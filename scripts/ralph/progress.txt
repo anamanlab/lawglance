@@ -31,3 +31,15 @@ Started: 2026-02-23
 - Gotcha: `scripts/ralph/prd.json` branch targets can drift across branches; verify the PRD on the branch you will commit to before doing Ralph bookkeeping to avoid cross-branch story mismatch.
 - Useful context: `make` is not installed here, but the full `quality` target passed when run manually in `Makefile` order (`ruff`, `pytest`, architecture/source/legal validators, jurisdiction eval/suite, hygiene).
 ---
+## 2026-02-23 18:38:40 -0300 - US-003
+- Implemented a normalized retrieved-document model and citation mapping helper so grounded chat/retriever flows can share a consistent document shape and citation conversion.
+- Files changed
+- `src/immcad_api/retrieval.py`
+- `tests/test_retrieval_documents.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: keep retrieval records in a small normalized model and centralize conversion to API citation objects in one helper to avoid duplicate mapper logic.
+  - Gotcha: `make` is unavailable in this environment; run the `quality` target command sequence directly from `Makefile` in the same order.
+  - Useful context: optional citation metadata (title/url/pin) should degrade to stable defaults so missing retriever fields do not crash chat grounding paths.
+---

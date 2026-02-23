@@ -33,3 +33,16 @@ Started: 2026-02-23
   - Gotcha: `make` is not installed in this environment, so `make quality` must be executed via the Makefile command sequence manually and in order.
   - Useful context: Updating story `passes` flags requires `tests/test_ralph_prd_json.py` to validate boolean shape instead of enforcing all stories as incomplete.
 ---
+## 2026-02-23 19:17:44 -0300 - US-003
+- Implemented structured audit events in the chat flow for `policy_block` and `provider_error`, threading `trace_id` from the API route to `ChatService` and emitting non-PII metadata (`locale`, `mode`, `message_length`, plus provider/error code when applicable).
+- Files changed
+- `src/immcad_api/api/routes/chat.py`
+- `src/immcad_api/services/chat_service.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Emit audit logs through a dedicated logger (`immcad_api.audit`) with a single structured `audit_event` payload for stable tests and downstream parsing.
+  - Gotcha: `scripts/ralph/prd.json` can differ by branch, so pick the story from the active branch-local PRD before coding.
+  - Useful context: Pass `trace_id` from route handlers into service methods whenever service-layer audit events are required.
+---

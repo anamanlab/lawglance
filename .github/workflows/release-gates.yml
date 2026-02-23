@@ -31,6 +31,16 @@ jobs:
         if: ${{ inputs.require_legal_checkboxes == true }}
         run: uv run python scripts/validate_legal_review_checklist.py --require-checked
 
+      - name: Generate jurisdictional readiness report
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/generate_jurisdiction_eval_report.py
+
+      - name: Run jurisdictional behavior suite
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/run_jurisdictional_test_suite.py
+
       - name: Run staging API smoke tests
         env:
           API_BEARER_TOKEN: release-smoke-token
@@ -40,3 +50,14 @@ jobs:
 
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
+
+      - name: Upload release evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-eval-artifacts
+          path: |
+            artifacts/evals/jurisdiction-eval-report.json
+            artifacts/evals/jurisdiction-eval-report.md
+            artifacts/evals/jurisdictional-suite-report.json
+            artifacts/evals/jurisdictional-suite-report.md

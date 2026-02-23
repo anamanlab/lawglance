@@ -24,6 +24,8 @@ def test_checklist_strict_validation_fails_when_unchecked(tmp_path: Path) -> Non
             [
                 "- [x] Jurisdiction scope validated (Canada-only legal domain)",
                 "- [ ] Citation-required behavior verified for legal factual responses",
+                "- [x] Jurisdictional readiness report generated and passed",
+                "- [x] Jurisdictional behavior suite generated and passed",
                 "- [x] Legal disclaimer text reviewed and approved",
                 "- [x] Privacy/PII handling reviewed (PIPEDA-oriented controls)",
                 "- [x] CanLII terms-of-use compliance reviewed",

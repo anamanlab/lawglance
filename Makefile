@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-amp ralph-status
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-amp ralph-status
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -36,6 +36,9 @@ source-registry-validate:
 legal-review-validate:
 	uv run python scripts/validate_legal_review_checklist.py
 
+domain-leak-scan:
+	uv run python scripts/scan_domain_leaks.py
+
 jurisdiction-eval:
 	uv run python scripts/generate_jurisdiction_eval_report.py
 
@@ -51,7 +54,7 @@ staging-smoke:
 hygiene:
 	bash scripts/check_repository_hygiene.sh
 
-quality: lint-api test arch-validate source-registry-validate legal-review-validate jurisdiction-eval jurisdiction-suite hygiene
+quality: lint-api test arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 
 ralph-run:
 	bash scripts/ralph/ralph.sh --tool claude 10

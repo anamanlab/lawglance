@@ -19,3 +19,17 @@ Started: 2026-02-23
   - Gotcha: `make` is not installed here, so `make quality` must be executed via the Makefile command sequence manually; full `pytest` currently fails earlier on a pre-existing unrelated `ChatService` constructor mismatch from dirty workspace changes.
   - Useful context: `scripts/scan_domain_leaks.py` defaults to scanning top-level app modules plus `src/immcad_api` and `docs`, with allowlisted legacy files for expected historical references.
 ---
+## 2026-02-23 18:33:41 -0300 - US-002
+- Wired the domain-leak scanner into both local and CI quality gates by adding a dedicated Makefile target and making it part of `quality`, plus a new `quality-gates.yml` step that runs the scanner before evaluation artifacts.
+- Files changed
+- `Makefile`
+- `.github/workflows/quality-gates.yml`
+- `tests/test_ralph_prd_json.py`
+- `src/immcad_api/services/chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Add new guardrail scripts as first-class Makefile targets, then compose them into `quality` and mirror the same order in CI workflows.
+  - Gotcha: `make` is not installed in this environment, so `make quality` must be executed via the Makefile command sequence manually and in order.
+  - Useful context: Updating story `passes` flags requires `tests/test_ralph_prd_json.py` to validate boolean shape instead of enforcing all stories as incomplete.
+---

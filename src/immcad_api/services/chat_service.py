@@ -12,8 +12,14 @@ from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 
 
 class ChatService:
-    def __init__(self, provider_router: ProviderRouter) -> None:
+    def __init__(
+        self,
+        provider_router: ProviderRouter,
+        *,
+        allow_scaffold_synthetic_citations: bool = True,
+    ) -> None:
         self.provider_router = provider_router
+        self.allow_scaffold_synthetic_citations = allow_scaffold_synthetic_citations
 
     def handle_chat(self, request: ChatRequest) -> ChatResponse:
         if should_refuse_for_policy(request.message):
@@ -62,13 +68,16 @@ class ChatService:
 
     def _default_citations(self, message: str) -> list[Citation]:
         del message
+        if not self.allow_scaffold_synthetic_citations:
+            return []
+
         snippet = "Reference to IRPA; user context omitted for privacy."
         return [
             Citation(
                 source_id="IRPA",
+                snippet=snippet,
                 title="Immigration and Refugee Protection Act",
                 url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/FullText.html",
                 pin="s. 11",
-                snippet=snippet,
             )
         ]

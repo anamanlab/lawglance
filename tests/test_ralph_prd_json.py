@@ -21,6 +21,6 @@ def test_ralph_prd_json_shape_and_ordering() -> None:
     assert priorities == sorted(priorities)
 
     for story in stories:
-        assert story["passes"] is False
+        assert isinstance(story["passes"], bool)
         assert story["notes"] == ""
         assert "Typecheck passes" in story["acceptanceCriteria"]

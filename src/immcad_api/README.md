@@ -33,7 +33,9 @@ Endpoints:
 ## Notes
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
-- If CanLII key or endpoint is unavailable, case search falls back to deterministic scaffold data.
+- Case-law fallback behavior is environment-sensitive:
+  - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
+  - `production`/`prod`/`ci`: CanLII failures return a structured `PROVIDER_ERROR` envelope with `trace_id`; synthetic scaffold cases are disabled.
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.
 - Provider routing has circuit-breaker safeguards for repeated provider failures.

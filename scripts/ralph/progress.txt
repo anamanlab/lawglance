@@ -97,3 +97,25 @@ Started: 2026-02-23
   - Useful context
   - `scripts/validate_source_registry.py` now returns non-zero with `[ERROR] Missing required source IDs: ...` and is executed in both local quality and CI quality gates.
 ---
+## 2026-02-23 20:21:16 -0300 - US-003
+- What was implemented
+- Disabled synthetic CanLII scaffold case output for `production`/`prod`/`ci` by wiring environment-aware fallback policy into `CanLIIClient`; unavailable CanLII now raises a safe provider error instead of returning synthetic cases.
+- Added coverage for strict CanLII behavior (no API key / HTTP failure with scaffold fallback disabled) and an API contract test asserting `/api/search/cases` returns a structured `PROVIDER_ERROR` envelope with matching `trace_id` in production mode.
+- Documented case-law fallback behavior to clarify non-prod scaffold behavior vs production-safe error behavior.
+- Files changed
+- `src/immcad_api/sources/canlii_client.py`
+- `src/immcad_api/main.py`
+- `tests/test_canlii_client.py`
+- `tests/test_api_scaffold.py`
+- `src/immcad_api/README.md`
+- `docs/architecture/api-contracts.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Gate scaffold/dev-only fallbacks at composition boundaries (`create_app`) and pass explicit behavior flags into adapters so production constraints stay centralized and testable.
+  - Gotcha
+  - `make` is unavailable in this environment; run the exact `quality` target command chain manually in Makefile order to preserve gate parity.
+  - Useful context
+  - Provider error envelopes already include `error.trace_id` and `x-trace-id` through shared exception handlers, so source/client failures can be surfaced safely without route-specific envelope code.
+---

@@ -168,3 +168,29 @@ def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     assert first.status_code == 200
     assert second.status_code == 429
     assert second.json()["error"]["code"] == "RATE_LIMITED"
+
+
+def test_case_search_returns_provider_error_envelope_in_production_when_canlii_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    production_client = TestClient(create_app())
+
+    response = production_client.post(
+        "/api/search/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "query": "express entry inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 502
+    body = response.json()
+    assert body["error"]["code"] == "PROVIDER_ERROR"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]

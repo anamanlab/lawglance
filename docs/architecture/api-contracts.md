@@ -56,6 +56,11 @@ Response:
 }
 ```
 
+Case-law fallback behavior:
+
+- `development` (and non-prod environments): if CanLII is unavailable, deterministic scaffold case results may be returned.
+- `production`/`prod`/`ci`: if CanLII is unavailable (including missing API key), API returns `502` with `ErrorEnvelope` (`code=PROVIDER_ERROR`) and matching `x-trace-id`; synthetic scaffold cases are not returned.
+
 Trace ID behavior for `POST /api/chat`:
 
 - Canonical location for all responses: `x-trace-id` HTTP header.

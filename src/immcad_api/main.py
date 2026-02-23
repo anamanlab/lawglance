@@ -97,10 +97,12 @@ def create_app() -> FastAPI:
     )
 
     chat_service = ChatService(provider_router)
+    allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
     case_search_service = CaseSearchService(
         CanLIIClient(
             api_key=settings.canlii_api_key,
             base_url=settings.canlii_base_url,
+            allow_scaffold_fallback=allow_canlii_scaffold_fallback,
         )
     )
 

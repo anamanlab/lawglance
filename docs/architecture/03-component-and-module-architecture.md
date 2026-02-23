@@ -2,6 +2,13 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Backend Module Map (Target)](#backend-module-map-(target))
+- [Current-to-Target Mapping](#current-to-target-mapping)
+- [Component Diagram](#component-diagram)
+- [Design Patterns](#design-patterns)
+- [Architectural Constraints](#architectural-constraints)
+
 - [Backend Module Map (Target)](#backend-module-map-(target))
 - [Current-to-Target Mapping](#current-to-target-mapping)
 - [Component Diagram](#component-diagram)

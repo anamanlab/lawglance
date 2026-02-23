@@ -2,6 +2,13 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Automation Goals](#automation-goals)
+- [Tooling](#tooling)
+- [Team Process](#team-process)
+- [Review Checklist](#review-checklist)
+- [Versioning and Change Management](#versioning-and-change-management)
+
 - [Automation Goals](#automation-goals)
 - [Tooling](#tooling)
 - [Team Process](#team-process)

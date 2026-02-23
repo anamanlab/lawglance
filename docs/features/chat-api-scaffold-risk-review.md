@@ -2,6 +2,13 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [1. Error Contract Drift](#1-error-contract-drift)
+- [2. Unprotected API Surface](#2-unprotected-api-surface)
+- [3. Fallback Observability Ambiguity](#3-fallback-observability-ambiguity)
+- [4. CanLII Integration Risk](#4-canlii-integration-risk)
+- [5. Remaining Gaps (not yet solved)](#5-remaining-gaps-(not-yet-solved))
+
 - [1. Error Contract Drift](#1-error-contract-drift)
 - [2. Unprotected API Surface](#2-unprotected-api-surface)
 - [3. Fallback Observability Ambiguity](#3-fallback-observability-ambiguity)

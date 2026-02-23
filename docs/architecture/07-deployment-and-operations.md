@@ -2,6 +2,14 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Environments](#environments)
+- [Deployment Topology (MVP)](#deployment-topology-(mvp))
+- [Operational Responsibilities](#operational-responsibilities)
+- [Runtime Controls](#runtime-controls)
+- [Monitoring and Alerting](#monitoring-and-alerting)
+- [Backup and Recovery](#backup-and-recovery)
+
 - [Environments](#environments)
 - [Deployment Topology (MVP)](#deployment-topology-(mvp))
 - [Operational Responsibilities](#operational-responsibilities)

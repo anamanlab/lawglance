@@ -2,6 +2,12 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Current Debt](#current-debt)
+- [Risk Assessment](#risk-assessment)
+- [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
+- [Success Criteria](#success-criteria)
+
 - [Current Debt](#current-debt)
 - [Risk Assessment](#risk-assessment)
 - [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
@@ -9,30 +15,25 @@
 
 ## Current Debt
 
-1. UI and orchestration are tightly coupled in `app.py`.
-2. No formal API boundary for frontend/backend separation.
-3. Prompt domain is still India-focused while product goal is Canada-focused.
-4. No provider abstraction or fallback policy in code.
-5. No formal citation validator and policy gate enforcement.
-6. No architecture CI validation or ADR process in place.
+1. UI and orchestration are still loosely coupled in legacy `app.py`; migration to `immcad_api` service is ongoing.
+2. Production vector database is still using legacy Indian legal data (requires full purge/rebuild).
+3. System prompts in `prompts.py` are jurisdictionally ambiguous.
+4. No automated "Grounding" layer to verify citations before user delivery.
+5. Ingestion pipeline in `src/Constituion_Pdf_Injestion...` is a notebook and needs migration to a production script.
 
 ## Risk Assessment
 
-- High: legal/domain mismatch can produce incorrect jurisdictional answers.
-- High: single provider dependency can degrade availability.
-- Medium: missing observability slows incident response.
-- Medium: loose source governance increases stale-content risk.
+- **High**: Jurisdictional Hallucination (mixing Indian vs Canadian laws).
+- **High**: Citation mismatch (LLM cites non-existent IRPR sections).
+- **Medium**: Single-language limitation (lacks French support for official compliance).
 
 ## Improvement Backlog (Prioritized)
 
-1. Introduce backend API boundary and move orchestration out of Streamlit.
-2. [HIGH] Migrate prompt templates and domain knowledge from India to Canada jurisdiction (addresses debt item 3 / domain mismatch). Acceptance criteria: update templates, migrate jurisdictional knowledge artifacts, run jurisdictional test suite, obtain legal review sign-off.
-3. Implement provider adapter with Gemini fallback.
-4. Introduce citation-required policy gate.
-5. Implement observability baseline (structured logging, metrics, distributed tracing) plus dashboards/alerting and phased coverage rollout for API, provider routing, and policy paths (addresses Risk Assessment: missing observability).
-6. Build ingestion metadata schema and freshness checks.
-7. Deploy architecture documentation validation in CI.
-8. Add benchmark-based evaluation harness.
+1. **[HIGH] Data Migration**: Purge legacy vectors; ingest IRPA/IRPR and IRCC sources into a new "Canada" collection.
+2. **[HIGH] Prompt Engineering**: Rewrite `prompts.py` for strict Canadian legal disclaimer and citation-only behavior.
+3. **[MEDIUM] API Integration**: Point Streamlit `app.py` to the new `immcad_api` FastAPI service for production-grade orchestration.
+4. **[MEDIUM] Observability Rollout**: Finalize the telemetry implementation in `src/immcad_api/telemetry` to capture all provider latency/error metrics.
+5. **[LOW] Quality Evaluation**: Implement the benchmark-based evaluation harness to score groundedness on 50 sample Canadian immigration queries.
 
 ## Success Criteria
 

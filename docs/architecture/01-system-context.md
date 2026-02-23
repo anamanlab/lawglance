@@ -2,6 +2,14 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Purpose](#purpose)
+- [Stakeholders and Personas](#stakeholders-and-personas)
+- [System Boundary](#system-boundary)
+- [External Systems](#external-systems)
+- [C4 Context Diagram](#c4-context-diagram)
+- [Architectural Pattern](#architectural-pattern)
+
 - [Purpose](#purpose)
 - [Stakeholders and Personas](#stakeholders-and-personas)
 - [System Boundary](#system-boundary)

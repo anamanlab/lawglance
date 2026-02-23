@@ -2,6 +2,12 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Purpose](#purpose)
+- [Naming](#naming)
+- [Status Values](#status-values)
+- [Workflow](#workflow)
+
 - [Purpose](#purpose)
 - [Naming](#naming)
 - [Status Values](#status-values)

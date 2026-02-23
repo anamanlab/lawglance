@@ -2,6 +2,13 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Data Domains](#data-domains)
+- [Canonical Metadata Schema](#canonical-metadata-schema)
+- [Data Flow](#data-flow)
+- [Governance and Lifecycle](#governance-and-lifecycle)
+- [Risks and Controls](#risks-and-controls)
+
 - [Data Domains](#data-domains)
 - [Canonical Metadata Schema](#canonical-metadata-schema)
 - [Data Flow](#data-flow)

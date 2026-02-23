@@ -2,6 +2,15 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Context](#context)
+- [Options Considered](#options-considered)
+- [Decision](#decision)
+- [Rationale](#rationale)
+- [Trade-offs](#trade-offs)
+- [Consequences](#consequences)
+- [Revisit Trigger](#revisit-trigger)
+
 - [Context](#context)
 - [Options Considered](#options-considered)
 - [Decision](#decision)

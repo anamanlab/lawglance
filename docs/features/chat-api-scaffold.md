@@ -2,6 +2,14 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Goal](#goal)
+- [Requirements](#requirements)
+- [Acceptance Criteria](#acceptance-criteria)
+- [Out of Scope (this scaffold)](#out-of-scope-(this-scaffold))
+- [Files Added](#files-added)
+- [Next Implementation Steps](#next-implementation-steps)
+
 - [Goal](#goal)
 - [Requirements](#requirements)
 - [Acceptance Criteria](#acceptance-criteria)

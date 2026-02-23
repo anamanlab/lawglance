@@ -65,3 +65,15 @@ Started: 2026-02-23
   - Gotcha: running `ruff` on YAML paths produces parser noise; lint only Python paths and validate workflows via CI execution.
   - Useful context: release evidence now hard-fails if any of the four eval artifacts are missing, blank, or malformed JSON before upload.
 ---
+## 2026-02-23 20:13:18 -0300 - US-001
+- What was implemented
+- Added the missing tribunal rules source IDs for ID/IAD/RPD/RAD and compliance source IDs for PIPEDA, CASL, and CanLII Terms to the canonical Canada source registry with valid HTTPS URLs and allowed source metadata fields.
+- Files changed
+- `data/sources/canada-immigration/registry.json`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Keep the legal source registry grouped by legal domain (statutes/regulations/policy/case-law) so future source additions remain reviewable and diff-friendly.
+  - Gotcha: `make` is unavailable in this environment, so `make quality` must be executed via the exact Makefile command sequence.
+  - Useful context: `source_type` is constrained to `statute|regulation|policy|case_law` and `update_cadence` to `daily|weekly|scheduled_incremental`; invalid values fail registry load/quality checks.
+---

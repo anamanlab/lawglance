@@ -38,6 +38,48 @@
       "update_cadence": "weekly"
     },
     {
+      "source_id": "IRB_ID_RULES",
+      "source_type": "regulation",
+      "instrument": "Immigration Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-229/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_IAD_RULES",
+      "source_type": "regulation",
+      "instrument": "Immigration Appeal Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-230/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_RPD_RULES",
+      "source_type": "regulation",
+      "instrument": "Refugee Protection Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-256/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_RAD_RULES",
+      "source_type": "regulation",
+      "instrument": "Refugee Appeal Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-257/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "PIPEDA",
+      "source_type": "statute",
+      "instrument": "Personal Information Protection and Electronic Documents Act",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "CASL",
+      "source_type": "statute",
+      "instrument": "Canada's Anti-Spam Legislation",
+      "url": "https://www.canada.ca/en/services/business/regulations/federallyregulatedindustrysectors/anti-spam-legislation.html",
+      "update_cadence": "weekly"
+    },
+    {
       "source_id": "IRCC_PDI",
       "source_type": "policy",
       "instrument": "IRCC Operational Instructions and Program Delivery Instructions",
@@ -71,6 +113,13 @@
       "instrument": "CanLII caseCitator API",
       "url": "https://github.com/canlii/API_documentation/blob/master/EN.md",
       "update_cadence": "scheduled_incremental"
+    },
+    {
+      "source_id": "CANLII_TERMS",
+      "source_type": "policy",
+      "instrument": "CanLII Terms of Use",
+      "url": "https://www.canlii.org/en/info/terms-of-use.html",
+      "update_cadence": "weekly"
     }
   ]
 }

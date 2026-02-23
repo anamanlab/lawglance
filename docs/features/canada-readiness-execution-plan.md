@@ -54,6 +54,13 @@ This plan executes the India -> Canada migration in measurable phases.
   - Output artifacts:
     - `artifacts/evals/jurisdiction-eval-report.json`
     - `artifacts/evals/jurisdiction-eval-report.md`
+- Added jurisdictional behavior test suite:
+  - `data/evals/jurisdictional-suite-v1.json`
+  - `src/immcad_api/evaluation/jurisdiction_suite.py`
+  - `scripts/run_jurisdictional_test_suite.py`
+  - Output artifacts:
+    - `artifacts/evals/jurisdictional-suite-report.json`
+    - `artifacts/evals/jurisdictional-suite-report.md`
 - CI now generates and uploads `jurisdiction-eval-report` artifact in `quality-gates`.
 - Added scheduled/manual ingestion workflow:
   - `.github/workflows/ingestion-jobs.yml`

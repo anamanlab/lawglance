@@ -45,3 +45,5 @@ Endpoints:
   - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
 - Generate jurisdictional scoring report (JSON + Markdown):
   - `uv run python scripts/generate_jurisdiction_eval_report.py`
+- Run jurisdictional behavior suite (policy refusal + citation checks):
+  - `uv run python scripts/run_jurisdictional_test_suite.py`

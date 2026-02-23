@@ -45,6 +45,11 @@ jobs:
           PYTHONPATH: src
         run: uv run python scripts/generate_jurisdiction_eval_report.py
 
+      - name: Run jurisdictional behavior test suite
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/run_jurisdictional_test_suite.py
+
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
 
@@ -56,3 +61,12 @@ jobs:
           path: |
             artifacts/evals/jurisdiction-eval-report.json
             artifacts/evals/jurisdiction-eval-report.md
+
+      - name: Upload jurisdictional suite artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jurisdiction-suite-report
+          path: |
+            artifacts/evals/jurisdictional-suite-report.json
+            artifacts/evals/jurisdictional-suite-report.md

@@ -40,5 +40,19 @@ jobs:
       - name: Validate legal review checklist template
         run: uv run python scripts/validate_legal_review_checklist.py
 
+      - name: Generate jurisdictional evaluation report
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/generate_jurisdiction_eval_report.py
+
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
+
+      - name: Upload jurisdictional evaluation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jurisdiction-eval-report
+          path: |
+            artifacts/evals/jurisdiction-eval-report.json
+            artifacts/evals/jurisdiction-eval-report.md

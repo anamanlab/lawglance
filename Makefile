@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate staging-smoke hygiene quality
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate jurisdiction-eval ingestion-run staging-smoke hygiene quality
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -36,10 +36,16 @@ source-registry-validate:
 legal-review-validate:
 	uv run python scripts/validate_legal_review_checklist.py
 
+jurisdiction-eval:
+	uv run python scripts/generate_jurisdiction_eval_report.py
+
+ingestion-run:
+	uv run python scripts/run_ingestion_jobs.py
+
 staging-smoke:
 	bash scripts/run_api_smoke_tests.sh
 
 hygiene:
 	bash scripts/check_repository_hygiene.sh
 
-quality: lint-api test arch-validate source-registry-validate legal-review-validate hygiene
+quality: lint-api test arch-validate source-registry-validate legal-review-validate jurisdiction-eval hygiene

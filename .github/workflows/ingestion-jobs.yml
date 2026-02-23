@@ -1,0 +1,77 @@
+name: Ingestion Jobs
+
+on:
+  workflow_dispatch:
+    inputs:
+      fail_on_error:
+        description: "Fail workflow when any source ingestion fails"
+        required: true
+        type: boolean
+        default: true
+  schedule:
+    - cron: "15 6 * * *"
+
+jobs:
+  run-ingestion:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cadence: daily
+            run_on_schedule: true
+          - cadence: weekly
+            run_on_schedule: false
+          - cadence: scheduled_incremental
+            run_on_schedule: true
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && matrix.run_on_schedule) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Restore ingestion checkpoint cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/immcad/ingestion-checkpoints.json
+          key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}
+          restore-keys: |
+            ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-
+            ingestion-state-
+
+      - name: Run ingestion jobs
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            fail_on_error="true"
+          else
+            fail_on_error="${{ inputs.fail_on_error }}"
+          fi
+
+          cmd=(uv run python scripts/run_ingestion_jobs.py --cadence "${{ matrix.cadence }}" --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" --state-path ".cache/immcad/ingestion-checkpoints.json")
+          if [ "$fail_on_error" = "true" ]; then
+            cmd+=(--fail-on-error)
+          fi
+
+          "${cmd[@]}"
+
+      - name: Upload ingestion artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ingestion-${{ matrix.cadence }}-report
+          path: artifacts/ingestion/ingestion-${{ matrix.cadence }}.json
+
+      - name: Save ingestion checkpoint cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/immcad/ingestion-checkpoints.json
+          key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}

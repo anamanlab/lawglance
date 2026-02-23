@@ -169,6 +169,25 @@ Health check:
 http://127.0.0.1:8000/healthz
 ```
 
+### Ingestion + jurisdiction evaluation workflows
+
+Generate ingestion execution report from the Canada source registry:
+
+```bash
+make ingestion-run
+```
+
+This runner now keeps a checkpoint file (`artifacts/ingestion/checkpoints.json`) and uses
+`ETag` / `Last-Modified` conditional requests to mark unchanged sources as `not_modified`.
+
+Generate jurisdictional readiness scoring report (JSON + Markdown):
+
+```bash
+make jurisdiction-eval
+```
+
+Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
+
 ## Definition of done for “Canadian adaptation”
 
 IMMCAD is considered Canada-ready when:

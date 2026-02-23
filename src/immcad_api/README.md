@@ -37,3 +37,11 @@ Endpoints:
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.
 - Provider routing has circuit-breaker safeguards for repeated provider failures.
+
+## Operational Scripts
+
+- Run registry-driven ingestion jobs and emit JSON report:
+  - `uv run python scripts/run_ingestion_jobs.py --cadence daily`
+  - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
+- Generate jurisdictional scoring report (JSON + Markdown):
+  - `uv run python scripts/generate_jurisdiction_eval_report.py`

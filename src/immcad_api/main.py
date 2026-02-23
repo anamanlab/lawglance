@@ -15,7 +15,7 @@ from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import CaseSearchService, ChatService
 from immcad_api.settings import load_settings
 from immcad_api.sources import CanLIIClient
-from immcad_api.telemetry import generate_trace_id
+from immcad_api.telemetry import ProviderMetrics, generate_trace_id
 
 
 def _parse_ip(value: str | None) -> str | None:
@@ -91,6 +91,9 @@ def create_app() -> FastAPI:
     provider_router = ProviderRouter(
         providers=providers,
         primary_provider_name="openai",
+        circuit_breaker_failure_threshold=settings.provider_circuit_breaker_failure_threshold,
+        circuit_breaker_open_seconds=settings.provider_circuit_breaker_open_seconds,
+        telemetry=ProviderMetrics(),
     )
 
     chat_service = ChatService(provider_router)

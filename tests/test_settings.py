@@ -21,3 +21,13 @@ def test_load_settings_allows_missing_bearer_token_in_development(
 
     settings = load_settings()
     assert settings.api_bearer_token is None
+
+
+def test_load_settings_has_circuit_breaker_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD", raising=False)
+    monkeypatch.delenv("PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS", raising=False)
+
+    settings = load_settings()
+    assert settings.provider_circuit_breaker_failure_threshold == 3
+    assert settings.provider_circuit_breaker_open_seconds == 30.0

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 
@@ -9,14 +10,17 @@ SRC_PATH = REPO_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from immcad_api.sources import load_source_registry
+from immcad_api.ingestion import build_ingestion_plan
 
 
 def main() -> None:
-    registry = load_source_registry()
-    print(f"[OK] Source registry loaded ({len(registry.sources)} sources)")
-    print(f"[OK] Jurisdiction: {registry.jurisdiction.lower()}")
-    print(f"[OK] Version: {registry.version}")
+    plan = build_ingestion_plan()
+    payload = {
+        "jurisdiction": plan.jurisdiction,
+        "version": plan.version,
+        "cadence_to_sources": plan.cadence_to_sources,
+    }
+    print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":

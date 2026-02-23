@@ -22,7 +22,25 @@ class Settings:
     provider_circuit_breaker_failure_threshold: int
     provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
+    allow_scaffold_synthetic_citations: bool
+    enable_chat_grounding: bool
+    chat_retriever_backend: str
+    chat_grounding_top_k: int
     api_rate_limit_per_minute: int
+
+
+def parse_bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().lower()
+    truthy = {"1", "true", "yes", "on"}
+    falsy = {"0", "false", "no", "off"}
+    if normalized in truthy:
+        return True
+    if normalized in falsy:
+        return False
+    raise ValueError(f"{name} must be a boolean value, got {raw!r}")
 
 
 def parse_float_env(name: str, default: float) -> float:
@@ -46,16 +64,29 @@ def parse_int_env(name: str, default: int) -> int:
 
 
 def load_settings() -> Settings:
-    enable_scaffold_provider = os.getenv("ENABLE_SCAFFOLD_PROVIDER", "true").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
     environment = os.getenv("ENVIRONMENT", "development")
+    environment_lower = environment.lower()
+    enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
+    allow_scaffold_synthetic_citations = parse_bool_env(
+        "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
+        environment_lower not in {"production", "prod", "ci"},
+    )
+    enable_chat_grounding = parse_bool_env("ENABLE_CHAT_GROUNDING", False)
+    chat_retriever_backend = os.getenv("CHAT_RETRIEVER_BACKEND", "none").strip().lower() or "none"
+    allowed_chat_retriever_backends = {"none", "chroma"}
+    if chat_retriever_backend not in allowed_chat_retriever_backends:
+        allowed_values = ", ".join(sorted(allowed_chat_retriever_backends))
+        raise ValueError(f"CHAT_RETRIEVER_BACKEND must be one of: {allowed_values}")
+    chat_grounding_top_k = parse_int_env("CHAT_GROUNDING_TOP_K", 3)
+    if chat_grounding_top_k < 1:
+        raise ValueError("CHAT_GROUNDING_TOP_K must be >= 1")
     api_bearer_token = os.getenv("API_BEARER_TOKEN")
-    if environment.lower() in {"production", "prod", "ci"} and not api_bearer_token:
+    if environment_lower in {"production", "prod", "ci"} and not api_bearer_token:
         raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+    if environment_lower in {"production", "prod", "ci"} and allow_scaffold_synthetic_citations:
+        raise ValueError(
+            "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be disabled in production/prod/ci"
+        )
 
     return Settings(
         app_name=os.getenv("API_APP_NAME", "IMMCAD API"),
@@ -80,5 +111,9 @@ def load_settings() -> Settings:
             30.0,
         ),
         enable_scaffold_provider=enable_scaffold_provider,
+        allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
+        enable_chat_grounding=enable_chat_grounding,
+        chat_retriever_backend=chat_retriever_backend,
+        chat_grounding_top_k=chat_grounding_top_k,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
     )

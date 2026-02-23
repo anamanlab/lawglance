@@ -43,3 +43,20 @@ Started: 2026-02-23
   - Gotcha: `make` is unavailable in this environment; run the `quality` target command sequence directly from `Makefile` in the same order.
   - Useful context: optional citation metadata (title/url/pin) should degrade to stable defaults so missing retriever fields do not crash chat grounding paths.
 ---
+## 2026-02-23 18:44:09 -0300 - US-004
+- Implemented a chat grounding retriever contract (`ChatRetriever`) and no-op fallback, then wired grounding feature flags/settings into `ChatService` and app startup with legacy-safe defaults.
+- Files changed
+- `src/immcad_api/retrieval.py`
+- `src/immcad_api/settings.py`
+- `src/immcad_api/services/chat_service.py`
+- `src/immcad_api/main.py`
+- `tests/test_chat_service.py`
+- `tests/test_settings.py`
+- `tests/test_retrieval_documents.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: keep retriever integration behind an optional protocol + settings gate so feature rollout can happen incrementally without breaking current provider flows.
+  - Gotcha: `make` is unavailable in this environment, so the `quality` target must be run as the exact Makefile command sequence in order.
+  - Useful context: when grounding is enabled but no retriever is configured, preserving `citations=[]` keeps existing policy refusal behavior stable and avoids accidental ungrounded answers.
+---

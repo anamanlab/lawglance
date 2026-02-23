@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Protocol
 
 from pydantic import BaseModel, Field
 
@@ -18,6 +19,18 @@ class RetrievedDocument(BaseModel):
     title: str | None = Field(default=None, max_length=256)
     url: str | None = Field(default=None, max_length=2048)
     pin: str | None = Field(default=None, max_length=256)
+
+
+class ChatRetriever(Protocol):
+    def retrieve(self, *, query: str, locale: str, top_k: int) -> list[RetrievedDocument]:
+        ...
+
+
+class NullChatRetriever:
+    """No-op retriever that preserves legacy ungrounded behavior."""
+
+    def retrieve(self, *, query: str, locale: str, top_k: int) -> list[RetrievedDocument]:
+        return []
 
 
 def map_retrieved_documents_to_citations(

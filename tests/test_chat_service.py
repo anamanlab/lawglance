@@ -9,6 +9,7 @@ from immcad_api.errors import ProviderApiError
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT
 from immcad_api.providers.base import ProviderError, ProviderResult
 from immcad_api.providers.router import RoutingResult
+from immcad_api.retrieval import RetrievedDocument
 from immcad_api.schemas import ChatRequest, Citation
 from immcad_api.services.chat_service import ChatService
 
@@ -30,6 +31,34 @@ class _RoutingMock:
 class _ErrorRouter:
     def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
         raise ProviderError("openai", "provider_error", "boom")
+
+
+class _EchoRouter:
+    def __init__(self) -> None:
+        self.last_citations: list[Citation] = []
+
+    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+        self.last_citations = list(citations)
+        return RoutingResult(
+            result=ProviderResult(
+                provider="gemini",
+                answer="Grounded answer",
+                citations=list(citations),
+                confidence="medium",
+            ),
+            fallback_used=False,
+            fallback_reason=None,
+        )
+
+
+class _RetrieverStub:
+    def __init__(self, documents: list[RetrievedDocument]) -> None:
+        self.documents = documents
+        self.calls: list[tuple[str, str, int]] = []
+
+    def retrieve(self, *, query: str, locale: str, top_k: int) -> list[RetrievedDocument]:
+        self.calls.append((query, locale, top_k))
+        return self.documents
 
 
 def _build_request(message: str = "Tell me about IRPA s.11") -> ChatRequest:
@@ -140,3 +169,48 @@ def test_handle_chat_refuses_when_citations_missing_and_scaffold_mode_disabled()
     assert response.citations == []
     assert response.confidence == "low"
     assert "do not have enough grounded legal context" in response.answer.lower()
+
+
+def test_handle_chat_uses_grounding_retriever_when_enabled() -> None:
+    router = _EchoRouter()
+    retriever = _RetrieverStub(
+        [
+            RetrievedDocument(
+                text_snippet="IRPA s.11 governs visa requirements.",
+                source_id="IRPA",
+                source_type="statute",
+                title="Immigration and Refugee Protection Act",
+                url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/",
+                pin="s.11",
+            )
+        ]
+    )
+    service = ChatService(
+        router,
+        retriever=retriever,
+        enable_grounding=True,
+        grounding_top_k=2,
+    )
+
+    response = service.handle_chat(_build_request())
+
+    assert retriever.calls == [("Tell me about IRPA s.11", "en-CA", 2)]
+    assert len(router.last_citations) == 1
+    assert router.last_citations[0].source_id == "IRPA"
+    assert response.citations == router.last_citations
+
+
+def test_handle_chat_preserves_legacy_flow_when_grounding_unavailable() -> None:
+    router = _EchoRouter()
+    service = ChatService(
+        router,
+        retriever=None,
+        enable_grounding=True,
+        grounding_top_k=3,
+    )
+
+    response = service.handle_chat(_build_request())
+
+    assert router.last_citations == []
+    assert response.citations == []
+    assert response.confidence == "low"

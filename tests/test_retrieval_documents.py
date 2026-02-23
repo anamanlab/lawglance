@@ -3,6 +3,7 @@ from __future__ import annotations
 from immcad_api.retrieval import (
     FALLBACK_CITATION_PIN,
     FALLBACK_CITATION_URL,
+    NullChatRetriever,
     RetrievedDocument,
     map_retrieved_documents_to_citations,
 )
@@ -50,3 +51,16 @@ def test_map_retrieved_documents_to_citations_handles_missing_optional_metadata(
 
 def test_map_retrieved_documents_to_citations_handles_empty_input() -> None:
     assert map_retrieved_documents_to_citations([]) == []
+
+
+def test_null_chat_retriever_returns_empty_documents() -> None:
+    retriever = NullChatRetriever()
+
+    assert (
+        retriever.retrieve(
+            query="Summarize IRPA s.11",
+            locale="en-CA",
+            top_k=3,
+        )
+        == []
+    )

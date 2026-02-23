@@ -10,10 +10,12 @@ from immcad_api.policy.compliance import (
 )
 from immcad_api.errors import ProviderApiError
 from immcad_api.providers import ProviderError, ProviderRouter
+from immcad_api.retrieval import ChatRetriever, map_retrieved_documents_to_citations
 from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 
 
 _AUDIT_LOGGER = logging.getLogger("immcad_api.audit")
+_LOGGER = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -22,9 +24,15 @@ class ChatService:
         provider_router: ProviderRouter,
         *,
         allow_scaffold_synthetic_citations: bool = False,
+        retriever: ChatRetriever | None = None,
+        enable_grounding: bool = False,
+        grounding_top_k: int = 3,
     ) -> None:
         self.provider_router = provider_router
         self.allow_scaffold_synthetic_citations = allow_scaffold_synthetic_citations
+        self.retriever = retriever
+        self.enable_grounding = enable_grounding
+        self.grounding_top_k = grounding_top_k
 
     def _emit_audit_event(
         self,
@@ -41,6 +49,28 @@ class ChatService:
                 "metadata": metadata,
             },
         )
+
+    def _grounding_citations(self, request: ChatRequest, *, trace_id: str | None) -> list[Citation]:
+        if not self.enable_grounding or self.retriever is None:
+            return []
+        try:
+            documents = self.retriever.retrieve(
+                query=request.message,
+                locale=request.locale,
+                top_k=self.grounding_top_k,
+            )
+        except Exception:  # pragma: no cover - defensive guard for adapter failures
+            _LOGGER.warning(
+                "chat_grounding_unavailable",
+                extra={
+                    "trace_id": trace_id or "trace-unavailable",
+                    "locale": request.locale,
+                    "top_k": self.grounding_top_k,
+                },
+                exc_info=True,
+            )
+            return []
+        return map_retrieved_documents_to_citations(documents)
 
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
@@ -68,7 +98,7 @@ class ChatService:
         try:
             routed = self.provider_router.generate(
                 message=request.message,
-                citations=[],
+                citations=self._grounding_citations(request, trace_id=trace_id),
                 locale=request.locale,
             )
         except ProviderError as exc:

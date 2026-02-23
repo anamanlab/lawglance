@@ -7,3 +7,11 @@ Started: 2026-02-23
 - Canada-only legal scope is mandatory; avoid India-domain terms outside legacy archival files.
 
 ---
+## 2026-02-23 17:23:51 -03 - US-001
+- Implemented a dedicated India-domain leak scanner script with Canada-scope defaults, explicit allowlist handling, and non-zero exit on violations with file/line output.
+- Files changed: scripts/scan_domain_leaks.py, tests/test_domain_leak_scanner.py, scripts/ralph/prd.json, scripts/ralph/progress.txt.
+- Learnings for future iterations:
+  - Reusable pattern: Keep scanner logic testable via a `main(argv)` entrypoint plus pure scanning helpers.
+  - Gotcha: `importlib`-loaded test modules that use `@dataclass` must be added to `sys.modules` before `exec_module`.
+  - Useful context: Current repo has approved India-term references in migration-history docs and jurisdiction-evaluation modules, so explicit path allowlisting is required.
+---

@@ -55,6 +55,7 @@ graph TD
   - Latency: `request_metrics.latency_ms.p95 > 8000` for 10 minutes.
 - Required runbook links:
   - Incident observability triage: `docs/release/incident-observability-runbook.md`
+  - Backup/recovery operational targets: `docs/release/backup-and-recovery-operational-targets.md`
   - Ingestion checkpoint recovery: `docs/release/ingestion-checkpoint-recovery.md`
   - Legal release sign-off checklist: `docs/release/legal-review-checklist.md`
 - Alerts on ingestion freshness breaches.
@@ -62,24 +63,12 @@ graph TD
 
 ## Backup and Recovery
 
-- Backup schedule for vector persistence directory:
-  - Incremental snapshot every hour.
-  - Full backup daily at 02:00 UTC.
-  - Weekly integrity check and restore test of latest full + incrementals.
-- Retention and pruning policy:
-  - Hourly snapshots retained for 7 days.
-  - Daily full backups retained for 90 days.
-  - Monthly compliance snapshot retained for 365 days.
-  - Automated pruning deletes expired snapshots after checksum verification.
-- Recovery objectives:
-  - RTO: 4 hours for chat API service recovery.
-  - RPO: 60 minutes for vector-store and metadata recovery.
-- Disaster recovery playbook:
-  - Incident commander (on-call SRE) declares DR event and starts runbook.
-  - Restore Redis and vector backups in order, then replay ingestion metadata deltas.
-  - Verify checksums, run smoke tests (`/healthz`, sample chat flow, case search call), then reopen traffic.
-  - Failover order: DNS/API ingress cutover -> backend API -> Redis -> vector store.
-  - Roles: SRE owns failover execution, backend lead validates app integrity, legal/compliance lead approves data handling.
-- Drill cadence:
-  - Tabletop DR exercise quarterly.
-  - Full failover simulation annually with postmortem and runbook updates.
+- Authoritative operational targets and checklist:
+  - `docs/release/backup-and-recovery-operational-targets.md`
+- Baseline targets:
+  - Incremental backup cadence: hourly.
+  - Full backup cadence: daily (`02:00 UTC` for vector store, `02:15 UTC` for ingestion artifacts).
+  - Retention: 7-day hourly, 90-day daily, 365-day monthly compliance snapshots.
+  - RTO: 4 hours.
+  - RPO: 60 minutes.
+  - Drill cadence: quarterly tabletop, annual full failover simulation.

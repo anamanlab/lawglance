@@ -257,3 +257,20 @@ Started: 2026-02-23
   - Useful context
   - `GET /ops/metrics` reports process-window request/error rates and chat-specific fallback/refusal rates, while provider circuit/failure counters remain under `provider_routing_metrics`.
 ---
+## 2026-02-23 20:51:03 -0300 - US-011
+- What was implemented
+- Added a dedicated backup and recovery operational targets runbook covering backup frequency, retention windows, pruning policy, RTO/RPO targets, explicit role ownership, restore verification checklist, and drill cadence.
+- Updated deployment/operations architecture documentation to link the new runbook and summarize baseline backup, retention, and recovery targets.
+- Files changed
+- `docs/release/backup-and-recovery-operational-targets.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep architecture sections concise and point to runbooks for operationally executable checklists/targets.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command sequence manually and in order.
+  - Useful context
+  - Backup and recovery operational targets are now centralized in `docs/release/backup-and-recovery-operational-targets.md` for release and incident workflows.
+---

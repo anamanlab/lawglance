@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import json
 
 import pytest
 
@@ -46,6 +47,19 @@ def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
     return [record.audit_event for record in caplog.records if hasattr(record, "audit_event")]
 
 
+def _assert_non_pii_audit_event(
+    *,
+    event: dict[str, object],
+    raw_message: str,
+    expected_event_type: str,
+) -> None:
+    assert event["event_type"] == expected_event_type
+    assert "message" not in event
+    assert "raw_message" not in event
+    serialized = json.dumps(event, sort_keys=True)
+    assert raw_message not in serialized
+
+
 def test_chat_service_emits_policy_block_audit_event(caplog: pytest.LogCaptureFixture) -> None:
     service = ChatService(_StaticRouter(citations=[]))
     payload = ChatRequest(
@@ -66,11 +80,16 @@ def test_chat_service_emits_policy_block_audit_event(caplog: pytest.LogCaptureFi
     assert events
     event = events[-1]
     assert event["trace_id"] == "trace-policy-001"
-    assert event["event_type"] == "policy_block"
     assert event["locale"] == "en-CA"
     assert event["mode"] == "standard"
     assert event["message_length"] == len(payload.message)
-    assert "message" not in event
+    _assert_non_pii_audit_event(
+        event=event,
+        raw_message=payload.message,
+        expected_event_type="policy_block",
+    )
+    for record in caplog.records:
+        assert payload.message not in record.getMessage()
 
 
 def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCaptureFixture) -> None:
@@ -90,10 +109,15 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
     assert events
     event = events[-1]
     assert event["trace_id"] == "trace-provider-001"
-    assert event["event_type"] == "provider_error"
     assert event["provider"] == "openai"
     assert event["provider_error_code"] == "timeout"
     assert event["locale"] == "en-CA"
     assert event["mode"] == "standard"
     assert event["message_length"] == len(payload.message)
-    assert "message" not in event
+    _assert_non_pii_audit_event(
+        event=event,
+        raw_message=payload.message,
+        expected_event_type="provider_error",
+    )
+    for record in caplog.records:
+        assert payload.message not in record.getMessage()

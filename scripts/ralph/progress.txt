@@ -197,3 +197,18 @@ Started: 2026-02-23
   - Useful context
   - Simulating rate-limit client identity failures is easiest by monkeypatching `_resolve_rate_limit_client_id` to return `None`, which exercises the exact 400 envelope branch.
 ---
+## 2026-02-23 20:38:25 -0300 - US-008
+- What was implemented
+- Added explicit non-PII audit logging guarantees for chat policy-block and provider-error paths by strengthening tests to assert raw user input is absent from both structured `audit_event` payloads and emitted log message text.
+- Files changed
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Add shared assertions that scan serialized structured logs plus rendered logger message text to prevent accidental PII regressions in observability code.
+  - Gotcha
+  - `make quality` is required by process, but this environment lacks `make`; run the exact `quality` command chain from `Makefile` in-order as a functional equivalent.
+  - Useful context
+  - `immcad_api.audit` records expose structured payloads under `record.audit_event`, which is the most reliable hook for stable non-PII compliance tests.
+---

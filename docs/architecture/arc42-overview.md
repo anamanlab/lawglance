@@ -2,6 +2,20 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [1. Introduction and Goals](#1-introduction-and-goals)
+- [2. Constraints](#2-constraints)
+- [3. Context and Scope](#3-context-and-scope)
+- [4. Solution Strategy](#4-solution-strategy)
+- [5. Building Block View](#5-building-block-view)
+- [6. Runtime View](#6-runtime-view)
+- [7. Deployment View](#7-deployment-view)
+- [8. Cross-Cutting Concepts](#8-cross-cutting-concepts)
+- [9. Architectural Decisions](#9-architectural-decisions)
+- [10. Quality Requirements](#10-quality-requirements)
+- [11. Risks and Technical Debt](#11-risks-and-technical-debt)
+- [12. Glossary](#12-glossary)
+
 - [1. Introduction and Goals](#1-introduction-and-goals)
 - [2. Constraints](#2-constraints)
 - [3. Context and Scope](#3-context-and-scope)

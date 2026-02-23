@@ -2,6 +2,12 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [`POST /api/chat`](#`post-/api/chat`)
+- [`POST /api/search/cases`](#`post-/api/search/cases`)
+- [Error Envelope](#error-envelope)
+- [Interface Rules](#interface-rules)
+
 - [`POST /api/chat`](#`post-/api/chat`)
 - [`POST /api/search/cases`](#`post-/api/search/cases`)
 - [Error Envelope](#error-envelope)

@@ -1,5 +1,11 @@
 # Architecture Diagrams
 
+## Table of Contents
+
+- [Module Dependency Diagram](#module-dependency-diagram)
+  - [Maintenance and Generation](#maintenance-and-generation)
+  - [Usage](#usage)
+
 This directory contains visual representations of the IMMCAD system architecture. These diagrams help provide a high-level overview of component relationships, data flow, and module dependencies.
 
 ## Module Dependency Diagram

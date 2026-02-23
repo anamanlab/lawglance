@@ -1,5 +1,12 @@
 # Canada Readiness Execution Plan
 
+## Table of Contents
+
+- [Phase 1: Prompt and Policy Migration (Now)](#phase-1:-prompt-and-policy-migration-(now))
+- [Phase 2: Source Ingestion Migration](#phase-2:-source-ingestion-migration)
+- [Phase 3: Evaluation and Legal Sign-Off](#phase-3:-evaluation-and-legal-sign-off)
+- [Current Week Deliverables](#current-week-deliverables)
+
 This plan executes the India -> Canada migration in measurable phases.
 
 ## Phase 1: Prompt and Policy Migration (Now)

@@ -2,6 +2,15 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Security Objectives](#security-objectives)
+- [Trust Zones](#trust-zones)
+- [Authentication and Authorization (MVP)](#authentication-and-authorization-(mvp))
+- [Compliance Controls](#compliance-controls)
+- [Threat Model Highlights](#threat-model-highlights)
+- [Mitigations](#mitigations)
+- [Incident Response](#incident-response)
+
 - [Security Objectives](#security-objectives)
 - [Trust Zones](#trust-zones)
 - [Authentication and Authorization (MVP)](#authentication-and-authorization-(mvp))

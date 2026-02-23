@@ -2,6 +2,19 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Supported baseline](#supported-baseline)
+- [Quick start (recommended)](#quick-start-(recommended))
+- [Manual install prerequisites](#manual-install-prerequisites)
+  - [Python 3.11+](#python-311+)
+  - [uv](#uv)
+- [Project bootstrap details](#project-bootstrap-details)
+- [Team-shared editor defaults](#team-shared-editor-defaults)
+- [Daily workflow](#daily-workflow)
+- [Environment variables](#environment-variables)
+- [Redis (optional but recommended)](#redis-(optional-but-recommended))
+- [Troubleshooting](#troubleshooting)
+
 - [Supported baseline](#supported-baseline)
 - [Quick start (recommended)](#quick-start-(recommended))
 - [Manual install prerequisites](#manual-install-prerequisites)

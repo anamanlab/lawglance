@@ -2,6 +2,13 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Scope](#scope)
+- [Documentation Framework](#documentation-framework)
+- [Contents](#contents)
+- [How to Use](#how-to-use)
+- [Ownership](#ownership)
+
 - [Scope](#scope)
 - [Documentation Framework](#documentation-framework)
 - [Contents](#contents)

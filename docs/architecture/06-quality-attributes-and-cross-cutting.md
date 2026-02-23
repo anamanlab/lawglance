@@ -2,6 +2,15 @@
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Performance](#performance)
+- [Reliability and Availability](#reliability-and-availability)
+- [Security](#security)
+- [Observability](#observability)
+- [Maintainability](#maintainability)
+- [Evolution Strategy](#evolution-strategy)
+- [Business Continuity](#business-continuity)
+
 - [Performance](#performance)
 - [Reliability and Availability](#reliability-and-availability)
 - [Security](#security)

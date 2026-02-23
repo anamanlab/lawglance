@@ -5,6 +5,7 @@
 - [Table of Contents](#table-of-contents)
 - [`POST /api/chat`](#`post-/api/chat`)
 - [`POST /api/search/cases`](#`post-/api/search/cases`)
+- [`GET /ops/metrics`](#`get-/ops/metrics`)
 - [Error Envelope](#error-envelope)
 - [Interface Rules](#interface-rules)
 
@@ -115,6 +116,55 @@ Response:
 }
 ```
 
+## `GET /ops/metrics`
+
+Purpose:
+
+- Exposes the production observability baseline for incident detection and triage.
+- Intended for operations dashboards and alert evaluators.
+
+Response:
+
+```json
+{
+  "request_metrics": {
+    "window_seconds": 120.5,
+    "requests": {
+      "total": 350,
+      "rate_per_minute": 174.2
+    },
+    "errors": {
+      "total": 8,
+      "rate": 0.0228
+    },
+    "fallback": {
+      "total": 32,
+      "rate": 0.0914
+    },
+    "refusal": {
+      "total": 41,
+      "rate": 0.1171
+    },
+    "latency_ms": {
+      "sample_count": 350,
+      "p50": 840.4,
+      "p95": 4120.7,
+      "p99": 7110.2
+    }
+  },
+  "provider_routing_metrics": {
+    "openai": {
+      "success": 300,
+      "failure": 18
+    },
+    "gemini": {
+      "success": 50,
+      "fallback_success": 32
+    }
+  }
+}
+```
+
 ## Error Envelope
 
 ```json
@@ -133,6 +183,7 @@ Error envelope contract note: `error.trace_id` is required for error responses a
 
 - All responses include `x-trace-id` header for observability correlation.
 - Error responses include `error.trace_id` in the body in addition to `x-trace-id`.
+- `GET /ops/metrics` is the canonical endpoint for request rate, error rate, fallback rate, refusal rate, and latency percentiles.
 - `POST /api/chat` must return at least one citation unless either:
   - response is a policy refusal, or
   - synthetic scaffold citations are disabled and no grounded citations are available (safe constrained response path).

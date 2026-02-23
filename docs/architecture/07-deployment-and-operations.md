@@ -47,7 +47,16 @@ graph TD
 
 ## Monitoring and Alerting
 
-- Alerts on elevated latency, error spikes, fallback saturation.
+- Operational metrics endpoint: `GET /ops/metrics`.
+- Alert thresholds (actionable baseline):
+  - Error rate: `request_metrics.errors.rate > 0.05` for 10 minutes.
+  - Fallback rate: `request_metrics.fallback.rate > 0.20` for 10 minutes.
+  - Refusal rate: `request_metrics.refusal.rate > 0.35` for 15 minutes.
+  - Latency: `request_metrics.latency_ms.p95 > 8000` for 10 minutes.
+- Required runbook links:
+  - Incident observability triage: `docs/release/incident-observability-runbook.md`
+  - Ingestion checkpoint recovery: `docs/release/ingestion-checkpoint-recovery.md`
+  - Legal release sign-off checklist: `docs/release/legal-review-checklist.md`
 - Alerts on ingestion freshness breaches.
 - Alerts on policy failure/citation validator regressions.
 

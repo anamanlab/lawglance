@@ -367,3 +367,49 @@ def test_case_search_returns_provider_error_envelope_in_production_when_canlii_u
     assert body["error"]["code"] == "PROVIDER_ERROR"
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
+    metrics_client = TestClient(create_app())
+
+    ok_response = metrics_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    refusal_response = metrics_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Please represent me and file my application",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    validation_error_response = metrics_client.post(
+        "/api/chat",
+        json={"session_id": "short", "message": ""},
+    )
+    metrics = metrics_client.get("/ops/metrics")
+
+    assert ok_response.status_code == 200
+    assert refusal_response.status_code == 200
+    assert validation_error_response.status_code == 422
+    assert metrics.status_code == 200
+
+    payload = metrics.json()
+    request_metrics = payload["request_metrics"]
+
+    assert request_metrics["requests"]["total"] >= 3
+    assert request_metrics["requests"]["rate_per_minute"] > 0
+    assert request_metrics["errors"]["total"] >= 1
+    assert request_metrics["refusal"]["total"] >= 1
+    assert "fallback" in request_metrics
+    assert request_metrics["latency_ms"]["sample_count"] >= 3
+    assert request_metrics["latency_ms"]["p50"] >= 0
+    assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
+    assert "provider_routing_metrics" in payload

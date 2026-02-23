@@ -232,3 +232,28 @@ Started: 2026-02-23
   - Useful context
   - Required release evidence artifacts are uploaded under the `release-eval-artifacts` bundle and should stay synchronized with `scripts/validate_release_artifacts.py` required paths.
 ---
+## 2026-02-23 20:47:33 -0300 - US-010
+- What was implemented
+- Added a production observability baseline by introducing request-level telemetry aggregation (request/error/fallback/refusal rates + latency percentiles), wiring it into API middleware/chat outcomes, and exposing `GET /ops/metrics` with request and provider-routing metrics.
+- Documented observability contracts, actionable alert thresholds, and a trace-ID incident triage runbook with explicit correlation flow.
+- Files changed
+- `src/immcad_api/telemetry/request_metrics.py`
+- `src/immcad_api/telemetry/__init__.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/api/routes/chat.py`
+- `tests/test_request_metrics.py`
+- `tests/test_api_scaffold.py`
+- `docs/architecture/api-contracts.md`
+- `docs/architecture/06-quality-attributes-and-cross-cutting.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `docs/release/incident-observability-runbook.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Capture API metrics in middleware `finally` blocks so early auth/rate-limit returns and handled exceptions are all counted consistently.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command chain manually and in order to preserve gate parity.
+  - Useful context
+  - `GET /ops/metrics` reports process-window request/error rates and chat-specific fallback/refusal rates, while provider circuit/failure counters remain under `provider_routing_metrics`.
+---

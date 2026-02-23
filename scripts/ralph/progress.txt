@@ -157,6 +157,25 @@ Started: 2026-02-23
   - Enforce production-only safety invariants in `load_settings()` and pass explicit flags into services from `create_app()` so behavior is deterministic across environments.
   - Gotcha
   - Existing production-mode tests must set all required hardening env vars (now including `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`) or app creation fails by design.
+- Useful context
+- With synthetic citations disabled, chat responses use the existing citation-enforcement safe fallback text and return `confidence="low"` with empty citations instead of fabricating references.
+---
+## 2026-02-23 20:32:28 -0300 - US-006
+- What was implemented
+- Locked provider routing contract by requiring the router's declared primary provider to be the first provider in ordered routing.
+- Added API coverage for a transient OpenAI timeout that falls back to Gemini and asserts stable `fallback_used.reason = "timeout"` propagation in the chat response, plus recovery on the next request back to primary.
+- Added router unit coverage to fail fast when provider order violates the primary-first routing invariant.
+- Files changed
+- `src/immcad_api/providers/router.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_provider_router_circuit_breaker.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Enforce critical routing invariants in constructor validation and back them with integration tests that assert response-envelope fields, not only internal router state.
+  - Gotcha
+  - `make` is unavailable in this environment; run the exact `quality` Makefile command chain manually and in order to preserve gate equivalence.
   - Useful context
-  - With synthetic citations disabled, chat responses use the existing citation-enforcement safe fallback text and return `confidence="low"` with empty citations instead of fabricating references.
+  - `fallback_used.reason` in API responses comes from router `last_error.code`; transient primary failures should be validated at API level to prevent contract regressions.
 ---

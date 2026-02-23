@@ -34,6 +34,10 @@ class ProviderRouter:
     ) -> None:
         if not providers:
             raise ValueError("ProviderRouter requires at least one provider")
+        if providers[0].name != primary_provider_name:
+            raise ValueError(
+                "ProviderRouter requires the primary provider to be first in ordered providers"
+            )
         if circuit_breaker_failure_threshold < 1:
             raise ValueError("circuit_breaker_failure_threshold must be >= 1")
         if circuit_breaker_open_seconds <= 0:

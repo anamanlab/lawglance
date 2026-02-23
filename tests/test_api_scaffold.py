@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from immcad_api.main import create_app  # noqa: E402
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
+from immcad_api.providers import ProviderError, ProviderResult  # noqa: E402
 
 
 client = TestClient(create_app())
@@ -144,6 +145,89 @@ def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.Monk
     body = response.json()
     assert body["error"]["code"] == "PROVIDER_ERROR"
     assert body["error"]["trace_id"]
+
+
+def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    openai_calls = {"count": 0}
+
+    def flaky_openai_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+        del self, message, citations, locale
+        openai_calls["count"] += 1
+        if openai_calls["count"] == 1:
+            raise ProviderError("openai", "timeout", "transient timeout")
+        return ProviderResult(
+            provider="openai",
+            answer="Recovered primary response",
+            citations=[
+                {
+                    "source_id": "IRPA_s11",
+                    "title": "IRPA section 11",
+                    "url": "https://laws-lois.justice.gc.ca/eng/acts/I-2.5/section-11.html",
+                    "pin": "s.11",
+                    "snippet": "A foreign national must apply before entering Canada.",
+                }
+            ],
+            confidence="medium",
+        )
+
+    def gemini_fallback_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+        del self, message, citations, locale
+        return ProviderResult(
+            provider="gemini",
+            answer="Fallback response",
+            citations=[
+                {
+                    "source_id": "IRPA_s11",
+                    "title": "IRPA section 11",
+                    "url": "https://laws-lois.justice.gc.ca/eng/acts/I-2.5/section-11.html",
+                    "pin": "s.11",
+                    "snippet": "A foreign national must apply before entering Canada.",
+                }
+            ],
+            confidence="medium",
+        )
+
+    monkeypatch.setattr("immcad_api.main.OpenAIProvider.generate", flaky_openai_generate)
+    monkeypatch.setattr("immcad_api.main.GeminiProvider.generate", gemini_fallback_generate)
+
+    transient_client = TestClient(create_app())
+    first = transient_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    second = transient_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert first.status_code == 200
+    assert first.headers["x-trace-id"]
+    first_body = first.json()
+    assert first_body["fallback_used"]["used"] is True
+    assert first_body["fallback_used"]["provider"] == "gemini"
+    assert first_body["fallback_used"]["reason"] == "timeout"
+
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["fallback_used"]["used"] is False
+    assert second_body["fallback_used"]["provider"] is None
+    assert second_body["fallback_used"]["reason"] is None
 
 
 def test_safe_constrained_response_when_synthetic_citations_disabled(

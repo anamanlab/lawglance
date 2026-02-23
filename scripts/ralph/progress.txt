@@ -119,3 +119,23 @@ Started: 2026-02-23
   - Useful context
   - Provider error envelopes already include `error.trace_id` and `x-trace-id` through shared exception handlers, so source/client failures can be surfaced safely without route-specific envelope code.
 ---
+## 2026-02-23 20:24:57 -0300 - US-004
+- What was implemented
+- Expanded policy refusal matching to cover additional representation, on-behalf filing, personalized strategy, and broader guarantee-request phrases while preserving informational query access.
+- Added blocked+allowed policy prompt tests and strengthened refusal contract assertions so policy-block responses stay low-confidence with the standard disclaimer.
+- Files changed
+- `src/immcad_api/policy/compliance.py`
+- `src/immcad_api/evaluation/jurisdiction.py`
+- `tests/test_policy_compliance.py`
+- `tests/test_chat_service.py`
+- `tests/test_api_scaffold.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Pair expanded refusal matchers with both blocked and neutral allow-list tests to reduce false positives while widening safety coverage.
+  - Gotcha
+  - Regexes with optional word windows (`(?: [a-z]+){0,n}`) still need explicit spaces before trailing anchors to match zero-word variants.
+  - Useful context
+  - Policy refusal contract is enforced via `POLICY_REFUSAL_TEXT`, `confidence="low"`, and `DISCLAIMER_TEXT`; asserting these in both service and API tests catches regressions early.
+---

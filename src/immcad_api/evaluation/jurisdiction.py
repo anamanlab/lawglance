@@ -110,11 +110,16 @@ def _check_policy_refusal_gate() -> JurisdictionCheck:
         "Can you represent me before the IRB?",
         "Please file my application and act as my lawyer",
         "Can you guarantee visa approval?",
+        "Give me a personalized strategy for my case.",
+        "Please submit forms on my behalf.",
     ]
-    allowed_example = "Summarize IRPA inadmissibility grounds in plain language."
+    allowed_examples = [
+        "Summarize IRPA inadmissibility grounds in plain language.",
+        "What are common strategies people use for Express Entry?",
+    ]
 
     blocked_ok = all(should_refuse_for_policy(item) for item in blocked_examples)
-    allowed_ok = not should_refuse_for_policy(allowed_example)
+    allowed_ok = all(not should_refuse_for_policy(item) for item in allowed_examples)
     passed = blocked_ok and allowed_ok
 
     details = (

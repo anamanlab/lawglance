@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from immcad_api.main import create_app  # noqa: E402
+from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
 
 
 client = TestClient(create_app())
@@ -51,7 +52,10 @@ def test_chat_policy_block_response() -> None:
     assert response.status_code == 200
     body = response.json()
 
+    assert body["answer"] == POLICY_REFUSAL_TEXT
     assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["disclaimer"] == DISCLAIMER_TEXT
     assert body["fallback_used"]["used"] is False
     assert body["fallback_used"]["reason"] == "policy_block"
 

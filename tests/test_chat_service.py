@@ -6,6 +6,7 @@ import logging
 import pytest
 
 from immcad_api.errors import ProviderApiError
+from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT
 from immcad_api.providers import ProviderError
 from immcad_api.providers.base import ProviderResult
 from immcad_api.providers.router import RoutingResult
@@ -57,6 +58,9 @@ def test_chat_service_emits_policy_block_audit_event(caplog: pytest.LogCaptureFi
     with caplog.at_level(logging.INFO, logger="immcad_api.audit"):
         response = service.handle_chat(payload, trace_id="trace-policy-001")
 
+    assert response.answer == POLICY_REFUSAL_TEXT
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.reason == "policy_block"
     events = _audit_events(caplog)
     assert events

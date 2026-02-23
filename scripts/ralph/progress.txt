@@ -7,3 +7,15 @@ Started: 2026-02-23
 - Canada-only legal scope is mandatory; avoid India-domain terms outside legacy archival files.
 
 ---
+## 2026-02-23 18:19:13 -0300 - US-001
+- Implemented a reusable domain-leak scanner (`scripts/scan_domain_leaks.py`) that scans source/docs paths for disallowed India-domain legal terms, supports an explicit legacy-file allowlist, and reports file/line context with non-zero exit on violations.
+- Files changed
+- `scripts/scan_domain_leaks.py`
+- `tests/test_domain_leak_scanner.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Implement validation scripts as importable modules with a small `main()` that returns an exit code so unit tests can cover both library behavior and CLI output.
+  - Gotcha: `make` is not installed here, so `make quality` must be executed via the Makefile command sequence manually; full `pytest` currently fails earlier on a pre-existing unrelated `ChatService` constructor mismatch from dirty workspace changes.
+  - Useful context: `scripts/scan_domain_leaks.py` defaults to scanning top-level app modules plus `src/immcad_api` and `docs`, with allowlisted legacy files for expected historical references.
+---

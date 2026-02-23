@@ -19,6 +19,8 @@ class Settings:
     gemini_model: str
     provider_timeout_seconds: float
     provider_max_retries: int
+    provider_circuit_breaker_failure_threshold: int
+    provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
     api_rate_limit_per_minute: int
 
@@ -69,6 +71,14 @@ def load_settings() -> Settings:
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         provider_timeout_seconds=parse_float_env("PROVIDER_TIMEOUT_SECONDS", 15.0),
         provider_max_retries=parse_int_env("PROVIDER_MAX_RETRIES", 1),
+        provider_circuit_breaker_failure_threshold=parse_int_env(
+            "PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+            3,
+        ),
+        provider_circuit_breaker_open_seconds=parse_float_env(
+            "PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS",
+            30.0,
+        ),
         enable_scaffold_provider=enable_scaffold_provider,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
     )

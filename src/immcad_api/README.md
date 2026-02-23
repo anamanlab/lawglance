@@ -26,6 +26,8 @@ Endpoints:
 - `GEMINI_MODEL` (optional, default `gemini-2.5-flash`)
 - `PROVIDER_TIMEOUT_SECONDS` (optional, default `15`)
 - `PROVIDER_MAX_RETRIES` (optional, default `1`)
+- `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (optional, default `3`)
+- `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
 - `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
 
 ## Notes
@@ -34,3 +36,4 @@ Endpoints:
 - If CanLII key or endpoint is unavailable, case search falls back to deterministic scaffold data.
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.
+- Provider routing has circuit-breaker safeguards for repeated provider failures.

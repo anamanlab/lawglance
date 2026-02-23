@@ -2,12 +2,6 @@ name: Release Gates
 
 on:
   workflow_dispatch:
-    inputs:
-      require_legal_checkboxes:
-        description: "Require all legal-review checklist items to be checked"
-        required: true
-        type: boolean
-        default: true
 
 jobs:
   release-readiness:
@@ -28,7 +22,6 @@ jobs:
         run: uv run python scripts/validate_legal_review_checklist.py
 
       - name: Validate legal review checklist (strict)
-        if: ${{ inputs.require_legal_checkboxes == true }}
         run: uv run python scripts/validate_legal_review_checklist.py --require-checked
 
       - name: Generate jurisdictional readiness report

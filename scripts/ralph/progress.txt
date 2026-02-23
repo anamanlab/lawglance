@@ -212,3 +212,23 @@ Started: 2026-02-23
   - Useful context
   - `immcad_api.audit` records expose structured payloads under `record.audit_event`, which is the most reliable hook for stable non-PII compliance tests.
 ---
+## 2026-02-23 20:41:35 -0300 - US-009
+- What was implemented
+- Enforced strict legal checklist sign-off in release gates by removing the bypass input and always running `scripts/validate_legal_review_checklist.py --require-checked`.
+- Extended checklist validation so strict mode now fails when `Reviewer` or `Date` sign-off fields are missing/blank in addition to unchecked required items.
+- Added regression tests to lock strict sign-off behavior and ensure required legal evaluation artifacts remain in release evidence uploads.
+- Files changed
+- `.github/workflows/release-gates.yml`
+- `scripts/validate_legal_review_checklist.py`
+- `tests/test_legal_review_checklist.py`
+- `tests/test_release_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep checklist validation split between structure mode (template quality) and strict mode (release sign-off enforcement) so CI and release workflows can enforce different guarantees cleanly.
+  - Gotcha
+  - Workflow-level bypass inputs can silently weaken compliance gates; remove optional toggles when a gate must be mandatory for release.
+  - Useful context
+  - Required release evidence artifacts are uploaded under the `release-eval-artifacts` bundle and should stay synchronized with `scripts/validate_release_artifacts.py` required paths.
+---

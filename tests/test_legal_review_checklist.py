@@ -36,3 +36,54 @@ def test_checklist_strict_validation_fails_when_unchecked(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError, match="unchecked required items"):
         MODULE.validate(checklist, require_checked=True)
+
+
+def test_checklist_strict_validation_fails_when_signoff_blank(tmp_path: Path) -> None:
+    checklist = tmp_path / "checklist.md"
+    checklist.write_text(
+        "\n".join(
+            [
+                "- [x] Jurisdiction scope validated (Canada-only legal domain)",
+                "- [x] Citation-required behavior verified for legal factual responses",
+                "- [x] Jurisdictional readiness report generated and passed",
+                "- [x] Jurisdictional behavior suite generated and passed",
+                "- [x] Legal disclaimer text reviewed and approved",
+                "- [x] Privacy/PII handling reviewed (PIPEDA-oriented controls)",
+                "- [x] CanLII terms-of-use compliance reviewed",
+                "",
+                "## Sign-off",
+                "",
+                "- Reviewer:",
+                "- Date:",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="blank required sign-off fields"):
+        MODULE.validate(checklist, require_checked=True)
+
+
+def test_checklist_strict_validation_passes_with_checked_items_and_signoff(tmp_path: Path) -> None:
+    checklist = tmp_path / "checklist.md"
+    checklist.write_text(
+        "\n".join(
+            [
+                "- [x] Jurisdiction scope validated (Canada-only legal domain)",
+                "- [x] Citation-required behavior verified for legal factual responses",
+                "- [x] Jurisdictional readiness report generated and passed",
+                "- [x] Jurisdictional behavior suite generated and passed",
+                "- [x] Legal disclaimer text reviewed and approved",
+                "- [x] Privacy/PII handling reviewed (PIPEDA-oriented controls)",
+                "- [x] CanLII terms-of-use compliance reviewed",
+                "",
+                "## Sign-off",
+                "",
+                "- Reviewer: Compliance Team",
+                "- Date: 2026-02-23",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    MODULE.validate(checklist, require_checked=True)

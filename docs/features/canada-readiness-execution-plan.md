@@ -40,3 +40,19 @@ This plan executes the India -> Canada migration in measurable phases.
 2. Add ingestion source registry skeleton.
 3. Add jurisdictional regression checks to CI.
 4. Schedule legal review checkpoint.
+
+## Operationalization Updates (Implemented)
+
+- Added registry-driven ingestion execution runner:
+  - `src/immcad_api/ingestion/jobs.py`
+  - `scripts/run_ingestion_jobs.py`
+  - Output artifact: `artifacts/ingestion/ingestion-*.json`
+- Added jurisdictional readiness evaluation harness:
+  - `src/immcad_api/evaluation/jurisdiction.py`
+  - `scripts/generate_jurisdiction_eval_report.py`
+  - Output artifacts:
+    - `artifacts/evals/jurisdiction-eval-report.json`
+    - `artifacts/evals/jurisdiction-eval-report.md`
+- CI now generates and uploads `jurisdiction-eval-report` artifact in `quality-gates`.
+- Added scheduled/manual ingestion workflow:
+  - `.github/workflows/ingestion-jobs.yml`

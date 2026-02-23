@@ -15,3 +15,11 @@ Started: 2026-02-23
   - Gotcha: `importlib`-loaded test modules that use `@dataclass` must be added to `sys.modules` before `exec_module`.
   - Useful context: Current repo has approved India-term references in migration-history docs and jurisdiction-evaluation modules, so explicit path allowlisting is required.
 ---
+## 2026-02-23 17:26:24 -0300 - US-002
+- Integrated the Canada domain-leak scanner into local quality gates and CI quality workflow enforcement.
+- Files changed: Makefile, .github/workflows/quality-gates.yml, scripts/ralph/prd.json, scripts/ralph/progress.txt.
+- Learnings for future iterations:
+  - Reusable pattern: Add policy scanners as dedicated Make targets and invoke the same script path in CI for parity.
+  - Gotcha: `make` may be unavailable in some environments, so run equivalent target commands directly to preserve gate coverage.
+  - Useful context: Quality gates now include domain leakage checks before jurisdiction evaluation and suite artifacts are generated.
+---

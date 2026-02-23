@@ -23,3 +23,11 @@ Started: 2026-02-23
   - Gotcha: `make` may be unavailable in some environments, so run equivalent target commands directly to preserve gate coverage.
   - Useful context: Quality gates now include domain leakage checks before jurisdiction evaluation and suite artifacts are generated.
 ---
+## 2026-02-23 17:29:30 -0300 - US-003
+- Implemented structured audit logging in chat flows for policy blocks and provider failures, carrying trace_id, event_type, and non-PII metadata.
+- Files changed: src/immcad_api/services/chat_service.py, src/immcad_api/api/routes/chat.py, tests/test_chat_service.py, scripts/ralph/prd.json, scripts/ralph/progress.txt.
+- Learnings for future iterations:
+  - Reusable pattern: Attach structured audit fields through `logging` `extra` payloads so tests can assert record attributes without coupling to formatter output.
+  - Gotcha: `trace_id` is only guaranteed at route/middleware boundaries, so pass it explicitly into service methods that need audit visibility.
+  - Useful context: Jurisdiction suite exercises policy refusal paths, so new audit logging will surface during quality runs and should remain non-PII.
+---

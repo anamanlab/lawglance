@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from immcad_api.policy.compliance import (
     DISCLAIMER_TEXT,
     POLICY_REFUSAL_TEXT,
@@ -11,12 +13,46 @@ from immcad_api.providers import ProviderError, ProviderRouter
 from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 
 
-class ChatService:
-    def __init__(self, provider_router: ProviderRouter) -> None:
-        self.provider_router = provider_router
+_AUDIT_LOGGER = logging.getLogger("immcad_api.audit")
 
-    def handle_chat(self, request: ChatRequest) -> ChatResponse:
+
+class ChatService:
+    def __init__(
+        self,
+        provider_router: ProviderRouter,
+        *,
+        allow_scaffold_synthetic_citations: bool = False,
+    ) -> None:
+        self.provider_router = provider_router
+        self.allow_scaffold_synthetic_citations = allow_scaffold_synthetic_citations
+
+    def _emit_audit_event(
+        self,
+        *,
+        trace_id: str | None,
+        event_type: str,
+        metadata: dict[str, str | int],
+    ) -> None:
+        _AUDIT_LOGGER.warning(
+            "chat_audit_event",
+            extra={
+                "trace_id": trace_id or "trace-unavailable",
+                "event_type": event_type,
+                "metadata": metadata,
+            },
+        )
+
+    def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="policy_block",
+                metadata={
+                    "locale": request.locale,
+                    "mode": request.mode,
+                    "message_length": len(request.message),
+                },
+            )
             return ChatResponse(
                 answer=POLICY_REFUSAL_TEXT,
                 citations=[],
@@ -29,20 +65,47 @@ class ChatService:
                 ),
             )
 
-        citations = self._default_citations(request.message)
-
         try:
             routed = self.provider_router.generate(
                 message=request.message,
-                citations=citations,
+                citations=[],
                 locale=request.locale,
             )
         except ProviderError as exc:
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="provider_error",
+                metadata={
+                    "provider": exc.provider,
+                    "error_code": exc.code,
+                    "locale": request.locale,
+                    "mode": request.mode,
+                },
+            )
             raise ProviderApiError(exc.message) from exc
+
+        citations = routed.result.citations
+        if (
+            self.allow_scaffold_synthetic_citations
+            and routed.result.provider == "scaffold"
+            and not citations
+        ):
+            citations = [
+                Citation(
+                    source_id="SCAFFOLD_DETERMINISTIC",
+                    title="Deterministic scaffold citation (non-authoritative)",
+                    url="https://www.canada.ca/en/immigration-refugees-citizenship.html",
+                    pin="n/a",
+                    snippet=(
+                        "Synthetic citation for development scaffolding only. "
+                        "Replace with retrieval-grounded citations before production rollout."
+                    ),
+                )
+            ]
 
         answer, validated_citations, confidence = enforce_citation_requirement(
             routed.result.answer,
-            routed.result.citations,
+            citations,
         )
 
         fallback_provider = routed.result.provider if routed.fallback_used else None
@@ -59,16 +122,3 @@ class ChatService:
                 reason=fallback_reason,
             ),
         )
-
-    def _default_citations(self, message: str) -> list[Citation]:
-        del message
-        snippet = "Reference to IRPA; user context omitted for privacy."
-        return [
-            Citation(
-                source_id="IRPA",
-                title="Immigration and Refugee Protection Act",
-                url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/FullText.html",
-                pin="s. 11",
-                snippet=snippet,
-            )
-        ]

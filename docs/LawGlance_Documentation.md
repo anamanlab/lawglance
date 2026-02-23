@@ -104,7 +104,7 @@ We welcome contributions from the community. To contribute:
  
 ## License
  
-This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for more information.
+This project is licensed under the Apache License 2.0. See the [LICENSE](../LICENSE.md) file for more information.
  
  
 ## Contact

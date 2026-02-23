@@ -1,0 +1,18 @@
+root_docs: "docs"
+exclude_dirs:
+  - "node_modules"
+  - ".venv"
+  - ".git"
+  - ".pytest_cache"
+quality_thresholds:
+  min_word_count: 50
+  max_freshness_days: 90
+style_rules:
+  require_h1: true
+  no_h1_skipping: true
+  require_code_lang: true
+  require_alt_text: true
+validation:
+  retry_count: 3
+  timeout: 5
+report_file: "DOCS_AUDIT_REPORT.md"

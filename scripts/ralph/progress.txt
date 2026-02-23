@@ -76,3 +76,15 @@ Started: 2026-02-23
   - Gotcha: make is unavailable in this environment, so run the quality target commands from the Makefile in order as an exact equivalent gate.
   - Useful context: explicit forwarding tests in router coverage prevent silent drift between provider contract changes and routing behavior.
 ---
+## 2026-02-23 19:00:39 -0300 - US-006
+- Implemented a Chroma-backed chat retriever adapter with explicit non-crashing failure states for missing index, initialization failure, and search failure; adapter results are normalized into the shared `RetrievedDocument` schema used for citation mapping.
+- Files changed
+- `src/immcad_api/retrieval.py`
+- `tests/test_retrieval_adapter.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: keep adapter failure handling as a typed status (`last_failure`) while returning `[]` so upstream chat flow can degrade safely without exception-driven control flow.
+  - Gotcha: PRD branch targets can diverge between branches; verify you are editing the PRD that contains the selected story before bookkeeping updates.
+  - Useful context: this adapter currently relies on `langchain_chroma` + `OpenAIEmbeddings` by default, but supports injected vector stores/factories for deterministic tests and alternate backends.
+---

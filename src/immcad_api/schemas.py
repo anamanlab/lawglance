@@ -7,7 +7,13 @@ from pydantic import BaseModel, Field
 
 
 Confidence = Literal["low", "medium", "high"]
-FallbackReason = Literal["timeout", "rate_limit", "policy_block", "provider_error"]
+FallbackReason = Literal[
+    "timeout",
+    "rate_limit",
+    "policy_block",
+    "provider_error",
+    "insufficient_context",
+]
 
 
 class ChatRequest(BaseModel):

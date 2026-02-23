@@ -100,3 +100,17 @@ Started: 2026-02-23
   - Gotcha: `make` is not available in this environment; run the exact `quality` target commands from `Makefile` in-order to preserve gate equivalence.
   - Useful context: existing provider/router contracts already accept optional `grounding_context`, so `US-007` wiring is localized to chat-service orchestration and tests.
 ---
+## 2026-02-23 19:22:01 -0300 - US-008
+- Implemented an explicit insufficient-context safety path for grounded chat: when grounding is enabled but retrieval yields no usable context/citations, chat now returns a constrained refusal with stable reason code `insufficient_context` without calling providers.
+- Files changed
+- `src/immcad_api/services/chat_service.py`
+- `src/immcad_api/schemas.py`
+- `tests/test_chat_service.py`
+- `tests/test_api_scaffold.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Short-circuit grounded chat before provider generation when context quality is insufficient, and reuse citation-enforcement output to keep refusal text/confidence consistent.
+  - Gotcha: `make` is unavailable in this environment, so `make quality` must be executed by running the Makefile quality command chain in order.
+  - Useful context: API trace header behavior remains unchanged in grounding refusals; `x-trace-id` is still emitted and response reason is now stable (`insufficient_context`).
+---

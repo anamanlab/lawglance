@@ -56,6 +56,32 @@ def test_chat_policy_block_response() -> None:
     assert body["fallback_used"]["reason"] == "policy_block"
 
 
+def test_chat_grounding_insufficient_context_preserves_trace_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_CHAT_GROUNDING", "true")
+    grounded_client = TestClient(create_app())
+
+    response = grounded_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["fallback_used"]["used"] is False
+    assert body["fallback_used"]["reason"] == "insufficient_context"
+    assert "x-trace-id" in response.headers
+    assert response.headers["x-trace-id"]
+
+
 def test_case_search_contract_shape() -> None:
     response = client.post(
         "/api/search/cases",

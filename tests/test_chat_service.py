@@ -51,6 +51,7 @@ class _ErrorRouter:
 
 class _EchoRouter:
     def __init__(self) -> None:
+        self.call_count = 0
         self.last_citations: list[Citation] = []
         self.last_grounding_context: list[str] | None = None
 
@@ -63,6 +64,7 @@ class _EchoRouter:
         grounding_context=None,
     ) -> RoutingResult:
         del message, locale
+        self.call_count += 1
         self.last_citations = list(citations)
         self.last_grounding_context = list(grounding_context) if grounding_context else None
         return RoutingResult(
@@ -221,13 +223,34 @@ def test_handle_chat_uses_grounding_retriever_when_enabled() -> None:
     response = service.handle_chat(_build_request())
 
     assert retriever.calls == [("Tell me about IRPA s.11", "en-CA", 2)]
+    assert router.call_count == 1
     assert len(router.last_citations) == 1
     assert router.last_citations[0].source_id == "IRPA"
     assert router.last_grounding_context == ["IRPA s.11 governs visa requirements."]
     assert response.citations == router.last_citations
 
 
-def test_handle_chat_preserves_legacy_flow_when_grounding_unavailable() -> None:
+def test_handle_chat_returns_insufficient_context_when_grounding_retrieval_is_empty() -> None:
+    router = _EchoRouter()
+    retriever = _RetrieverStub([])
+    service = ChatService(
+        router,
+        retriever=retriever,
+        enable_grounding=True,
+        grounding_top_k=3,
+    )
+
+    response = service.handle_chat(_build_request())
+
+    assert retriever.calls == [("Tell me about IRPA s.11", "en-CA", 3)]
+    assert router.call_count == 0
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.fallback_used.used is False
+    assert response.fallback_used.reason == "insufficient_context"
+
+
+def test_handle_chat_returns_insufficient_context_when_grounding_unavailable() -> None:
     router = _EchoRouter()
     service = ChatService(
         router,
@@ -238,7 +261,10 @@ def test_handle_chat_preserves_legacy_flow_when_grounding_unavailable() -> None:
 
     response = service.handle_chat(_build_request())
 
+    assert router.call_count == 0
     assert router.last_citations == []
     assert router.last_grounding_context is None
     assert response.citations == []
     assert response.confidence == "low"
+    assert response.fallback_used.used is False
+    assert response.fallback_used.reason == "insufficient_context"

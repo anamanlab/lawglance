@@ -16,6 +16,7 @@ from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 
 _AUDIT_LOGGER = logging.getLogger("immcad_api.audit")
 _LOGGER = logging.getLogger(__name__)
+INSUFFICIENT_CONTEXT_REASON = "insufficient_context"
 
 
 class ChatService:
@@ -76,6 +77,20 @@ class ChatService:
             )
             return []
 
+    def _insufficient_context_response(self) -> ChatResponse:
+        answer, citations, confidence = enforce_citation_requirement("", [])
+        return ChatResponse(
+            answer=answer,
+            citations=citations,
+            confidence=confidence,
+            disclaimer=DISCLAIMER_TEXT,
+            fallback_used=FallbackUsed(
+                used=False,
+                provider=None,
+                reason=INSUFFICIENT_CONTEXT_REASON,
+            ),
+        )
+
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
             self._emit_audit_event(
@@ -108,6 +123,8 @@ class ChatService:
         ]
         if not grounding_context:
             grounding_context = None
+        if self.enable_grounding and (not grounding_citations or grounding_context is None):
+            return self._insufficient_context_response()
 
         try:
             routed = self.provider_router.generate(

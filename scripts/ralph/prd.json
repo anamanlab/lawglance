@@ -1,75 +1,437 @@
 {
   "project": "IMMCAD",
-  "branchName": "ralph/canada-hardening-next-loop",
-  "description": "Canada production hardening backlog for IMMCAD API, ingestion, and compliance workflows.",
+  "branchName": "ralph/prod-readiness-canlii-legal-research",
+  "description": "Production-readiness hardening for IMMCAD plus a CanLII-powered legal research feature for lawyers, CICC licensees, and self-represented users.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Add domain-leak scanner for Canada scope",
-      "description": "As a maintainer, I want automated scanning for disallowed India-domain terms so that Canada scope regressions are blocked in CI.",
+      "title": "Enforce production-safe scaffold configuration",
+      "description": "As a release owner, I want production and CI production-like modes to fail fast on unsafe scaffold settings so that placeholder behavior cannot reach users.",
       "acceptanceCriteria": [
-        "Add a scanner script that flags disallowed India-domain terms in source/docs paths with an explicit allowlist for legacy archived files",
-        "Script exits non-zero when violations are found and prints file/line context",
+        "Add/confirm settings validation that blocks synthetic scaffold citations in production/prod/ci",
+        "Add/confirm settings validation for scaffold provider usage policy in production mode (disabled by default or explicitly guarded)",
+        "Update tests for environment guardrails",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Wire domain-leak scanner into quality gates",
-      "description": "As a release owner, I want CI to enforce domain leakage checks so that jurisdiction mismatches are caught before merge.",
+      "title": "Add release config safety validator for production flags",
+      "description": "As a release manager, I want a script that validates production-safe runtime flags so that release-gates fail before unsafe smoke or deploy steps run.",
       "acceptanceCriteria": [
-        "Integrate domain-leak scanner into Makefile quality target",
-        "Add scanner execution step to quality-gates workflow",
+        "Add script to validate required production-safe env flags and disallowed scaffold settings",
+        "Wire script into release-gates workflow before final release evidence steps",
+        "Failure output identifies invalid or missing production-safe config values",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Add audit log events for policy blocks and provider failures",
-      "description": "As an operator, I want structured audit events for high-risk chat outcomes so that incidents can be triaged quickly.",
+      "title": "Add retrieved document schema and citation mapping helper",
+      "description": "As a backend developer, I want a normalized retrieved-document model and citation mapper so that chat grounding can use a consistent format across retrievers.",
       "acceptanceCriteria": [
-        "Emit structured log entries containing trace_id, event_type, and minimal non-PII metadata for policy_block and provider_error paths",
-        "Add tests validating log emission in both scenarios",
+        "Add a normalized retrieved-document model including text snippet and source metadata fields",
+        "Add helper to map retrieved documents to chat citation schema",
+        "Handle missing optional metadata without crashing",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Add ingestion checkpoint recovery runbook",
-      "description": "As an on-call engineer, I want a documented checkpoint recovery playbook so that ingestion can be safely resumed after failures.",
+      "title": "Introduce chat retriever interface and grounding settings",
+      "description": "As a backend developer, I want a retriever abstraction and feature settings so that chat grounding can be integrated without hard-coding one backend everywhere.",
       "acceptanceCriteria": [
-        "Document checkpoint file location, corruption recovery, and replay procedure",
-        "Include verification checklist after recovery",
-        "Typecheck passes"
+        "Add retriever interface/service contract for chat grounding",
+        "Add settings for enabling grounding and configuring retriever behavior",
+        "Default behavior remains backward compatible when grounding is disabled or unavailable",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-005",
-      "title": "Add release artifact verification checklist step",
-      "description": "As a release manager, I want release-gates to verify required evaluation artifacts exist and are readable so that sign-off is evidence-based.",
+      "title": "Extend provider/router interfaces for grounding context",
+      "description": "As a backend developer, I want provider and router interfaces to accept retrieval context snippets so that model prompts can be grounded before response generation.",
       "acceptanceCriteria": [
-        "Add a script that validates required eval artifacts exist with non-empty content",
-        "Run this script in release-gates before completion",
+        "Update provider interface and router contract to accept optional grounding context input",
+        "Update OpenAI, Gemini, and scaffold providers to handle the new argument safely",
+        "No regression in existing provider routing and fallback tests",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement Chroma-based Canada retriever adapter",
+      "description": "As a backend developer, I want a retriever adapter backed by the Canada vector store so that chat can fetch relevant source context with metadata.",
+      "acceptanceCriteria": [
+        "Implement retriever adapter that queries the configured Chroma/legacy vector store",
+        "Return normalized retrieved-document records with source metadata required for citations",
+        "Handle missing index or retriever initialization failures with explicit non-crashing error path",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Wire chat service to retrieval grounding and citation mapping",
+      "description": "As an IMMCAD user, I want chat responses to use retrieved source context so that answers and citations are grounded in Canadian immigration sources.",
+      "acceptanceCriteria": [
+        "Chat service calls retriever before provider generation for grounded factual flows",
+        "Retrieved documents are converted into citation objects using the shared mapper",
+        "Provider prompt path receives grounding context snippets",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Add insufficient-context behavior for chat grounding failures",
+      "description": "As a user, I want a safe constrained response or refusal when retrieval context is insufficient so that I am not given ungrounded legal information.",
+      "acceptanceCriteria": [
+        "Define and implement explicit response behavior for empty/insufficient retrieval context",
+        "Response includes a stable reason code and preserves trace ID behavior",
+        "Citation-required policy remains enforced when no valid grounded citations are available",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Add chat grounding regression tests and API coverage",
+      "description": "As a maintainer, I want regression tests for grounded and ungrounded chat paths so that future changes do not silently weaken citation guarantees.",
+      "acceptanceCriteria": [
+        "Add/extend unit tests for grounded citation success path",
+        "Add/extend tests for insufficient-context refusal or constrained behavior",
+        "Add API-level test coverage for trace/error envelope behavior in grounding failures",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Expand jurisdictional eval dataset to 50+ cases",
+      "description": "As a release manager, I want a larger jurisdictional evaluation dataset so that production readiness decisions are based on broader coverage.",
+      "acceptanceCriteria": [
+        "Expand jurisdictional suite dataset to at least 50 cases",
+        "Include grounded responses, policy refusals, out-of-scope prompts, and domain-leak detection cases",
+        "Dataset remains valid JSON and compatible with existing suite runner",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Enforce eval thresholds and dataset-size checks in CI scripts",
+      "description": "As a release owner, I want threshold enforcement in evaluation scripts and workflows so that releases fail automatically when quality gates regress.",
+      "acceptanceCriteria": [
+        "Add dataset-size threshold check (>=50) to release-evaluated suite path",
+        "Enforce citation coverage, policy accuracy, and domain-leak thresholds in scripts or workflow steps",
+        "Failure output identifies the breached threshold clearly",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Define legal research search API contract and schema",
+      "description": "As a frontend integrator, I want a stable legal research search contract so that case-law research UI can be built independently of backend implementation details.",
+      "acceptanceCriteria": [
+        "Add/update API contract docs for legal research search request and response fields",
+        "Include query, court, jurisdiction, pagination, limit, and provenance metadata fields",
+        "Align error envelope and trace ID behavior with existing API conventions",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Add production-safe CanLII search mode without placeholder results",
+      "description": "As a legal researcher, I want explicit degraded errors instead of fake placeholder cases in production research mode so that I can trust the results shown.",
+      "acceptanceCriteria": [
+        "Add production research mode behavior that returns explicit degraded/error response when CanLII is unavailable",
+        "Retain deterministic fallback behavior only where explicitly allowed for local development/testing",
+        "Document behavior difference between development scaffold mode and production research mode",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Normalize court handling for FCT minimum and extensible coverage",
+      "description": "As a backend developer, I want normalized court identifiers and mappings so that Federal Court is supported now and additional courts can be added without breaking clients.",
+      "acceptanceCriteria": [
+        "Implement court normalization/mapping with Federal Court (`fct`) support",
+        "Reject or normalize unsupported court inputs with clear error behavior",
+        "Design mapping so new courts can be added without changing the public response schema",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add CanLII search parser and pagination test coverage",
+      "description": "As a maintainer, I want tests for CanLII result parsing and paging so that API response changes or parser regressions are caught early.",
+      "acceptanceCriteria": [
+        "Add tests for result parsing across expected CanLII payload shapes",
+        "Add tests for pagination/limit behavior and bounded results",
+        "Add tests for degraded/error behavior in production research mode",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Define case detail and summary API schemas and routes",
+      "description": "As a frontend integrator, I want stable case detail and summary endpoints so that result selection and AI summary UI can be implemented predictably.",
+      "acceptanceCriteria": [
+        "Add request/response schemas for case detail and case summary APIs",
+        "Add route handlers with consistent error envelope and trace ID behavior",
+        "Document endpoints in API/architecture docs",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Implement CanLII case detail retrieval adapter",
+      "description": "As a legal researcher, I want selected case details fetched from CanLII so that summaries and review screens use real source data.",
+      "acceptanceCriteria": [
+        "Implement case detail retrieval for a selected CanLII case result",
+        "Normalize case metadata and source content fields needed for summaries",
+        "Return explicit error/degraded behavior when detail retrieval fails",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-018",
+      "title": "Add case summary service skeleton with grounding checks and disclaimer",
+      "description": "As a backend developer, I want a dedicated case summary service path with grounding and disclaimer rules so that AI case summaries follow legal research safety constraints.",
+      "acceptanceCriteria": [
+        "Add case summary service that validates required case content/metadata before generation",
+        "Add disclaimer and legal-advice boundary messaging for summary responses",
+        "Add explicit insufficient-context refusal or constrained-response path",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-019",
+      "title": "Implement grounded AI generation for case summaries",
+      "description": "As a lawyer, CICC licensee, or self-represented applicant, I want AI summaries grounded in case content so that I can evaluate case relevance quickly without unverified statements.",
+      "acceptanceCriteria": [
+        "Case summary generation passes grounded case content to provider prompt path",
+        "Summary response includes provenance links/citations to the selected case",
+        "Summary generation respects policy and disclaimer constraints",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-020",
+      "title": "Add tests for case detail and summary grounded/degraded paths",
+      "description": "As a maintainer, I want regression tests for case detail and AI summary flows so that legal research behavior remains predictable under failures and low-context conditions.",
+      "acceptanceCriteria": [
+        "Add tests for case detail success and failure/degraded responses",
+        "Add tests for grounded summary success and insufficient-context behavior",
+        "Add API-level tests for summary route envelopes and trace IDs",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-021",
+      "title": "Add Streamlit legal research entry point and search form",
+      "description": "As a user, I want a dedicated legal research entry point and search form so that case-law research is separate from the general chat workflow.",
+      "acceptanceCriteria": [
+        "Add a dedicated legal research section/tab in Streamlit",
+        "Add search input and court filter controls for case research",
+        "Display clear legal research assistance disclaimer in the UI",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-022",
+      "title": "Render legal research results list with provenance and states",
+      "description": "As a legal researcher, I want search results displayed with provenance metadata so that I can evaluate and select relevant cases quickly.",
+      "acceptanceCriteria": [
+        "Render result rows with title, citation, court, decision date, and source link",
+        "Handle loading, empty, and API error states with user-safe messaging",
+        "Show trace-aware error details when available without exposing sensitive internals",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-023",
+      "title": "Add case detail and summary panel to legal research UI",
+      "description": "As a legal researcher, I want to select a case and view its details/summary so that I can assess relevance without leaving IMMCAD.",
+      "acceptanceCriteria": [
+        "Selecting a search result loads case detail and summary content in the UI",
+        "UI displays provenance links and disclaimer messaging with the summary",
+        "UI handles degraded summary responses without breaking the page",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-024",
+      "title": "Add observability for retrieval and legal research flows",
+      "description": "As an operator, I want logs and metrics for retrieval and case research endpoints so that production failures and latency issues are diagnosable.",
+      "acceptanceCriteria": [
+        "Add structured logging with trace IDs for retrieval and legal research error/degraded paths",
+        "Add metrics counters and latency measurements for legal research endpoints and retrieval failures",
+        "Document how to inspect these logs/metrics during incident triage",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-025",
+      "title": "Audit and patch existing release ops assets against master PRD",
+      "description": "As a release owner, I want the existing ingestion recovery runbook and release artifact validation assets checked against the new master PRD so that no previously completed work is missing production requirements.",
+      "acceptanceCriteria": [
+        "Review existing ingestion checkpoint recovery runbook against master PRD requirements and patch any gaps",
+        "Review release artifact validation script/workflow coverage against master PRD evidence requirements and patch any gaps",
+        "Document the audit outcome in release docs or progress notes",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-026",
+      "title": "Add production cutover and rollback runbook",
+      "description": "As an operator, I want a documented cutover and rollback procedure so that production launch and incident response can be executed safely.",
+      "acceptanceCriteria": [
+        "Add a runbook with pre-release checklist, cutover steps, rollback triggers, and rollback steps",
+        "Include production-safe config flag checklist and smoke-test commands",
+        "Include ownership/escalation roles without secrets or personal credentials",
+        "Typecheck passes"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-027",
+      "title": "Document controlled bearer-token production rollout policy",
+      "description": "As a release owner, I want a documented controlled rollout policy using bearer-token access so that lawyers, CICC licensees, and self-represented users can be onboarded safely before role-based auth is implemented.",
+      "acceptanceCriteria": [
+        "Document intended user groups and rollout limitations for bearer-token access",
+        "Document security risks and mitigations for bearer-token initial production rollout",
+        "Track role-based user authentication as a follow-on requirement in docs/backlog",
+        "Typecheck passes"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-028",
+      "title": "Create production sign-off checklist and evidence manifest",
+      "description": "As product and engineering stakeholders, we want a single sign-off checklist and evidence manifest so that production readiness review is repeatable and auditable.",
+      "acceptanceCriteria": [
+        "Add a production readiness sign-off checklist covering engineering, legal/compliance, and operations gates",
+        "Add an evidence manifest listing required reports, artifacts, and validation outputs for release review",
+        "Checklist explicitly includes no-scaffold-in-production and no-placeholder-research-response confirmations",
+        "Typecheck passes"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-029",
+      "title": "Run production readiness rehearsal and record results",
+      "description": "As a release manager, I want a documented release-rehearsal execution so that the production process is validated before the real launch.",
+      "acceptanceCriteria": [
+        "Run the defined release readiness checks and record pass/fail outcomes in a reproducible report",
+        "Capture references to generated evaluation and release evidence artifacts",
+        "Document any remaining blockers or confirm readiness for production decision",
+        "Typecheck passes"
+      ],
+      "priority": 29,
+      "passes": false,
       "notes": ""
     }
   ]

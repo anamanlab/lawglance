@@ -46,3 +46,14 @@ Started: 2026-02-23
   - Gotcha: `scripts/ralph/prd.json` can differ by branch, so pick the story from the active branch-local PRD before coding.
   - Useful context: Pass `trace_id` from route handlers into service methods whenever service-layer audit events are required.
 ---
+## 2026-02-23 19:29:38 -0300 - US-004
+- Added a new ingestion checkpoint recovery runbook with explicit checkpoint file location, corruption recovery flow, full/cadence replay commands, and a post-recovery verification checklist.
+- Files changed
+- `docs/release/ingestion-checkpoint-recovery.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Keep operational runbooks command-driven with copy/paste-ready shell blocks and checklist verification commands for faster on-call execution.
+  - Gotcha: Ralph PRD branch pointers can differ across branches; verify and follow the branch-local story backlog before implementation.
+  - Useful context: Ingestion checkpoint state lives at `artifacts/ingestion/checkpoints.json` and can be safely rebuilt by replaying `scripts/run_ingestion_jobs.py` with `--state-path`.
+---

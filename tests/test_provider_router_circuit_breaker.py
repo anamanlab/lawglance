@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from immcad_api.providers import ProviderError, ProviderResult, ProviderRouter
@@ -11,7 +12,15 @@ class _FailingProvider:
     code: str = "provider_error"
     message: str = "provider failed"
 
-    def generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> ProviderResult:
+        del message, citations, locale, grounding_context
         raise ProviderError(self.name, self.code, self.message)
 
 
@@ -20,7 +29,15 @@ class _FlakyProvider:
     name: str
     fail_once: bool = True
 
-    def generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> ProviderResult:
+        del message, locale, grounding_context
         if self.fail_once:
             self.fail_once = False
             raise ProviderError(self.name, "provider_error", "temporary failure")
@@ -32,10 +49,41 @@ class _SuccessProvider:
     name: str
     answer: str = "fallback answer"
 
-    def generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> ProviderResult:
+        del message, locale, grounding_context
         return ProviderResult(
             provider=self.name,
             answer=self.answer,
+            citations=citations,
+            confidence="medium",
+        )
+
+
+@dataclass
+class _CapturingProvider:
+    name: str
+    received_grounding_context: list[str] | None = None
+
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> ProviderResult:
+        del message, locale
+        self.received_grounding_context = list(grounding_context) if grounding_context else None
+        return ProviderResult(
+            provider=self.name,
+            answer="ok",
             citations=citations,
             confidence="medium",
         )
@@ -116,3 +164,28 @@ def test_router_resets_circuit_after_window() -> None:
 
     metrics = router.telemetry_snapshot()
     assert metrics["openai"]["success"] == 1
+
+
+def test_router_forwards_grounding_context_to_provider() -> None:
+    provider = _CapturingProvider(name="openai")
+    router = ProviderRouter(
+        [provider],
+        "openai",
+        circuit_breaker_failure_threshold=3,
+        circuit_breaker_open_seconds=30.0,
+    )
+
+    grounding_context = [
+        "IRPA s. 11 governs visa and document requirements.",
+        "Federal Court jurisprudence emphasizes procedural fairness.",
+    ]
+
+    result = router.generate(
+        message="Summarize key requirements for entry documents.",
+        citations=[],
+        locale="en-CA",
+        grounding_context=grounding_context,
+    )
+
+    assert result.fallback_used is False
+    assert provider.received_grounding_context == grounding_context

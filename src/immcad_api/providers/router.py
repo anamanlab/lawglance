@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 import time
 
 from immcad_api.telemetry import ProviderMetrics
 
 from immcad_api.providers.base import Provider, ProviderError, ProviderResult
+from immcad_api.schemas import Citation
 
 
 @dataclass
@@ -78,7 +80,14 @@ class ProviderRouter:
     def telemetry_snapshot(self) -> dict[str, dict[str, int]]:
         return self.telemetry.snapshot()
 
-    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations: list[Citation],
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> RoutingResult:
         last_error: ProviderError | None = None
 
         for provider in self.providers:
@@ -92,7 +101,12 @@ class ProviderRouter:
                     )
                 continue
             try:
-                result = provider.generate(message=message, citations=citations, locale=locale)
+                result = provider.generate(
+                    message=message,
+                    citations=citations,
+                    locale=locale,
+                    grounding_context=grounding_context,
+                )
                 fallback_used = provider.name != self.primary_provider_name
                 fallback_reason = last_error.code if fallback_used and last_error else None
                 self._record_success(provider.name, fallback_used=fallback_used)

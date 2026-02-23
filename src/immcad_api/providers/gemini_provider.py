@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import time
 
 from immcad_api.providers.error_mapping import map_provider_exception
@@ -23,7 +24,23 @@ class GeminiProvider:
         self.timeout_seconds = timeout_seconds
         self.max_retries = max(0, max_retries)
 
-    def generate(self, *, message: str, citations: list[Citation], locale: str) -> ProviderResult:
+    def _format_grounding_context(self, grounding_context: Sequence[str] | None) -> str:
+        if not grounding_context:
+            return ""
+        snippets = [snippet.strip() for snippet in grounding_context if snippet and snippet.strip()]
+        if not snippets:
+            return ""
+        lines = "\n".join(f"- {snippet}" for snippet in snippets)
+        return f"\nGrounding context snippets:\n{lines}"
+
+    def generate(
+        self,
+        *,
+        message: str,
+        citations: list[Citation],
+        locale: str,
+        grounding_context: Sequence[str] | None = None,
+    ) -> ProviderResult:
         if not self.api_key:
             raise ProviderError(self.name, "provider_error", "GEMINI_API_KEY not configured")
 
@@ -38,11 +55,13 @@ class GeminiProvider:
             api_key=self.api_key,
             http_options=types.HttpOptions(timeout=timeout_seconds),
         )
+        grounding_context_block = self._format_grounding_context(grounding_context)
         prompt = (
             "You are an informational assistant for Canadian immigration law. "
             "Do not provide legal representation advice. "
             f"User locale: {locale}. "
             f"Question: {message.strip()}"
+            f"{grounding_context_block}"
         )
 
         answer = ""

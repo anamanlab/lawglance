@@ -60,3 +60,19 @@ Started: 2026-02-23
   - Gotcha: `make` is unavailable in this environment, so the `quality` target must be run as the exact Makefile command sequence in order.
   - Useful context: when grounding is enabled but no retriever is configured, preserving `citations=[]` keeps existing policy refusal behavior stable and avoids accidental ungrounded answers.
 ---
+## 2026-02-23 18:51:20 -0300 - US-005
+- Updated provider and router contracts to accept optional grounding context snippets and pass them through safely.
+- Files changed
+- src/immcad_api/providers/base.py
+- src/immcad_api/providers/router.py
+- src/immcad_api/providers/openai_provider.py
+- src/immcad_api/providers/gemini_provider.py
+- src/immcad_api/providers/scaffold_provider.py
+- tests/test_provider_router_circuit_breaker.py
+- scripts/ralph/prd.json
+- scripts/ralph/progress.txt
+- Learnings for future iterations:
+  - Reusable pattern: add optional protocol arguments with default None and thread them through router boundaries first to preserve backwards compatibility.
+  - Gotcha: make is unavailable in this environment, so run the quality target commands from the Makefile in order as an exact equivalent gate.
+  - Useful context: explicit forwarding tests in router coverage prevent silent drift between provider contract changes and routing behavior.
+---

@@ -155,6 +155,20 @@ App URL:
 http://127.0.0.1:8501
 ```
 
+### API scaffold (new feature)
+
+Run API service scaffold:
+
+```bash
+uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+```
+
+Health check:
+
+```bash
+http://127.0.0.1:8000/healthz
+```
+
 ## Definition of done for “Canadian adaptation”
 
 IMMCAD is considered Canada-ready when:

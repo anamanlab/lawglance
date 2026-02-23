@@ -1,0 +1,25 @@
+name: Architecture Docs Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-architecture-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate module dependency diagram
+        run: python scripts/generate_module_dependency_diagram.py
+
+      - name: Validate architecture documentation
+        run: bash scripts/validate_architecture_docs.sh

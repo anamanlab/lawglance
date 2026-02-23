@@ -1,5 +1,8 @@
+fastapi>=0.115.0
 chroma-hnswlib==0.7.6
 chromadb==0.5.11
+google-genai>=1.33.0
+httpx>=0.27.0
 langchain==0.2.9
 langchain-chroma==0.1.4
 langchain-community==0.2.10
@@ -13,3 +16,4 @@ openai
 PyMuPDF==1.24.9
 PyMuPDFb==1.24.9
 streamlit==1.37.0
+uvicorn>=0.30.0

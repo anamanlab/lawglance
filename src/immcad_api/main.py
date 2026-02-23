@@ -1,0 +1,215 @@
+from __future__ import annotations
+
+import ipaddress
+import secrets
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
+from immcad_api.errors import AuthError, ProviderApiError
+from immcad_api.api.routes import build_case_router, build_chat_router
+from immcad_api.middleware.rate_limit import build_rate_limiter
+from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
+from immcad_api.schemas import ErrorEnvelope
+from immcad_api.services import CaseSearchService, ChatService
+from immcad_api.settings import load_settings
+from immcad_api.sources import CanLIIClient
+from immcad_api.telemetry import generate_trace_id
+
+
+def _parse_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def _sanitize_client_host(value: str | None) -> str | None:
+    if not value:
+        return None
+    trimmed = value.strip().lower()
+    if not trimmed or len(trimmed) > 128:
+        return None
+    allowed = set("abcdefghijklmnopqrstuvwxyz0123456789-._:")
+    if any(char not in allowed for char in trimmed):
+        return None
+    return f"host:{trimmed}"
+
+
+def _trusted_forwarded_client_id(request: Request) -> str | None:
+    x_real_ip = _parse_ip(request.headers.get("x-real-ip"))
+    x_forwarded_for = request.headers.get("x-forwarded-for", "")
+    forwarded_first = _parse_ip(x_forwarded_for.split(",")[0].strip()) if x_forwarded_for else None
+
+    if x_real_ip and forwarded_first and x_real_ip == forwarded_first:
+        return x_real_ip
+    if x_real_ip and not forwarded_first:
+        return x_real_ip
+    return None
+
+
+def _resolve_rate_limit_client_id(request: Request) -> str | None:
+    direct_host = request.client.host if request.client else None
+    direct_ip = _parse_ip(direct_host)
+    if direct_ip:
+        parsed_direct = ipaddress.ip_address(direct_ip)
+        # Only trust forwarded headers when the direct source is a trusted proxy hop.
+        if parsed_direct.is_private or parsed_direct.is_loopback or parsed_direct.is_link_local:
+            forwarded_ip = _trusted_forwarded_client_id(request)
+            if forwarded_ip:
+                return forwarded_ip
+        return direct_ip
+    direct_host_id = _sanitize_client_host(direct_host)
+    if direct_host_id:
+        return direct_host_id
+    return _trusted_forwarded_client_id(request)
+
+
+def create_app() -> FastAPI:
+    settings = load_settings()
+
+    providers = [
+        OpenAIProvider(
+            settings.openai_api_key,
+            model=settings.openai_model,
+            timeout_seconds=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
+        ),
+        GeminiProvider(
+            settings.gemini_api_key,
+            model=settings.gemini_model,
+            timeout_seconds=settings.provider_timeout_seconds,
+            max_retries=settings.provider_max_retries,
+        ),
+    ]
+    if settings.enable_scaffold_provider:
+        providers.append(ScaffoldProvider())
+
+    provider_router = ProviderRouter(
+        providers=providers,
+        primary_provider_name="openai",
+    )
+
+    chat_service = ChatService(provider_router)
+    case_search_service = CaseSearchService(
+        CanLIIClient(
+            api_key=settings.canlii_api_key,
+            base_url=settings.canlii_base_url,
+        )
+    )
+
+    app = FastAPI(title=settings.app_name, version="0.1.0")
+    rate_limiter = build_rate_limiter(
+        limit_per_minute=settings.api_rate_limit_per_minute,
+        redis_url=settings.redis_url,
+    )
+
+    @app.middleware("http")
+    async def trace_middleware(request: Request, call_next):
+        request.state.trace_id = generate_trace_id()
+        if request.url.path.startswith("/api") and settings.api_bearer_token:
+            auth_header = request.headers.get("authorization", "")
+            expected = f"Bearer {settings.api_bearer_token}"
+            if not secrets.compare_digest(auth_header, expected):
+                error = ErrorEnvelope(
+                    error={
+                        "code": "UNAUTHORIZED",
+                        "message": "Missing or invalid bearer token",
+                        "trace_id": request.state.trace_id,
+                    }
+                )
+                return JSONResponse(
+                    status_code=401,
+                    content=error.model_dump(),
+                    headers={"x-trace-id": request.state.trace_id},
+                )
+
+        if request.url.path.startswith("/api"):
+            client_id = _resolve_rate_limit_client_id(request)
+            if not client_id:
+                error = ErrorEnvelope(
+                    error={
+                        "code": "VALIDATION_ERROR",
+                        "message": "Unable to determine client identifier for rate limiting",
+                        "trace_id": request.state.trace_id,
+                    }
+                )
+                return JSONResponse(
+                    status_code=400,
+                    content=error.model_dump(),
+                    headers={"x-trace-id": request.state.trace_id},
+                )
+
+            allowed = rate_limiter.allow(client_id)
+            if not allowed:
+                error = ErrorEnvelope(
+                    error={
+                        "code": "RATE_LIMITED",
+                        "message": "Request rate exceeded allowed threshold",
+                        "trace_id": request.state.trace_id,
+                    }
+                )
+                return JSONResponse(
+                    status_code=429,
+                    content=error.model_dump(),
+                    headers={"x-trace-id": request.state.trace_id},
+                )
+
+        response = await call_next(request)
+        response.headers["x-trace-id"] = request.state.trace_id
+        return response
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+        trace_id = getattr(request.state, "trace_id", generate_trace_id())
+        payload = ErrorEnvelope(
+            error={
+                "code": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+                "trace_id": trace_id,
+            }
+        )
+        return JSONResponse(
+            status_code=422,
+            content=payload.model_dump(),
+            headers={"x-trace-id": trace_id},
+        )
+
+    @app.exception_handler(AuthError)
+    async def auth_exception_handler(request: Request, exc: AuthError):
+        trace_id = getattr(request.state, "trace_id", generate_trace_id())
+        payload = ErrorEnvelope(
+            error={"code": "UNAUTHORIZED", "message": exc.message, "trace_id": trace_id}
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=payload.model_dump(),
+            headers={"x-trace-id": trace_id},
+        )
+
+    @app.exception_handler(ProviderApiError)
+    async def provider_exception_handler(request: Request, exc: ProviderApiError):
+        trace_id = getattr(request.state, "trace_id", generate_trace_id())
+        payload = ErrorEnvelope(
+            error={"code": "PROVIDER_ERROR", "message": exc.message, "trace_id": trace_id}
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=payload.model_dump(),
+            headers={"x-trace-id": trace_id},
+        )
+
+    app.include_router(build_chat_router(chat_service))
+    app.include_router(build_case_router(case_search_service))
+
+    @app.get("/healthz", tags=["health"])
+    def healthz() -> dict[str, str]:
+        return {"status": "ok", "service": settings.app_name}
+
+    return app
+
+
+app = create_app()

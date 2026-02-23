@@ -57,3 +57,11 @@ Started: 2026-02-23
   - Gotcha: Ralph PRD branch pointers can differ across branches; verify and follow the branch-local story backlog before implementation.
   - Useful context: Ingestion checkpoint state lives at `artifacts/ingestion/checkpoints.json` and can be safely rebuilt by replaying `scripts/run_ingestion_jobs.py` with `--state-path`.
 ---
+## 2026-02-23 19:53:34 -0300 - US-005
+- Implemented a release artifact validator (`scripts/validate_release_artifacts.py`) that enforces presence, readability, non-empty content, and JSON validity for required jurisdiction evaluation artifacts, then wired it into `release-gates.yml` before smoke/hygiene/upload steps.
+- Files changed: `.github/workflows/release-gates.yml`, `scripts/validate_release_artifacts.py`, `tests/test_validate_release_artifacts.py`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: keep release gate validators importable with a small CLI wrapper so unit tests can directly assert failure categories without shelling out.
+  - Gotcha: running `ruff` on YAML paths produces parser noise; lint only Python paths and validate workflows via CI execution.
+  - Useful context: release evidence now hard-fails if any of the four eval artifacts are missing, blank, or malformed JSON before upload.
+---

@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-amp ralph-status
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -57,10 +57,19 @@ hygiene:
 quality: lint-api test arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 
 ralph-run:
-	bash scripts/ralph/ralph.sh --tool claude 10
+	bash scripts/ralph/ralph.sh --tool codex 10
+
+ralph-run-codex:
+	bash scripts/ralph/ralph.sh --tool codex 10
 
 ralph-run-amp:
 	bash scripts/ralph/ralph.sh --tool amp 10
+
+ralph-run-claude:
+	bash scripts/ralph/ralph.sh --tool claude 10
+
+ralph-check:
+	bash scripts/ralph/ralph.sh --tool codex --check
 
 ralph-status:
 	jq '.userStories[] | {id, title, priority, passes}' scripts/ralph/prd.json

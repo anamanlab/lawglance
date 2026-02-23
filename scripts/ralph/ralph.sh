@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Ralph loop for IMMCAD
-# Usage: ./scripts/ralph/ralph.sh [--tool amp|claude] [max_iterations]
+# Usage: ./scripts/ralph/ralph.sh [--tool codex|amp|claude] [--check] [max_iterations]
 
 set -euo pipefail
 
-TOOL="claude"
+TOOL="codex"
 MAX_ITERATIONS=10
+CHECK_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,6 +18,10 @@ while [[ $# -gt 0 ]]; do
       TOOL="${1#*=}"
       shift
       ;;
+    --check)
+      CHECK_ONLY=1
+      shift
+      ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -26,8 +31,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
-  echo "Error: invalid tool '$TOOL' (must be amp or claude)"
+if [[ "$TOOL" != "codex" && "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
+  echo "Error: invalid tool '$TOOL' (must be codex, amp, or claude)"
   exit 1
 fi
 
@@ -52,8 +57,29 @@ if [[ "$TOOL" == "amp" ]] && ! command -v amp >/dev/null 2>&1; then
   echo "Error: amp CLI is not installed"
   exit 1
 fi
+if [[ "$TOOL" == "codex" ]] && ! command -v codex >/dev/null 2>&1; then
+  echo "Error: codex CLI is not installed"
+  exit 1
+fi
 if [[ "$TOOL" == "claude" ]] && ! command -v claude >/dev/null 2>&1; then
   echo "Error: claude CLI is not installed"
+  exit 1
+fi
+
+PROMPT_FILE="$SCRIPT_DIR/prompt.md"
+if [[ "$TOOL" == "codex" ]]; then
+  PROMPT_FILE="$SCRIPT_DIR/CODEX.md"
+elif [[ "$TOOL" == "claude" ]]; then
+  PROMPT_FILE="$SCRIPT_DIR/CLAUDE.md"
+fi
+
+if [[ ! -f "$PROMPT_FILE" ]]; then
+  echo "Error: missing prompt file: $PROMPT_FILE"
+  exit 1
+fi
+
+if [[ ! -s "$PROMPT_FILE" ]]; then
+  echo "Error: empty prompt file: $PROMPT_FILE"
   exit 1
 fi
 
@@ -90,6 +116,16 @@ if [[ -z "$TARGET_BRANCH" ]]; then
   exit 1
 fi
 
+if [[ "$CHECK_ONLY" -eq 1 ]]; then
+  TOTAL_COUNT=$(jq '.userStories | length' "$PRD_FILE")
+  echo "Ralph preflight OK"
+  echo "tool=$TOOL"
+  echo "prompt_file=$PROMPT_FILE"
+  echo "target_branch=$TARGET_BRANCH"
+  echo "stories_total=$TOTAL_COUNT"
+  exit 0
+fi
+
 cd "$REPO_ROOT"
 CURRENT_GIT_BRANCH=$(git branch --show-current)
 if [[ "$CURRENT_GIT_BRANCH" != "$TARGET_BRANCH" ]]; then
@@ -108,9 +144,12 @@ echo "$TARGET_BRANCH" > "$LAST_BRANCH_FILE"
 
 echo "Starting Ralph for IMMCAD (tool=$TOOL, iterations=$MAX_ITERATIONS, branch=$TARGET_BRANCH)"
 
-PROMPT_FILE="$SCRIPT_DIR/prompt.md"
-if [[ "$TOOL" == "claude" ]]; then
-  PROMPT_FILE="$SCRIPT_DIR/CLAUDE.md"
+DONE_COUNT=$(jq '[.userStories[] | select(.passes==true)] | length' "$PRD_FILE")
+TOTAL_COUNT=$(jq '.userStories | length' "$PRD_FILE")
+if [[ "$TOTAL_COUNT" -gt 0 && "$DONE_COUNT" -eq "$TOTAL_COUNT" ]]; then
+  echo "All PRD stories are already complete ($DONE_COUNT/$TOTAL_COUNT)."
+  echo "<promise>COMPLETE</promise>"
+  exit 0
 fi
 
 for i in $(seq 1 "$MAX_ITERATIONS"); do
@@ -119,13 +158,25 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
   echo "  Ralph Iteration $i/$MAX_ITERATIONS ($TOOL)"
   echo "==============================================================="
 
+  LAST_MESSAGE_FILE=""
   if [[ "$TOOL" == "amp" ]]; then
     OUTPUT=$(cat "$PROMPT_FILE" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+  elif [[ "$TOOL" == "codex" ]]; then
+    LAST_MESSAGE_FILE=$(mktemp)
+    OUTPUT=$(cat "$PROMPT_FILE" | codex exec --color never --dangerously-bypass-approvals-and-sandbox --output-last-message "$LAST_MESSAGE_FILE" 2>&1 | tee /dev/stderr) || true
   else
     OUTPUT=$(claude --dangerously-skip-permissions --print < "$PROMPT_FILE" 2>&1 | tee /dev/stderr) || true
   fi
 
-  if echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
+  if [[ "$TOOL" == "codex" ]]; then
+    if [[ -n "$LAST_MESSAGE_FILE" && -f "$LAST_MESSAGE_FILE" ]] && grep -q "<promise>COMPLETE</promise>" "$LAST_MESSAGE_FILE"; then
+      rm -f "$LAST_MESSAGE_FILE"
+      echo
+      echo "Ralph completed all tasks at iteration $i."
+      exit 0
+    fi
+    rm -f "$LAST_MESSAGE_FILE"
+  elif echo "$OUTPUT" | grep -q "<promise>COMPLETE</promise>"; then
     echo
     echo "Ralph completed all tasks at iteration $i."
     exit 0
@@ -133,6 +184,12 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
 
   DONE_COUNT=$(jq '[.userStories[] | select(.passes==true)] | length' "$PRD_FILE")
   TOTAL_COUNT=$(jq '.userStories | length' "$PRD_FILE")
+  if [[ "$TOTAL_COUNT" -gt 0 && "$DONE_COUNT" -eq "$TOTAL_COUNT" ]]; then
+    echo
+    echo "Ralph detected all tasks complete from PRD state at iteration $i."
+    echo "<promise>COMPLETE</promise>"
+    exit 0
+  fi
   echo "Progress: $DONE_COUNT/$TOTAL_COUNT stories complete"
 
   sleep 2

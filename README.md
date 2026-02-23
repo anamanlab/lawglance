@@ -198,16 +198,34 @@ Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quali
 
 Ralph is now wired in this repo under `scripts/ralph/`.
 
-Run with Claude Code:
+Run with Codex (default):
 
 ```bash
 make ralph-run
+```
+
+Run with Codex (explicit target):
+
+```bash
+make ralph-run-codex
 ```
 
 Run with Amp:
 
 ```bash
 make ralph-run-amp
+```
+
+Run with Claude Code (optional):
+
+```bash
+make ralph-run-claude
+```
+
+Preflight validation (no iterations):
+
+```bash
+bash scripts/ralph/ralph.sh --tool codex --check
 ```
 
 Check story progress:

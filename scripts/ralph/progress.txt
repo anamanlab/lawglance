@@ -39,3 +39,11 @@ Started: 2026-02-23
   - Gotcha: Deleting or moving the checkpoint file intentionally triggers full refresh behavior because ingestion loads empty state when the file is absent.
   - Useful context: `scripts/run_ingestion_jobs.py` defaults checkpoint state to `artifacts/ingestion/checkpoints.json`, so runbook steps must align with that path.
 ---
+## 2026-02-23 17:35:35 -0300 - US-005
+- Implemented release artifact verification by adding a dedicated validator for required jurisdiction evaluation artifacts and wiring it into `release-gates` before job completion.
+- Files changed: scripts/verify_release_eval_artifacts.py, tests/test_verify_release_eval_artifacts.py, .github/workflows/release-gates.yml, scripts/ralph/prd.json, scripts/ralph/progress.txt.
+- Learnings for future iterations:
+  - Reusable pattern: Keep CI artifact checks in a standalone script with overridable `--artifact` inputs so both workflows and tests can share the same verification logic.
+  - Gotcha: Treat whitespace-only files as empty artifacts; size checks alone are not enough for reliable release evidence.
+  - Useful context: Required release-gates evidence currently includes four files under `artifacts/evals/` for jurisdiction evaluation and suite outputs.
+---

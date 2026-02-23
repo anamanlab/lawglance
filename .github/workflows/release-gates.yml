@@ -41,6 +41,9 @@ jobs:
           PYTHONPATH: src
         run: uv run python scripts/run_jurisdictional_test_suite.py
 
+      - name: Verify release evaluation artifacts
+        run: uv run python scripts/verify_release_eval_artifacts.py
+
       - name: Run staging API smoke tests
         env:
           API_BEARER_TOKEN: release-smoke-token

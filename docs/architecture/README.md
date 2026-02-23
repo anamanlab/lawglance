@@ -1,5 +1,13 @@
 # Architecture Documentation
 
+## Table of Contents
+
+- [Scope](#scope)
+- [Documentation Framework](#documentation-framework)
+- [Contents](#contents)
+- [How to Use](#how-to-use)
+- [Ownership](#ownership)
+
 This directory contains the authoritative architecture documentation for IMMCAD.
 
 ## Scope

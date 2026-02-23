@@ -1,5 +1,15 @@
 # ADR-001: Use Modular Monolith Backend in Python for MVP
 
+## Table of Contents
+
+- [Context](#context)
+- [Options Considered](#options-considered)
+- [Decision](#decision)
+- [Rationale](#rationale)
+- [Trade-offs](#trade-offs)
+- [Consequences](#consequences)
+- [Revisit Trigger](#revisit-trigger)
+
 - Status: Accepted
 - Date: 2026-02-23
 - Deciders: IMMCAD maintainers

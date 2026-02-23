@@ -1,5 +1,19 @@
 # Development Environment Setup
 
+## Table of Contents
+
+- [Supported baseline](#supported-baseline)
+- [Quick start (recommended)](#quick-start-(recommended))
+- [Manual install prerequisites](#manual-install-prerequisites)
+  - [Python 3.11+](#python-311+)
+  - [uv](#uv)
+- [Project bootstrap details](#project-bootstrap-details)
+- [Team-shared editor defaults](#team-shared-editor-defaults)
+- [Daily workflow](#daily-workflow)
+- [Environment variables](#environment-variables)
+- [Redis (optional but recommended)](#redis-(optional-but-recommended))
+- [Troubleshooting](#troubleshooting)
+
 This guide standardizes local development for IMMCAD.
 
 ## Supported baseline
@@ -79,8 +93,7 @@ The setup script performs:
 ./scripts/verify_dev_env.sh
 
 # Lint and test
-uv run ruff check .
-uv run pytest -q
+make quality
 ```
 
 ## Environment variables
@@ -91,6 +104,12 @@ Use `.env.example` as baseline:
 OPENAI_API_KEY=your-openai-api-key
 REDIS_URL=redis://localhost:6379/0
 ```
+
+Production/CI policy:
+
+- Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
+- `API_BEARER_TOKEN` is mandatory in `production`/`prod`/`ci`.
+- Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
 
 ## Redis (optional but recommended)
 

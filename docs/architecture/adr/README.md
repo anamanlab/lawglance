@@ -1,5 +1,12 @@
 # Architecture Decision Records (ADR)
 
+## Table of Contents
+
+- [Purpose](#purpose)
+- [Naming](#naming)
+- [Status Values](#status-values)
+- [Workflow](#workflow)
+
 ## Purpose
 
 ADRs document significant architecture decisions with context, alternatives, and trade-offs.

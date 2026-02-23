@@ -50,15 +50,20 @@ def load_settings() -> Settings:
         "yes",
         "on",
     }
+    environment = os.getenv("ENVIRONMENT", "development")
+    api_bearer_token = os.getenv("API_BEARER_TOKEN")
+    if environment.lower() in {"production", "prod", "ci"} and not api_bearer_token:
+        raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+
     return Settings(
         app_name=os.getenv("API_APP_NAME", "IMMCAD API"),
-        environment=os.getenv("ENVIRONMENT", "development"),
+        environment=environment,
         default_locale=os.getenv("DEFAULT_LOCALE", "en-CA"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         gemini_api_key=os.getenv("GEMINI_API_KEY"),
         canlii_api_key=os.getenv("CANLII_API_KEY"),
         canlii_base_url=os.getenv("CANLII_BASE_URL", "https://api.canlii.org/v1"),
-        api_bearer_token=os.getenv("API_BEARER_TOKEN"),
+        api_bearer_token=api_bearer_token,
         redis_url=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
         openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),

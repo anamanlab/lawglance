@@ -1,5 +1,15 @@
 # ADR-XXX: Decision Title
 
+## Table of Contents
+
+- [Context](#context)
+- [Options Considered](#options-considered)
+- [Decision](#decision)
+- [Rationale](#rationale)
+- [Trade-offs](#trade-offs)
+- [Consequences](#consequences)
+- [Revisit Trigger](#revisit-trigger)
+
 - Status: Proposed
 - Date: YYYY-MM-DD
 - Deciders: Team/Owner

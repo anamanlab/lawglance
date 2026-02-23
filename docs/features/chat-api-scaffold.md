@@ -1,5 +1,14 @@
 # Feature: Chat API Scaffold
 
+## Table of Contents
+
+- [Goal](#goal)
+- [Requirements](#requirements)
+- [Acceptance Criteria](#acceptance-criteria)
+- [Out of Scope (this scaffold)](#out-of-scope-(this-scaffold))
+- [Files Added](#files-added)
+- [Next Implementation Steps](#next-implementation-steps)
+
 ## Goal
 
 Create an API-first scaffold that decouples UI from backend orchestration and matches architecture contracts.

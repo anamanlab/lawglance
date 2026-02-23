@@ -18,7 +18,8 @@ Endpoints:
 - `GEMINI_API_KEY` (optional in scaffold; used by fallback provider)
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
-- `API_BEARER_TOKEN` (optional; if set, required for `/api/*` routes)
+- `ENVIRONMENT` (optional, default `development`; use `production`/`prod`/`ci` for hardened mode)
+- `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `REDIS_URL` (optional, default `redis://localhost:6379/0`; used for distributed rate limiting when reachable)
 - `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
@@ -32,3 +33,4 @@ Endpoints:
 - If provider keys are missing, scaffold provider returns deterministic responses.
 - If CanLII key or endpoint is unavailable, case search falls back to deterministic scaffold data.
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
+- Store all production tokens/keys in a secrets manager and rotate on a regular schedule.

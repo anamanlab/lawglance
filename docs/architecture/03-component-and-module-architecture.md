@@ -1,5 +1,13 @@
 # 03. Component and Module Architecture
 
+## Table of Contents
+
+- [Backend Module Map (Target)](#backend-module-map-(target))
+- [Current-to-Target Mapping](#current-to-target-mapping)
+- [Component Diagram](#component-diagram)
+- [Design Patterns](#design-patterns)
+- [Architectural Constraints](#architectural-constraints)
+
 ## Backend Module Map (Target)
 
 - `api/`: HTTP endpoints, request/response schemas, auth middleware.

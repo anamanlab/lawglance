@@ -1,5 +1,14 @@
 # 01. System Context
 
+## Table of Contents
+
+- [Purpose](#purpose)
+- [Stakeholders and Personas](#stakeholders-and-personas)
+- [System Boundary](#system-boundary)
+- [External Systems](#external-systems)
+- [C4 Context Diagram](#c4-context-diagram)
+- [Architectural Pattern](#architectural-pattern)
+
 ## Purpose
 
 IMMCAD is an AI-powered legal information assistant being adapted to Canadian immigration law. It provides contextual answers with citations and legal disclaimers.

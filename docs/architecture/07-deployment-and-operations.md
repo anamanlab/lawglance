@@ -1,5 +1,14 @@
 # 07. Deployment and Operations Architecture
 
+## Table of Contents
+
+- [Environments](#environments)
+- [Deployment Topology (MVP)](#deployment-topology-(mvp))
+- [Operational Responsibilities](#operational-responsibilities)
+- [Runtime Controls](#runtime-controls)
+- [Monitoring and Alerting](#monitoring-and-alerting)
+- [Backup and Recovery](#backup-and-recovery)
+
 ## Environments
 
 - Local development: single machine, uv-managed Python runtime, optional Redis container.

@@ -1,5 +1,13 @@
 # 04. Data Architecture
 
+## Table of Contents
+
+- [Data Domains](#data-domains)
+- [Canonical Metadata Schema](#canonical-metadata-schema)
+- [Data Flow](#data-flow)
+- [Governance and Lifecycle](#governance-and-lifecycle)
+- [Risks and Controls](#risks-and-controls)
+
 ## Data Domains
 
 1. Legal source corpus

@@ -1,5 +1,14 @@
 # 02. Container and Service Architecture
 
+## Table of Contents
+
+- [Current Container View](#current-container-view)
+- [Target MVP Container View](#target-mvp-container-view)
+- [C4 Container Diagram](#c4-container-diagram)
+- [Service Boundaries and API Contracts](#service-boundaries-and-api-contracts)
+- [Communication Patterns](#communication-patterns)
+- [Deployment Notes](#deployment-notes)
+
 ## Current Container View
 
 - `app.py`: Streamlit UI + orchestration bootstrap.

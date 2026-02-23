@@ -1,5 +1,12 @@
 # 08. Architecture Debt and Improvement Plan
 
+## Table of Contents
+
+- [Current Debt](#current-debt)
+- [Risk Assessment](#risk-assessment)
+- [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
+- [Success Criteria](#success-criteria)
+
 ## Current Debt
 
 1. UI and orchestration are tightly coupled in `app.py`.

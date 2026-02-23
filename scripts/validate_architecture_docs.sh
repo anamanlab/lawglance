@@ -33,7 +33,11 @@ fi
 
 echo "[OK] ADR count: $adr_count"
 
-mermaid_count="$(rg -n '```mermaid' docs/architecture | wc -l | tr -d ' ')"
+if command -v rg >/dev/null 2>&1; then
+  mermaid_count="$(rg -n '```mermaid' docs/architecture | wc -l | tr -d ' ')"
+else
+  mermaid_count="$(grep -R --line-number '```mermaid' docs/architecture | wc -l | tr -d ' ')"
+fi
 if [[ "$mermaid_count" -lt 3 ]]; then
   echo "Expected at least 3 Mermaid diagrams, found $mermaid_count"
   exit 1

@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint format test arch-generate arch-validate
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate hygiene quality
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -15,6 +15,9 @@ api-dev:
 lint:
 	uv run ruff check .
 
+lint-api:
+	uv run ruff check src/immcad_api tests
+
 format:
 	uv run ruff format .
 
@@ -26,3 +29,8 @@ arch-generate:
 
 arch-validate:
 	./scripts/validate_architecture_docs.sh
+
+hygiene:
+	bash scripts/check_repository_hygiene.sh
+
+quality: lint-api test arch-validate hygiene

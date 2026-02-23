@@ -1,5 +1,12 @@
 # API Contracts
 
+## Table of Contents
+
+- [`POST /api/chat`](#`post-/api/chat`)
+- [`POST /api/search/cases`](#`post-/api/search/cases`)
+- [Error Envelope](#error-envelope)
+- [Interface Rules](#interface-rules)
+
 ## `POST /api/chat`
 
 Headers:

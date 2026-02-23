@@ -1,5 +1,13 @@
 # 09. Documentation Automation and Maintenance
 
+## Table of Contents
+
+- [Automation Goals](#automation-goals)
+- [Tooling](#tooling)
+- [Team Process](#team-process)
+- [Review Checklist](#review-checklist)
+- [Versioning and Change Management](#versioning-and-change-management)
+
 ## Automation Goals
 
 - Keep architecture docs complete and synchronized with code evolution.

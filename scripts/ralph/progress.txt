@@ -274,3 +274,20 @@ Started: 2026-02-23
   - Useful context
   - Backup and recovery operational targets are now centralized in `docs/release/backup-and-recovery-operational-targets.md` for release and incident workflows.
 ---
+## 2026-02-23 20:54:45 -0300 - US-012
+- What was implemented
+- Documented frontend integration expectations for chat success/refusal/error envelopes and explicit `x-trace-id`/`error.trace_id` handling in the architecture API contract.
+- Added an implementation-ready Next.js + Tailwind minimal chat migration feature doc with phased delivery steps and UI contract requirements.
+- Files changed
+- `docs/architecture/api-contracts.md`
+- `docs/features/nextjs-minimal-chat-ui-plan.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend migration docs split into two layers: immutable API envelope contract in `docs/architecture/api-contracts.md` and execution sequencing in `docs/features/*`.
+  - Gotcha
+  - The environment does not provide `make`; run the exact `quality` Makefile command chain manually and in order to preserve gate equivalence.
+  - Useful context
+  - Refusal responses are `200` chat payloads with `fallback_used.reason = "policy_block"`; only transport failures use `ErrorEnvelope` with `error.trace_id`.
+---

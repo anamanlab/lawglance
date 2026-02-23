@@ -57,6 +57,38 @@ Response:
 }
 ```
 
+## Frontend Contract Expectations (Next.js Minimal Chat)
+
+These rules define how the Next.js chat client must consume API envelopes without relying on provider internals.
+
+Success path (`200` + chat payload):
+
+- Treat `answer`, `confidence`, and `disclaimer` as required display fields.
+- Always render `disclaimer` below assistant content, including refusal responses.
+- Render citations from `citations[]` when present using `title` + `url` as the clickable label/target and `pin`/`snippet` as optional metadata.
+- If `fallback_used.used = true`, show a non-blocking status indicator; do not expose provider exception text.
+
+Policy refusal path (`200` + chat payload):
+
+- Detect refusal via `fallback_used.reason = "policy_block"`.
+- Show refusal copy as assistant output while keeping normal chat layout.
+- Keep disclaimer visible; do not present refusal as system failure.
+- Citation section may be empty for refusal responses and should not display placeholder synthetic citations.
+
+Error path (`4xx`/`5xx` + `ErrorEnvelope`):
+
+- Read `error.code` and map to user-safe UI states (`UNAUTHORIZED`, `RATE_LIMITED`, `VALIDATION_ERROR`, `PROVIDER_ERROR`, `POLICY_BLOCKED`).
+- Surface a generic failure banner and retry affordance for recoverable failures.
+- Capture `x-trace-id` from response headers for telemetry and support correlation.
+- If `error.trace_id` exists in the body, it must match `x-trace-id`; frontend logs should record a mismatch as an integration defect.
+
+Trace correlation requirements:
+
+- Persist last seen trace ID per request lifecycle event in frontend telemetry.
+- Include trace ID in client-side error events and support-copy UI.
+- Prefer header `x-trace-id` as canonical value; use body `error.trace_id` only when needed for body-only consumers.
+
+
 Case-law fallback behavior:
 
 - `development` (and non-prod environments): if CanLII is unavailable, deterministic scaffold case results may be returned.

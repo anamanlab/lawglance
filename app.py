@@ -1,24 +1,24 @@
-import os
-import streamlit as st
-import random
-import time
 import base64
+import os
 import uuid
+
+import httpx
+import streamlit as st
 from dotenv import load_dotenv
 
-from lawglance_main import Lawglance
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_chroma import Chroma
-from langchain.schema import HumanMessage, AIMessage
 
-# Set page configuration
-st.set_page_config(page_title="LawGlance", page_icon="logo/logo.png", layout="wide")
+st.set_page_config(page_title="IMMCAD", page_icon="logo/logo.png", layout="wide")
 
-# Load environment variables
 load_dotenv()
 
-# Custom CSS for UI
-def add_custom_css():
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+API_BEARER_TOKEN = os.getenv("API_BEARER_TOKEN")
+DEFAULT_LOCALE = os.getenv("DEFAULT_LOCALE", "en-CA")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+REQUEST_TIMEOUT_SECONDS = float(os.getenv("UI_API_TIMEOUT_SECONDS", "30"))
+
+
+def add_custom_css() -> None:
     custom_css = """
     <style>
         body { font-family: 'Arial', sans-serif; }
@@ -27,13 +27,6 @@ def add_custom_css():
             border: 1px solid #ddd; margin-bottom: 10px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
-        .stButton > button {
-            background-color: #0066cc; color: white;
-            font-size: 16px; border-radius: 20px;
-            padding: 10px 20px; margin-top: 5px;
-            transition: background-color 0.3s ease;
-        }
-        .stButton > button:hover { background-color: #0052a3; }
         .st-chat-message-assistant {
             background-color: #f7f7f7; border-radius: 15px;
             padding: 15px; margin-bottom: 15px;
@@ -57,106 +50,172 @@ def add_custom_css():
             gap: 15px; margin-top: 20px; margin-bottom: 20px;
         }
         .logo { width: 40px; height: 30px; }
-        .st-sidebar {
-            background-color: #f9f9f9; padding: 20px;
-        }
-        .st-sidebar header {
-            font-size: 20px; font-weight: bold; margin-bottom: 10px;
-        }
-        .st-sidebar p {
-            font-size: 14px; color: #666;
-        }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
 
+
+def _render_title() -> None:
+    logo_path = "logo/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as image_file:
+            encoded_image = base64.b64encode(image_file.read()).decode()
+        st.markdown(
+            f"""
+            <div class="st-title">
+                <img src="data:image/png;base64,{encoded_image}" alt="IMMCAD Logo" class="logo">
+                <span>IMMCAD - Canadian Immigration Information Assistant</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            """
+            <div class="st-title">
+                <span>IMMCAD - Canadian Immigration Information Assistant</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _render_sidebar() -> None:
+    st.sidebar.header("About IMMCAD")
+    st.sidebar.markdown(
+        """
+IMMCAD is a Canadian immigration information assistant.
+
+Runtime:
+- UI: Streamlit
+- Backend: FastAPI (`/api/chat`)
+
+Disclaimer:
+- Informational responses only, not legal advice.
+"""
+    )
+    st.sidebar.caption(f"API base URL: {API_BASE_URL}")
+
+
+def _require_hardened_auth_config() -> None:
+    if ENVIRONMENT in {"production", "prod", "ci"} and not API_BEARER_TOKEN:
+        st.error("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci.")
+        st.stop()
+
+
+def _build_headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if API_BEARER_TOKEN:
+        headers["Authorization"] = f"Bearer {API_BEARER_TOKEN}"
+    return headers
+
+
+def _format_error_message(response: httpx.Response) -> str:
+    trace_id = response.headers.get("x-trace-id", "")
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    error = payload.get("error", {})
+    message = error.get("message", response.text or "Unexpected API error")
+    envelope_trace_id = error.get("trace_id")
+    resolved_trace_id = envelope_trace_id or trace_id
+    if resolved_trace_id:
+        return f"{message} (trace_id={resolved_trace_id})"
+    return message
+
+
+def call_chat_api(message: str, session_id: str) -> dict:
+    payload = {
+        "session_id": session_id,
+        "message": message,
+        "locale": DEFAULT_LOCALE,
+        "mode": "standard",
+    }
+    url = f"{API_BASE_URL}/api/chat"
+
+    try:
+        with httpx.Client(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            response = client.post(url, json=payload, headers=_build_headers())
+    except httpx.RequestError as exc:
+        raise RuntimeError(f"Unable to reach API at {url}: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise RuntimeError(_format_error_message(response))
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RuntimeError("Chat API returned invalid JSON response.") from exc
+
+
+def _render_citations(citations: list[dict]) -> str:
+    if not citations:
+        return ""
+    lines = ["", "Sources:"]
+    for item in citations:
+        title = item.get("title", "Source")
+        pin = item.get("pin", "")
+        url = item.get("url", "")
+        if pin:
+            lines.append(f"- {title} ({pin}) - {url}")
+        else:
+            lines.append(f"- {title} - {url}")
+    return "\n".join(lines)
+
+
+def _format_assistant_message(payload: dict) -> str:
+    answer = str(payload.get("answer", "")).strip()
+    citations = payload.get("citations", [])
+    fallback_used = payload.get("fallback_used", {})
+    disclaimer = str(payload.get("disclaimer", "")).strip()
+
+    sections = [answer]
+    citations_block = _render_citations(citations)
+    if citations_block:
+        sections.append(citations_block)
+
+    if fallback_used.get("used"):
+        provider = fallback_used.get("provider", "unknown")
+        reason = fallback_used.get("reason", "provider_error")
+        sections.append(f"\nFallback provider used: {provider} (reason={reason})")
+
+    if disclaimer:
+        sections.append(f"\nDisclaimer: {disclaimer}")
+
+    return "\n".join(sections).strip()
+
+
 add_custom_css()
+_require_hardened_auth_config()
+_render_title()
+_render_sidebar()
 
-# Title with Logo
-logo_path = "logo/logo.png"
-if os.path.exists(logo_path):
-    with open(logo_path, "rb") as image_file:
-        encoded_image = base64.b64encode(image_file.read()).decode()
-    st.markdown(f"""
-    <div class="st-title">
-        <img src="data:image/png;base64,{encoded_image}" alt="LawGlance Logo" class="logo">
-        <span>LawGlance - An AI Legal Assistant </span>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <div class="st-title">
-        <span>LawGlance - Your Legal Assistant 📖</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-# Sidebar Info
-st.sidebar.header("About LawGlance")
-st.sidebar.markdown("""
-**LawGlance** is a free, open-source AI legal assistant that helps answer legal questions.
-
-Visit our website: [LawGlance](https://lawglance.com)
-
-_Disclaimer_: This tool is in its pilot phase, and responses may not be 100% accurate.
-""")
-
-# Persistent session ID
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
-
-thread_id = st.session_state.thread_id
-
-# Load OpenAI models
-openai_api_key = os.getenv('OPENAI_API_KEY')
-llm = ChatOpenAI(model='gpt-4o-mini', temperature=0.9, openai_api_key=openai_api_key)
-embeddings = OpenAIEmbeddings()
-vector_store = Chroma(persist_directory="chroma_db_legal_bot_part1", embedding_function=embeddings)
-
-# Create LawGlance instance
-law = Lawglance(llm, embeddings, vector_store)
-
-# Get chat history from backend and display
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-    history = law.get_session_history(thread_id).messages
-    for msg in history:
-        role = "user" if isinstance(msg, HumanMessage) else "assistant"
-        st.session_state.messages.append({"role": role, "content": msg.content})
-
-# Display history
 for message in st.session_state.messages:
-    role = "user" if message["role"] == "user" else "assistant"
-    with st.chat_message(role):
+    with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Prompt input
 st.markdown("<div class='chat-input-container'>", unsafe_allow_html=True)
-prompt = st.chat_input("Have a legal question? Let’s work through it.")
+prompt = st.chat_input("Ask a Canadian immigration information question.")
 st.markdown("</div>", unsafe_allow_html=True)
 
 if prompt and prompt.strip():
     with st.chat_message("user"):
         st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Invoke LawGlance backend
-    result, updated_history = law.conversational(prompt, thread_id)
+    try:
+        response_payload = call_chat_api(prompt, st.session_state.thread_id)
+    except RuntimeError as exc:
+        st.error(str(exc))
+    else:
+        assistant_text = _format_assistant_message(response_payload)
+        with st.chat_message("assistant"):
+            st.markdown(assistant_text)
 
-    # Rebuild session messages from updated Redis chat
-    st.session_state.messages = []
-    for msg in updated_history:
-        role = "user" if isinstance(msg, HumanMessage) else "assistant"
-        st.session_state.messages.append({"role": role, "content": msg.content})
-
-    # Animate AI response
-    final_response = f"AI Legal Assistant: {result}"
-
-    def response_generator(response):
-        for word in response.split():
-            yield word + " "
-            time.sleep(0.05)
-
-    with st.chat_message("assistant"):
-        animated = "".join(list(response_generator(final_response)))
-        st.markdown(animated)
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "assistant", "content": assistant_text})

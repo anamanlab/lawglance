@@ -29,10 +29,12 @@ Endpoints:
 - `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (optional, default `3`)
 - `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
 - `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
+- `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` (optional; defaults to `true` in development and `false` in production/prod/ci)
 
 ## Notes
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
+- Synthetic citations are allowed only in scaffold mode (for development) and must be disabled in production.
 - If CanLII key or endpoint is unavailable, case search falls back to deterministic scaffold data.
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.

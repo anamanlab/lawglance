@@ -45,3 +45,10 @@ If `make` is unavailable, run the underlying commands directly from the repo roo
 - Never commit secrets; use `.env` locally and keep `.env.example` as template.
 - Minimum required env var: `OPENAI_API_KEY`.
 - Redis is optional but recommended (`REDIS_URL=redis://localhost:6379/0`).
+
+## Agent Collaboration Best Practices
+- Keep tasks single-owner per file or directory; do not have multiple agents edit the same file in parallel.
+- Limit parallel workers to a small batch (2-3) and start the next batch only after reviewing results.
+- Require explicit scope in each agent prompt (goal, files, acceptance criteria, and "ignore unrelated diffs").
+- Always `wait` for agent completion before merging outputs, then run `make lint` and targeted `make test`.
+- Close completed/stale agents promptly to avoid context drift and accidental follow-up actions.

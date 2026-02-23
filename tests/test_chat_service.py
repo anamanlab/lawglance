@@ -250,6 +250,37 @@ def test_handle_chat_returns_insufficient_context_when_grounding_retrieval_is_em
     assert response.fallback_used.reason == "insufficient_context"
 
 
+def test_handle_chat_returns_insufficient_context_when_grounding_snippets_are_blank() -> None:
+    router = _EchoRouter()
+    retriever = _RetrieverStub(
+        [
+            RetrievedDocument(
+                text_snippet="   ",
+                source_id="IRPA",
+                source_type="statute",
+                title="Immigration and Refugee Protection Act",
+                url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/",
+                pin="s.11",
+            )
+        ]
+    )
+    service = ChatService(
+        router,
+        retriever=retriever,
+        enable_grounding=True,
+        grounding_top_k=3,
+    )
+
+    response = service.handle_chat(_build_request())
+
+    assert retriever.calls == [("Tell me about IRPA s.11", "en-CA", 3)]
+    assert router.call_count == 0
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.fallback_used.used is False
+    assert response.fallback_used.reason == "insufficient_context"
+
+
 def test_handle_chat_returns_insufficient_context_when_grounding_unavailable() -> None:
     router = _EchoRouter()
     service = ChatService(

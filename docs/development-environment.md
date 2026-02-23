@@ -45,7 +45,13 @@ Run from repository root:
 ./scripts/verify_dev_env.sh
 ```
 
-Then start the app:
+Then start the API backend:
+
+```bash
+uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+```
+
+Then start the Streamlit UI (second terminal):
 
 ```bash
 uv run streamlit run app.py
@@ -107,6 +113,10 @@ The setup script performs:
 
 # Lint and test
 make quality
+
+# Run API + UI locally
+uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+uv run streamlit run app.py
 ```
 
 ## Environment variables
@@ -115,6 +125,9 @@ Use `.env.example` as baseline:
 
 ```dotenv
 OPENAI_API_KEY=your-openai-api-key
+GEMINI_API_KEY=your-gemini-api-key
+API_BASE_URL=http://127.0.0.1:8000
+API_BEARER_TOKEN=your-api-bearer-token
 REDIS_URL=redis://localhost:6379/0
 ```
 
@@ -122,7 +135,18 @@ Production/CI policy:
 
 - Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
 - `API_BEARER_TOKEN` is mandatory in `production`/`prod`/`ci`.
+- Streamlit UI calls FastAPI `/api/chat` using `API_BASE_URL`.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
+
+Additional backend/runtime variables:
+
+- `CANLII_API_KEY`, `CANLII_BASE_URL`
+- `OPENAI_MODEL`, `GEMINI_MODEL`
+- `ENABLE_SCAFFOLD_PROVIDER`
+- `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS`
+- `PROVIDER_TIMEOUT_SECONDS`, `PROVIDER_MAX_RETRIES`
+- `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD`, `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS`
+- `API_RATE_LIMIT_PER_MINUTE`
 
 ## Redis (optional but recommended)
 
@@ -147,6 +171,8 @@ docker stop immcad-redis && docker rm immcad-redis
 - Import check failures:
   - Re-run `./scripts/setup_dev_env.sh`.
 - App starts but responses fail:
-  - Verify `OPENAI_API_KEY` in `.env`.
+  - Verify API service is running on `API_BASE_URL`.
+  - Verify `API_BEARER_TOKEN` matches backend expectation.
+  - Verify provider keys (`OPENAI_API_KEY`, optional `GEMINI_API_KEY`) in `.env`.
 - Redis warnings:
   - App can run without Redis, but session caching may be degraded.

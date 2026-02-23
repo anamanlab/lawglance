@@ -130,7 +130,10 @@ def evaluate_jurisdictional_suite(
     min_policy_accuracy: float = 100.0,
 ) -> JurisdictionSuiteReport:
     router = ProviderRouter(providers=[ScaffoldProvider()], primary_provider_name="scaffold")
-    chat_service = ChatService(provider_router=router)
+    chat_service = ChatService(
+        provider_router=router,
+        allow_scaffold_synthetic_citations=True,
+    )
 
     results: list[JurisdictionSuiteCaseResult] = []
 

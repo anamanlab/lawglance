@@ -17,8 +17,8 @@ The goal is to help users quickly understand:
 ## Current baseline analysis
 
 The current codebase already provides a strong foundation:
-- Streamlit chat UI in `app.py`
-- RAG pipeline with LangChain + Chroma in `chains.py`
+- Streamlit chat UI in `app.py` (calls FastAPI `/api/chat`)
+- API scaffold in `src/immcad_api` with provider routing, policy, and trace IDs
 - Session history + caching with Redis in `cache.py` and `lawglance_main.py` (legacy filename retained for compatibility during IMMCAD migration)
 - Prompt templates in `prompts.py`
 
@@ -141,9 +141,17 @@ Create `.env`:
 
 ```bash
 OPENAI_API_KEY=your-api-key-here
+API_BASE_URL=http://127.0.0.1:8000
+API_BEARER_TOKEN=your-api-bearer-token
 ```
 
-Run:
+Run API backend:
+
+```bash
+uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+```
+
+Run Streamlit UI (in a second terminal):
 
 ```bash
 uv run streamlit run app.py
@@ -153,14 +161,6 @@ App URL:
 
 ```bash
 http://127.0.0.1:8501
-```
-
-### API scaffold (new feature)
-
-Run API service scaffold:
-
-```bash
-uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
 ```
 
 Health check:
@@ -194,20 +194,40 @@ make jurisdiction-suite
 
 Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
 
+### Runtime behavior notes
+
+- Provider routing order is OpenAI primary, Gemini fallback, with optional scaffold provider in development.
+- `/api/chat` responses include `fallback_used` metadata; surface this in UI/ops logs.
+- Synthetic citations are scaffold-only and must be disabled for production deployments.
+- CanLII case search falls back to deterministic scaffold results when API key/network calls fail.
+- Rate limiting uses Redis when available and in-memory limiter when Redis is unavailable.
+
 ### Ralph autonomous loop
 
 Ralph is now wired in this repo under `scripts/ralph/`.
 
-Run with Claude Code:
+Run with Codex (default):
 
 ```bash
 make ralph-run
+```
+
+Run with Codex (explicit target):
+
+```bash
+make ralph-run-codex
 ```
 
 Run with Amp:
 
 ```bash
 make ralph-run-amp
+```
+
+Run with Claude Code (optional):
+
+```bash
+make ralph-run-claude
 ```
 
 Check story progress:

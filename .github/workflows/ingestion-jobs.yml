@@ -37,6 +37,15 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Restore ingestion checkpoint cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/immcad/ingestion-checkpoints.json
+          key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}
+          restore-keys: |
+            ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-
+            ingestion-state-
+
       - name: Run ingestion jobs
         run: |
           set -euo pipefail
@@ -46,7 +55,7 @@ jobs:
             fail_on_error="${{ inputs.fail_on_error }}"
           fi
 
-          cmd=(uv run python scripts/run_ingestion_jobs.py --cadence "${{ matrix.cadence }}" --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json")
+          cmd=(uv run python scripts/run_ingestion_jobs.py --cadence "${{ matrix.cadence }}" --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" --state-path ".cache/immcad/ingestion-checkpoints.json")
           if [ "$fail_on_error" = "true" ]; then
             cmd+=(--fail-on-error)
           fi
@@ -59,3 +68,10 @@ jobs:
         with:
           name: ingestion-${{ matrix.cadence }}-report
           path: artifacts/ingestion/ingestion-${{ matrix.cadence }}.json
+
+      - name: Save ingestion checkpoint cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/immcad/ingestion-checkpoints.json
+          key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}

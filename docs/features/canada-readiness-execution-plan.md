@@ -47,6 +47,7 @@ This plan executes the India -> Canada migration in measurable phases.
   - `src/immcad_api/ingestion/jobs.py`
   - `scripts/run_ingestion_jobs.py`
   - Output artifact: `artifacts/ingestion/ingestion-*.json`
+  - Incremental behavior: `ETag`/`Last-Modified` checkpointing (`not_modified` status on 304).
 - Added jurisdictional readiness evaluation harness:
   - `src/immcad_api/evaluation/jurisdiction.py`
   - `scripts/generate_jurisdiction_eval_report.py`

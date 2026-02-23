@@ -42,5 +42,6 @@ Endpoints:
 
 - Run registry-driven ingestion jobs and emit JSON report:
   - `uv run python scripts/run_ingestion_jobs.py --cadence daily`
+  - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
 - Generate jurisdictional scoring report (JSON + Markdown):
   - `uv run python scripts/generate_jurisdiction_eval_report.py`

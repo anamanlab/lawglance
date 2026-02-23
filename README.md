@@ -177,6 +177,9 @@ Generate ingestion execution report from the Canada source registry:
 make ingestion-run
 ```
 
+This runner now keeps a checkpoint file (`artifacts/ingestion/checkpoints.json`) and uses
+`ETag` / `Last-Modified` conditional requests to mark unchanged sources as `not_modified`.
+
 Generate jurisdictional readiness scoring report (JSON + Markdown):
 
 ```bash

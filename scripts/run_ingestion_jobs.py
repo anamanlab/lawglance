@@ -37,6 +37,11 @@ def parse_args() -> argparse.Namespace:
         help="JSON output path for ingestion report.",
     )
     parser.add_argument(
+        "--state-path",
+        default="artifacts/ingestion/checkpoints.json",
+        help="Checkpoint state path used for conditional requests (ETag/Last-Modified).",
+    )
+    parser.add_argument(
         "--fail-on-error",
         action="store_true",
         help="Exit non-zero when any source ingestion fails.",
@@ -54,6 +59,7 @@ def main() -> int:
         cadence=cadence,
         registry_path=args.registry,
         timeout_seconds=args.timeout_seconds,
+        state_path=args.state_path,
     )
 
     output_path = Path(args.output)
@@ -63,9 +69,10 @@ def main() -> int:
     print(
         "Ingestion report generated "
         f"(cadence={report.cadence}, total={report.total}, "
-        f"succeeded={report.succeeded}, failed={report.failed})"
+        f"succeeded={report.succeeded}, not_modified={report.not_modified}, failed={report.failed})"
     )
     print(f"Report path: {output_path}")
+    print(f"State path: {args.state_path}")
 
     if args.fail_on_error and report.failed > 0:
         return 1

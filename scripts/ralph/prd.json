@@ -1,0 +1,76 @@
+{
+  "project": "IMMCAD",
+  "branchName": "ralph/canada-hardening-next-loop",
+  "description": "Canada production hardening backlog for IMMCAD API, ingestion, and compliance workflows.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add domain-leak scanner for Canada scope",
+      "description": "As a maintainer, I want automated scanning for disallowed India-domain terms so that Canada scope regressions are blocked in CI.",
+      "acceptanceCriteria": [
+        "Add a scanner script that flags disallowed India-domain terms in source/docs paths with an explicit allowlist for legacy archived files",
+        "Script exits non-zero when violations are found and prints file/line context",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Wire domain-leak scanner into quality gates",
+      "description": "As a release owner, I want CI to enforce domain leakage checks so that jurisdiction mismatches are caught before merge.",
+      "acceptanceCriteria": [
+        "Integrate domain-leak scanner into Makefile quality target",
+        "Add scanner execution step to quality-gates workflow",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add audit log events for policy blocks and provider failures",
+      "description": "As an operator, I want structured audit events for high-risk chat outcomes so that incidents can be triaged quickly.",
+      "acceptanceCriteria": [
+        "Emit structured log entries containing trace_id, event_type, and minimal non-PII metadata for policy_block and provider_error paths",
+        "Add tests validating log emission in both scenarios",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Add ingestion checkpoint recovery runbook",
+      "description": "As an on-call engineer, I want a documented checkpoint recovery playbook so that ingestion can be safely resumed after failures.",
+      "acceptanceCriteria": [
+        "Document checkpoint file location, corruption recovery, and replay procedure",
+        "Include verification checklist after recovery",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Add release artifact verification checklist step",
+      "description": "As a release manager, I want release-gates to verify required evaluation artifacts exist and are readable so that sign-off is evidence-based.",
+      "acceptanceCriteria": [
+        "Add a script that validates required eval artifacts exist with non-empty content",
+        "Run this script in release-gates before completion",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

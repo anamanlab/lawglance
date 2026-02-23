@@ -1,0 +1,9 @@
+# Ralph Progress Log
+Started: 2026-02-23
+
+## Codebase Patterns
+- Run `make quality` before each commit.
+- Keep architecture docs in sync when changing API contracts or runtime behavior.
+- Canada-only legal scope is mandatory; avoid India-domain terms outside legacy archival files.
+
+---

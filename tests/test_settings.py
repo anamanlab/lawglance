@@ -5,8 +5,12 @@ import pytest
 from immcad_api.settings import load_settings
 
 
-def test_load_settings_requires_bearer_token_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_bearer_token_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
 
     with pytest.raises(ValueError, match="API_BEARER_TOKEN is required"):

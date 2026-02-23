@@ -177,5 +177,23 @@ Started: 2026-02-23
   - Gotcha
   - `make` is unavailable in this environment; run the exact `quality` Makefile command chain manually and in order to preserve gate equivalence.
   - Useful context
-  - `fallback_used.reason` in API responses comes from router `last_error.code`; transient primary failures should be validated at API level to prevent contract regressions.
+- `fallback_used.reason` in API responses comes from router `last_error.code`; transient primary failures should be validated at API level to prevent contract regressions.
+---
+## 2026-02-23 20:35:54 -0300 - US-007
+- What was implemented
+- Strengthened API security coverage by adding tests that enforce bearer-token auth behavior across `production`/`prod`/`ci` modes and verify unauthorized responses return structured envelopes with trace correlation headers.
+- Added regression coverage for rate-limiter client ID resolution failures to ensure `/api/*` requests return structured `400 VALIDATION_ERROR` envelopes with `trace_id` and matching `x-trace-id`.
+- Expanded rate-limit/auth envelope assertions to validate trace header-to-body consistency on `401` and `429` responses.
+- Files changed
+- `tests/test_api_scaffold.py`
+- `tests/test_settings.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For middleware-level guards, assert both HTTP status and trace correlation (`error.trace_id` == `x-trace-id`) so observability contracts stay intact.
+  - Gotcha
+  - Production-mode tests require `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`; otherwise app boot fails before auth/rate-limit checks execute.
+  - Useful context
+  - Simulating rate-limit client identity failures is easiest by monkeypatching `_resolve_rate_limit_client_id` to return `None`, which exercises the exact 400 envelope branch.
 ---

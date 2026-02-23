@@ -110,7 +110,10 @@ def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     assert unauthorized.status_code == 401
-    assert unauthorized.json()["error"]["code"] == "UNAUTHORIZED"
+    unauthorized_body = unauthorized.json()
+    assert unauthorized_body["error"]["code"] == "UNAUTHORIZED"
+    assert unauthorized_body["error"]["trace_id"]
+    assert unauthorized.headers["x-trace-id"] == unauthorized_body["error"]["trace_id"]
 
     authorized = secured_client.post(
         "/api/chat",
@@ -123,6 +126,33 @@ def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     assert authorized.status_code == 200
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_bearer_auth_enforced_for_production_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    secured_client = TestClient(create_app())
+
+    unauthorized = secured_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What is IRPA section 11 about?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert unauthorized.status_code == 401
+    body = unauthorized.json()
+    assert body["error"]["code"] == "UNAUTHORIZED"
+    assert body["error"]["trace_id"]
+    assert unauthorized.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
 def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -279,7 +309,37 @@ def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert first.status_code == 200
     assert second.status_code == 429
-    assert second.json()["error"]["code"] == "RATE_LIMITED"
+    body = second.json()
+    assert body["error"]["code"] == "RATE_LIMITED"
+    assert body["error"]["trace_id"]
+    assert second.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_client_id(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("immcad_api.main._resolve_rate_limit_client_id", no_client_id)
+    validation_client = TestClient(create_app())
+
+    response = validation_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Explain PR pathways in brief.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["message"] == "Unable to determine client identifier for rate limiting"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
 def test_case_search_returns_provider_error_envelope_in_production_when_canlii_unavailable(

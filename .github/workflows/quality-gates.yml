@@ -32,5 +32,10 @@ jobs:
       - name: Validate architecture docs
         run: bash scripts/validate_architecture_docs.sh
 
+      - name: Validate source registry
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/validate_source_registry.py
+
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh

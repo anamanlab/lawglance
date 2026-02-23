@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate hygiene quality
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate hygiene quality
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -30,7 +30,10 @@ arch-generate:
 arch-validate:
 	./scripts/validate_architecture_docs.sh
 
+source-registry-validate:
+	uv run python scripts/validate_source_registry.py
+
 hygiene:
 	bash scripts/check_repository_hygiene.sh
 
-quality: lint-api test arch-validate hygiene
+quality: lint-api test arch-validate source-registry-validate hygiene

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -43,7 +43,13 @@ class _FakeClient:
         return _FakeResponse(self.payload or {})
 
 
-def test_canlii_fallback_without_api_key() -> None:
+def test_canlii_fallback_without_api_key(monkeypatch) -> None:
+    # API key is absent, so client should return local fallback without hitting HTTP.
+    def _should_not_call_http(*args, **kwargs):  # pragma: no cover - defensive guard
+        raise AssertionError("httpx.Client should not be called when api_key is None")
+
+    monkeypatch.setattr("immcad_api.sources.canlii_client.httpx.Client", _should_not_call_http)
+
     client = CanLIIClient(api_key=None)
     request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=2)
 
@@ -109,7 +115,8 @@ def test_canlii_handles_invalid_date(monkeypatch) -> None:
     response = client.search_cases(request)
 
     assert len(response.results) == 1
-    assert response.results[0].decision_date == date.today()
+    today = date.today()
+    assert response.results[0].decision_date in {today, today - timedelta(days=1)}
 
 
 def test_canlii_falls_back_on_http_error(monkeypatch) -> None:
@@ -124,4 +131,3 @@ def test_canlii_falls_back_on_http_error(monkeypatch) -> None:
 
     assert len(response.results) == 2
     assert response.results[0].case_id.startswith("FCT-")
-

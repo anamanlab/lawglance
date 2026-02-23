@@ -11,6 +11,10 @@ from immcad_api.schemas import Citation
 
 class OpenAIProvider:
     name = "openai"
+    _NON_TRANSIENT_PROVIDER_ERROR_MESSAGES = (
+        "no choices",
+        "no message content",
+    )
 
     def __init__(
         self,
@@ -73,6 +77,12 @@ class OpenAIProvider:
                 answer = content
                 break
             except ProviderError as exc:
+                lowered = exc.message.lower()
+                is_non_transient = exc.code == "provider_error" and any(
+                    marker in lowered for marker in self._NON_TRANSIENT_PROVIDER_ERROR_MESSAGES
+                )
+                if is_non_transient:
+                    raise
                 last_error = exc
             except RateLimitError as exc:
                 last_error = ProviderError(self.name, "rate_limit", str(exc))

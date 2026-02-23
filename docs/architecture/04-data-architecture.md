@@ -47,11 +47,11 @@
     },
     "effective_date": {
       "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      "format": "date"
     },
     "published_date": {
       "type": "string",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+      "format": "date"
     },
     "url": {
       "type": "string",

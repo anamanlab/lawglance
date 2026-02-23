@@ -8,3 +8,13 @@ Started: 2026-02-23
 - Use small, single-owner stories and validate with targeted tests before moving to the next story.
 
 ---
+## 2026-02-23 18:05:47 -03 - US-001
+- Verified and accepted the pre-existing domain-leak scanner implementation for Canada scope (`scripts/scan_domain_leaks.py`) and its tests, then completed Ralph bookkeeping for the story.
+- Files changed
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+- Reusable pattern: Validation scripts are implemented as importable Python modules with a small `main()` entrypoint plus direct unit tests using `importlib`.
+- Gotcha: `make` is not installed in this environment, so run the `quality` target commands manually in `Makefile` order and record that equivalence in progress.
+- Useful context: `US-001` code already exists on `ralph/canada-hardening-next-loop` (`scripts/scan_domain_leaks.py`, `tests/test_domain_leak_scanner.py`) and passed the full quality gate.
+---

@@ -20,7 +20,15 @@ class _RoutingMock:
     fallback_used: bool
     fallback_reason: str | None
 
-    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context=None,
+    ) -> RoutingResult:
+        del message, locale, grounding_context
         return RoutingResult(
             result=self.result,
             fallback_used=self.fallback_used,
@@ -29,16 +37,34 @@ class _RoutingMock:
 
 
 class _ErrorRouter:
-    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context=None,
+    ) -> RoutingResult:
+        del message, citations, locale, grounding_context
         raise ProviderError("openai", "provider_error", "boom")
 
 
 class _EchoRouter:
     def __init__(self) -> None:
         self.last_citations: list[Citation] = []
+        self.last_grounding_context: list[str] | None = None
 
-    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+    def generate(
+        self,
+        *,
+        message: str,
+        citations,
+        locale: str,
+        grounding_context=None,
+    ) -> RoutingResult:
+        del message, locale
         self.last_citations = list(citations)
+        self.last_grounding_context = list(grounding_context) if grounding_context else None
         return RoutingResult(
             result=ProviderResult(
                 provider="gemini",
@@ -197,6 +223,7 @@ def test_handle_chat_uses_grounding_retriever_when_enabled() -> None:
     assert retriever.calls == [("Tell me about IRPA s.11", "en-CA", 2)]
     assert len(router.last_citations) == 1
     assert router.last_citations[0].source_id == "IRPA"
+    assert router.last_grounding_context == ["IRPA s.11 governs visa requirements."]
     assert response.citations == router.last_citations
 
 
@@ -212,5 +239,6 @@ def test_handle_chat_preserves_legacy_flow_when_grounding_unavailable() -> None:
     response = service.handle_chat(_build_request())
 
     assert router.last_citations == []
+    assert router.last_grounding_context is None
     assert response.citations == []
     assert response.confidence == "low"

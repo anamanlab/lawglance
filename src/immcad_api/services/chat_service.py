@@ -10,7 +10,7 @@ from immcad_api.policy.compliance import (
 )
 from immcad_api.errors import ProviderApiError
 from immcad_api.providers import ProviderError, ProviderRouter
-from immcad_api.retrieval import ChatRetriever, map_retrieved_documents_to_citations
+from immcad_api.retrieval import ChatRetriever, RetrievedDocument, map_retrieved_documents_to_citations
 from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 
 
@@ -50,11 +50,16 @@ class ChatService:
             },
         )
 
-    def _grounding_citations(self, request: ChatRequest, *, trace_id: str | None) -> list[Citation]:
+    def _grounding_documents(
+        self,
+        request: ChatRequest,
+        *,
+        trace_id: str | None,
+    ) -> list[RetrievedDocument]:
         if not self.enable_grounding or self.retriever is None:
             return []
         try:
-            documents = self.retriever.retrieve(
+            return self.retriever.retrieve(
                 query=request.message,
                 locale=request.locale,
                 top_k=self.grounding_top_k,
@@ -70,7 +75,6 @@ class ChatService:
                 exc_info=True,
             )
             return []
-        return map_retrieved_documents_to_citations(documents)
 
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
@@ -95,11 +99,22 @@ class ChatService:
                 ),
             )
 
+        grounding_documents = self._grounding_documents(request, trace_id=trace_id)
+        grounding_citations = map_retrieved_documents_to_citations(grounding_documents)
+        grounding_context = [
+            document.text_snippet.strip()
+            for document in grounding_documents
+            if document.text_snippet.strip()
+        ]
+        if not grounding_context:
+            grounding_context = None
+
         try:
             routed = self.provider_router.generate(
                 message=request.message,
-                citations=self._grounding_citations(request, trace_id=trace_id),
+                citations=grounding_citations,
                 locale=request.locale,
+                grounding_context=grounding_context,
             )
         except ProviderError as exc:
             self._emit_audit_event(

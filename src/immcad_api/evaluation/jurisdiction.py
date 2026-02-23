@@ -7,20 +7,7 @@ import json
 from pathlib import Path
 
 from immcad_api.policy.compliance import should_refuse_for_policy
-from immcad_api.sources import load_source_registry
-
-_REQUIRED_SOURCE_IDS = {
-    "IRPA",
-    "IRPR",
-    "CIT_ACT",
-    "CIT_REG",
-    "CIT_REG_NO2",
-    "IRCC_PDI",
-    "EE_MI_CURRENT",
-    "EE_MI_INVITES",
-    "CANLII_CASE_BROWSE",
-    "CANLII_CASE_CITATOR",
-}
+from immcad_api.sources import PRODUCTION_REQUIRED_SOURCE_IDS, load_source_registry
 
 _DISALLOWED_INDIA_TERMS = (
     "indian constitution",
@@ -149,7 +136,7 @@ def _check_policy_refusal_gate() -> JurisdictionCheck:
 def _check_registry_required_sources() -> JurisdictionCheck:
     registry = load_source_registry()
     source_ids = {source.source_id for source in registry.sources}
-    missing = sorted(_REQUIRED_SOURCE_IDS - source_ids)
+    missing = sorted(PRODUCTION_REQUIRED_SOURCE_IDS - source_ids)
     if registry.jurisdiction.lower() != "ca" or missing:
         details = [f"jurisdiction={registry.jurisdiction.lower()}"]
         if missing:

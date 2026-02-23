@@ -77,3 +77,23 @@ Started: 2026-02-23
   - Gotcha: `make` is unavailable in this environment, so `make quality` must be executed via the exact Makefile command sequence.
   - Useful context: `source_type` is constrained to `statute|regulation|policy|case_law` and `update_cadence` to `daily|weekly|scheduled_incremental`; invalid values fail registry load/quality checks.
 ---
+## 2026-02-23 20:17:46 -0300 - US-002
+- What was implemented
+- Enforced strict source-registry validation by introducing a canonical required production source ID set (including tribunal and compliance IDs), wiring it into the source-registry validator and jurisdiction readiness checks, and adding tests that assert explicit missing-ID failure output.
+- Files changed
+- `src/immcad_api/sources/required_sources.py`
+- `src/immcad_api/sources/__init__.py`
+- `scripts/validate_source_registry.py`
+- `src/immcad_api/evaluation/jurisdiction.py`
+- `tests/test_canada_registry.py`
+- `tests/test_validate_source_registry.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize compliance-critical ID allowlists in one importable module so validators, runtime checks, and tests cannot drift.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command chain manually and in order.
+  - Useful context
+  - `scripts/validate_source_registry.py` now returns non-zero with `[ERROR] Missing required source IDs: ...` and is executed in both local quality and CI quality gates.
+---

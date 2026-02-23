@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from immcad_api.sources.required_sources import PRODUCTION_REQUIRED_SOURCE_IDS
+
 
 REGISTRY_PATH = Path("data/sources/canada-immigration/registry.json")
 
@@ -23,20 +25,7 @@ def test_registry_has_required_sources() -> None:
     sources = payload.get("sources", [])
     source_ids = {item.get("source_id") for item in sources}
 
-    required_ids = {
-        "IRPA",
-        "IRPR",
-        "CIT_ACT",
-        "CIT_REG",
-        "CIT_REG_NO2",
-        "IRCC_PDI",
-        "EE_MI_CURRENT",
-        "EE_MI_INVITES",
-        "CANLII_CASE_BROWSE",
-        "CANLII_CASE_CITATOR",
-    }
-
-    assert required_ids.issubset(source_ids)
+    assert PRODUCTION_REQUIRED_SOURCE_IDS.issubset(source_ids)
 
 
 def test_registry_source_shape_and_values() -> None:

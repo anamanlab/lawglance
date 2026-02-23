@@ -186,6 +186,12 @@ Generate jurisdictional readiness scoring report (JSON + Markdown):
 make jurisdiction-eval
 ```
 
+Run behavior-focused jurisdictional suite (policy refusal + citation behavior):
+
+```bash
+make jurisdiction-suite
+```
+
 Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
 
 ## Definition of done for “Canadian adaptation”

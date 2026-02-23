@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from immcad_api.schemas import Citation
 
 DISCLAIMER_TEXT = (
@@ -14,14 +16,14 @@ POLICY_REFUSAL_TEXT = (
 
 
 def should_refuse_for_policy(message: str) -> bool:
-    normalized = message.lower()
-    blocked_phrases = [
-        "represent me",
-        "file my application",
-        "act as my lawyer",
-        "guarantee visa",
+    normalized = re.sub(r"\s+", " ", message.lower()).strip()
+    blocked_patterns = [
+        r"\brepresent me\b",
+        r"\bfile my(?: [a-z]+)* application\b",
+        r"\bact as my (?:lawyer|counsel)\b",
+        r"\bguarantee(?: that i will get)?(?: [a-z]+)* visa\b",
     ]
-    return any(phrase in normalized for phrase in blocked_phrases)
+    return any(re.search(pattern, normalized) for pattern in blocked_patterns)
 
 
 def enforce_citation_requirement(answer: str, citations: list[Citation]) -> tuple[str, list[Citation], str]:

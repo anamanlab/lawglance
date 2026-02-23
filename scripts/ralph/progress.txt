@@ -139,3 +139,24 @@ Started: 2026-02-23
   - Useful context
   - Policy refusal contract is enforced via `POLICY_REFUSAL_TEXT`, `confidence="low"`, and `DISCLAIMER_TEXT`; asserting these in both service and API tests catches regressions early.
 ---
+## 2026-02-23 20:29:02 -0300 - US-005
+- What was implemented
+- Wired `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` into runtime settings and `ChatService`, enforced production fail-fast when synthetic citations are enabled, and added an API test for safe constrained responses when grounded citations are unavailable.
+- Files changed
+- `.env.example`
+- `docs/architecture/api-contracts.md`
+- `src/immcad_api/README.md`
+- `src/immcad_api/main.py`
+- `src/immcad_api/settings.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_settings.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Enforce production-only safety invariants in `load_settings()` and pass explicit flags into services from `create_app()` so behavior is deterministic across environments.
+  - Gotcha
+  - Existing production-mode tests must set all required hardening env vars (now including `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`) or app creation fails by design.
+  - Useful context
+  - With synthetic citations disabled, chat responses use the existing citation-enforcement safe fallback text and return `confidence="low"` with empty citations instead of fabricating references.
+---

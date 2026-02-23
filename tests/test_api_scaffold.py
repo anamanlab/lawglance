@@ -146,6 +146,30 @@ def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.Monk
     assert body["error"]["trace_id"]
 
 
+def test_safe_constrained_response_when_synthetic_citations_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    constrained_client = TestClient(create_app())
+
+    response = constrained_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What are the basic PR eligibility pathways?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["disclaimer"] == DISCLAIMER_TEXT
+
+
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
     throttled_client = TestClient(create_app())
@@ -179,6 +203,7 @@ def test_case_search_returns_provider_error_envelope_in_production_when_canlii_u
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.delenv("CANLII_API_KEY", raising=False)
     production_client = TestClient(create_app())
 

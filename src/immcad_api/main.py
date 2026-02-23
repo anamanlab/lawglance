@@ -96,7 +96,10 @@ def create_app() -> FastAPI:
         telemetry=ProviderMetrics(),
     )
 
-    chat_service = ChatService(provider_router)
+    chat_service = ChatService(
+        provider_router,
+        allow_scaffold_synthetic_citations=settings.allow_scaffold_synthetic_citations,
+    )
     allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
     case_search_service = CaseSearchService(
         CanLIIClient(

@@ -133,5 +133,8 @@ Error envelope contract note: `error.trace_id` is required for error responses a
 
 - All responses include `x-trace-id` header for observability correlation.
 - Error responses include `error.trace_id` in the body in addition to `x-trace-id`.
-- `POST /api/chat` must return at least one citation unless response is a policy refusal.
+- `POST /api/chat` must return at least one citation unless either:
+  - response is a policy refusal, or
+  - synthetic scaffold citations are disabled and no grounded citations are available (safe constrained response path).
+- `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` must be set to `false` in `production`/`prod`/`ci`; app startup fails otherwise.
 - Provider internals are hidden behind normalized response schema.

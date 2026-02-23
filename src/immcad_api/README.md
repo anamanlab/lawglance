@@ -29,10 +29,12 @@ Endpoints:
 - `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (optional, default `3`)
 - `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
 - `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
+- `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
 
 ## Notes
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
+- If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: CanLII failures return a structured `PROVIDER_ERROR` envelope with `trace_id`; synthetic scaffold cases are disabled.

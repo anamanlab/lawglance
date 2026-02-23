@@ -22,6 +22,7 @@ class Settings:
     provider_circuit_breaker_failure_threshold: int
     provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
+    allow_scaffold_synthetic_citations: bool
     api_rate_limit_per_minute: int
 
 
@@ -45,17 +46,29 @@ def parse_int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer value, got {raw!r}") from exc
 
 
+def parse_bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_settings() -> Settings:
-    enable_scaffold_provider = os.getenv("ENABLE_SCAFFOLD_PROVIDER", "true").lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
     environment = os.getenv("ENVIRONMENT", "development")
+    environment_normalized = environment.lower()
     api_bearer_token = os.getenv("API_BEARER_TOKEN")
-    if environment.lower() in {"production", "prod", "ci"} and not api_bearer_token:
+    enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
+    allow_scaffold_synthetic_citations = parse_bool_env(
+        "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
+        True,
+    )
+
+    if environment_normalized in {"production", "prod", "ci"} and not api_bearer_token:
         raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+    if environment_normalized in {"production", "prod", "ci"} and allow_scaffold_synthetic_citations:
+        raise ValueError(
+            "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
+        )
 
     return Settings(
         app_name=os.getenv("API_APP_NAME", "IMMCAD API"),
@@ -80,5 +93,6 @@ def load_settings() -> Settings:
             30.0,
         ),
         enable_scaffold_provider=enable_scaffold_provider,
+        allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
     )

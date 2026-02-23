@@ -194,6 +194,32 @@ make jurisdiction-suite
 
 Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
 
+### Ralph autonomous loop
+
+Ralph is now wired in this repo under `scripts/ralph/`.
+
+Run with Claude Code:
+
+```bash
+make ralph-run
+```
+
+Run with Amp:
+
+```bash
+make ralph-run-amp
+```
+
+Check story progress:
+
+```bash
+make ralph-status
+```
+
+Ralph execution state is in:
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+
 ## Definition of done for “Canadian adaptation”
 
 IMMCAD is considered Canada-ready when:

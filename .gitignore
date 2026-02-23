@@ -13,3 +13,5 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 artifacts/
+scripts/ralph/archive/
+scripts/ralph/.last-branch

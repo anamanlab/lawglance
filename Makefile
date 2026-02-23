@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality
+.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-amp ralph-status
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -52,3 +52,12 @@ hygiene:
 	bash scripts/check_repository_hygiene.sh
 
 quality: lint-api test arch-validate source-registry-validate legal-review-validate jurisdiction-eval jurisdiction-suite hygiene
+
+ralph-run:
+	bash scripts/ralph/ralph.sh --tool claude 10
+
+ralph-run-amp:
+	bash scripts/ralph/ralph.sh --tool amp 10
+
+ralph-status:
+	jq '.userStories[] | {id, title, priority, passes}' scripts/ralph/prd.json

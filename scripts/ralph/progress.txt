@@ -18,3 +18,16 @@ Started: 2026-02-23
 - Gotcha: `make` is not installed in this environment, so run the `quality` target commands manually in `Makefile` order and record that equivalence in progress.
 - Useful context: `US-001` code already exists on `ralph/canada-hardening-next-loop` (`scripts/scan_domain_leaks.py`, `tests/test_domain_leak_scanner.py`) and passed the full quality gate.
 ---
+## 2026-02-23 18:11:59 -03 - US-002
+- Added a release runtime flag validator script (`scripts/validate_release_runtime_flags.py`) with explicit failure output for missing/unsafe prod-like env flags, wired it into `.github/workflows/release-gates.yml` before staging smoke, and added unit tests covering safe and failing configurations.
+- Files changed
+- `.github/workflows/release-gates.yml`
+- `scripts/validate_release_runtime_flags.py`
+- `tests/test_validate_release_runtime_flags.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+- Reusable pattern: Keep validation scripts importable (`validate_env(...)`) and make `main()` return an exit code so tests can verify both validation logic and CLI failure output.
+- Gotcha: `scripts/ralph/prd.json` branch targets can drift across branches; verify the PRD on the branch you will commit to before doing Ralph bookkeeping to avoid cross-branch story mismatch.
+- Useful context: `make` is not installed here, but the full `quality` target passed when run manually in `Makefile` order (`ruff`, `pytest`, architecture/source/legal validators, jurisdiction eval/suite, hygiene).
+---

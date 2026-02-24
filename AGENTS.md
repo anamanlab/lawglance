@@ -90,3 +90,25 @@ If `make` is unavailable, run the underlying commands directly from the repo roo
 - Simplicity First: Keep changes as simple as possible and minimize code impact.
 - No Laziness: Find root causes; no temporary fixes; maintain senior-engineer quality.
 - Minimal Impact: Touch only what is necessary and avoid introducing regressions.
+
+## Current Execution Priorities (2026-02-24)
+- Objective (MVP): ship a production-safe Canada case-law pipeline and API surface with enforceable policy gates, trusted-source grounding, and deterministic CI checks.
+- Phase 0 (Release Safety First): close secret/config hygiene and workflow race conditions.
+  - Add/verify backup ignore rules and untracked-secret policy.
+  - Ensure workflow dedup/concurrency (`quality-gates`, `release-gates`) and SHA pinning where required.
+  - Exit gate: workflow-focused tests pass and no tracked secret backups remain.
+- Phase 1 (Core Ingestion Correctness): finish SCC/FC/FCA parser and policy enforcement path.
+  - Complete `canada_courts` parsing resilience and registry/source consistency.
+  - Keep ingestion policy decisions deterministic across environments.
+  - Exit gate: parser + ingestion + registry tests pass.
+- Phase 2 (Runtime/API Safety): close auth, prompt, citation, and export-policy gaps.
+  - Harden `/ops` auth behavior, citation trusted-domain handling, prompt input wiring, and markdown/citation sanitization.
+  - Finalize export/download policy gate behavior and tests.
+  - Exit gate: API scaffold/chat-service/export-policy tests pass with no prompt leakage regressions.
+- Phase 3 (Tooling + Docs Alignment): stabilize Makefile/doc-maint scripts and sync plans/docs.
+  - Fix hermetic quality target behavior and env guardrails.
+  - Complete documentation consistency updates across `docs/plans`, `docs/release`, and `docs/research`.
+  - Exit gate: doc/workflow tests and maintenance scripts pass; plan docs match runtime behavior.
+- Delivery discipline:
+  - One PR per phase; avoid mixing workflow/security and runtime parser changes.
+  - Every phase requires explicit verification before status is moved to done in `tasks/todo.md`.

@@ -84,3 +84,37 @@ def test_main_returns_zero_for_clean_paths(tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "[OK] Domain leak scan passed" in captured.out
+
+
+def test_iter_candidate_files_falls_back_to_legacy_root_files_when_archive_missing(
+    tmp_path: Path,
+) -> None:
+    for filename in MODULE.LEGACY_LOCAL_RAG_ROOT_FALLBACK_PATHS:
+        (tmp_path / filename).write_text("safe = 'canadian'\n", encoding="utf-8")
+
+    files = list(
+        MODULE.iter_candidate_files(
+            repo_root=tmp_path,
+            scan_paths=(MODULE.LEGACY_LOCAL_RAG_DIR,),
+        )
+    )
+
+    assert {path.name for path in files} == set(MODULE.LEGACY_LOCAL_RAG_EXPECTED_FILES)
+
+
+def test_iter_candidate_files_falls_back_when_archive_is_incomplete(tmp_path: Path) -> None:
+    legacy_dir = tmp_path / "legacy" / "local_rag"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "cache.py").write_text("safe = 'canadian'\n", encoding="utf-8")
+    for filename in MODULE.LEGACY_LOCAL_RAG_ROOT_FALLBACK_PATHS:
+        (tmp_path / filename).write_text("safe = 'canadian'\n", encoding="utf-8")
+
+    files = list(
+        MODULE.iter_candidate_files(
+            repo_root=tmp_path,
+            scan_paths=(MODULE.LEGACY_LOCAL_RAG_DIR,),
+        )
+    )
+
+    assert any(path.as_posix().endswith("/legacy/local_rag/cache.py") for path in files)
+    assert any(path.name == "lawglance_main.py" and path.parent == tmp_path for path in files)

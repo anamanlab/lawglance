@@ -22,7 +22,7 @@ from immcad_api.services import (
     scaffold_grounded_citations,
 )
 from immcad_api.settings import load_settings
-from immcad_api.sources import CanLIIClient
+from immcad_api.sources import CanLIIClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
 
@@ -148,6 +148,7 @@ def create_app() -> FastAPI:
         )
     )
     source_policy = load_source_policy()
+    source_registry = load_source_registry()
 
     has_api_bearer_token = bool(settings.api_bearer_token)
 
@@ -282,6 +283,7 @@ def create_app() -> FastAPI:
         build_case_router(
             case_search_service,
             source_policy=source_policy,
+            source_registry=source_registry,
             export_policy_gate_enabled=settings.export_policy_gate_enabled,
         )
     )

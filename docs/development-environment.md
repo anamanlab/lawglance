@@ -149,6 +149,9 @@ Production/CI policy:
 - Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
 - `IMMCAD_API_BEARER_TOKEN` is the canonical token variable and is mandatory in `production`/`prod`/`ci` (`API_BEARER_TOKEN` is supported only as a compatibility alias).
 - `CITATION_TRUSTED_DOMAINS` must be explicitly set in `production`/`prod`/`ci`.
+- `EXPORT_POLICY_GATE_ENABLED` must remain enabled in `production`/`prod`/`ci` (startup rejects disabled values).
+- `EXPORT_MAX_DOWNLOAD_BYTES` controls export payload caps (default `10485760`, i.e. 10 MB).
+- `GET /ops/metrics` requires a valid bearer token in every environment.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
 
 ## Redis (optional but recommended)

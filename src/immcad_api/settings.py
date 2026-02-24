@@ -32,6 +32,7 @@ class Settings:
     enable_scaffold_provider: bool
     allow_scaffold_synthetic_citations: bool
     export_policy_gate_enabled: bool
+    export_max_download_bytes: int
     citation_trusted_domains: tuple[str, ...]
     api_rate_limit_per_minute: int
     cors_allowed_origins: tuple[str, ...]
@@ -109,7 +110,9 @@ def load_settings() -> Settings:
     )
 
     if hardened_environment and not api_bearer_token:
-        raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+        raise ValueError(
+            "API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci"
+        )
     if hardened_environment and allow_scaffold_synthetic_citations:
         raise ValueError(
             "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
@@ -124,13 +127,29 @@ def load_settings() -> Settings:
         raise ValueError(
             "CITATION_TRUSTED_DOMAINS must define at least one trusted domain in production/prod/ci"
         )
+    export_policy_gate_enabled = parse_bool_env(
+        "EXPORT_POLICY_GATE_ENABLED",
+        hardened_environment,
+    )
+    if hardened_environment and not export_policy_gate_enabled:
+        raise ValueError(
+            "EXPORT_POLICY_GATE_ENABLED must be true when ENVIRONMENT is production/prod/ci"
+        )
+    export_max_download_bytes = parse_int_env(
+        "EXPORT_MAX_DOWNLOAD_BYTES", 10 * 1024 * 1024
+    )
+    if export_max_download_bytes < 1:
+        raise ValueError("EXPORT_MAX_DOWNLOAD_BYTES must be >= 1")
 
     enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
     primary_provider = parse_str_env("PRIMARY_PROVIDER", "openai") or "openai"
     if primary_provider not in {"openai", "gemini", "scaffold"}:
         raise ValueError("PRIMARY_PROVIDER must be one of: openai, gemini, scaffold")
 
-    gemini_model = parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview") or "gemini-3-flash-preview"
+    gemini_model = (
+        parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview")
+        or "gemini-3-flash-preview"
+    )
     gemini_model_fallbacks = tuple(
         model
         for model in parse_csv_env("GEMINI_MODEL_FALLBACKS", ("gemini-2.5-flash",))
@@ -166,7 +185,8 @@ def load_settings() -> Settings:
         ),
         enable_scaffold_provider=enable_scaffold_provider,
         allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
-        export_policy_gate_enabled=parse_bool_env("EXPORT_POLICY_GATE_ENABLED", False),
+        export_policy_gate_enabled=export_policy_gate_enabled,
+        export_max_download_bytes=export_max_download_bytes,
         citation_trusted_domains=citation_trusted_domains,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
         cors_allowed_origins=parse_csv_env(

@@ -13,6 +13,16 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     metrics.record_api_response(status_code=502, duration_seconds=0.40)
     metrics.record_chat_outcome(fallback_used=True, refusal_used=False)
     metrics.record_chat_outcome(fallback_used=False, refusal_used=True)
+    metrics.record_export_outcome(
+        outcome="allowed", policy_reason="source_export_allowed"
+    )
+    metrics.record_export_outcome(
+        outcome="blocked",
+        policy_reason="source_export_blocked_by_policy",
+    )
+    metrics.record_export_outcome(
+        outcome="fetch_failed", policy_reason="source_export_fetch_failed"
+    )
 
     clock["now"] = 160.0
     snapshot = metrics.snapshot()
@@ -26,6 +36,14 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert snapshot["fallback"]["rate"] == pytest.approx(0.5)
     assert snapshot["refusal"]["total"] == 1
     assert snapshot["refusal"]["rate"] == pytest.approx(0.5)
+    assert snapshot["export"]["attempts"] == 3
+    assert snapshot["export"]["allowed"] == 1
+    assert snapshot["export"]["blocked"] == 1
+    assert snapshot["export"]["fetch_failures"] == 1
+    assert snapshot["export"]["too_large"] == 0
+    assert snapshot["export"]["policy_reasons"]["source_export_allowed"] == 1
+    assert snapshot["export"]["policy_reasons"]["source_export_blocked_by_policy"] == 1
+    assert snapshot["export"]["policy_reasons"]["source_export_fetch_failed"] == 1
     assert snapshot["latency_ms"]["sample_count"] == 2
     assert snapshot["latency_ms"]["p50"] == pytest.approx(250.0)
     assert snapshot["latency_ms"]["p95"] == pytest.approx(385.0)
@@ -44,6 +62,12 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["fallback"]["rate"] == 0.0
     assert snapshot["refusal"]["total"] == 0
     assert snapshot["refusal"]["rate"] == 0.0
+    assert snapshot["export"]["attempts"] == 0
+    assert snapshot["export"]["allowed"] == 0
+    assert snapshot["export"]["blocked"] == 0
+    assert snapshot["export"]["fetch_failures"] == 0
+    assert snapshot["export"]["too_large"] == 0
+    assert snapshot["export"]["policy_reasons"] == {}
     assert snapshot["latency_ms"]["sample_count"] == 0
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0

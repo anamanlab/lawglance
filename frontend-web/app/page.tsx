@@ -10,7 +10,7 @@ export default function HomePage(): JSX.Element {
   const { apiBaseUrl } = getRuntimeConfig();
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-100 via-slate-200 to-slate-100 px-4 py-8 md:py-12">
+    <main className="min-h-screen px-4 py-6 md:py-10">
       <ChatShell apiBaseUrl={apiBaseUrl} legalDisclaimer={LEGAL_DISCLAIMER} />
     </main>
   );

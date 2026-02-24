@@ -17,6 +17,7 @@ class Settings:
     redis_url: str
     openai_model: str
     gemini_model: str
+    gemini_model_fallbacks: tuple[str, ...]
     provider_timeout_seconds: float
     provider_max_retries: int
     provider_circuit_breaker_failure_threshold: int
@@ -91,6 +92,13 @@ def load_settings() -> Settings:
             "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
         )
 
+    gemini_model = parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview") or "gemini-3-flash-preview"
+    gemini_model_fallbacks = tuple(
+        model
+        for model in parse_csv_env("GEMINI_MODEL_FALLBACKS", ("gemini-2.5-flash",))
+        if model != gemini_model
+    )
+
     return Settings(
         app_name=parse_str_env("API_APP_NAME", "IMMCAD API") or "IMMCAD API",
         environment=environment,
@@ -104,7 +112,8 @@ def load_settings() -> Settings:
         redis_url=parse_str_env("REDIS_URL", "redis://localhost:6379/0")
         or "redis://localhost:6379/0",
         openai_model=parse_str_env("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini",
-        gemini_model=parse_str_env("GEMINI_MODEL", "gemini-2.5-flash") or "gemini-2.5-flash",
+        gemini_model=gemini_model,
+        gemini_model_fallbacks=gemini_model_fallbacks,
         provider_timeout_seconds=parse_float_env("PROVIDER_TIMEOUT_SECONDS", 15.0),
         provider_max_retries=parse_int_env("PROVIDER_MAX_RETRIES", 1),
         provider_circuit_breaker_failure_threshold=parse_int_env(

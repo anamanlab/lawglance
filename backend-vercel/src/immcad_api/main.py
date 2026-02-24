@@ -88,6 +88,7 @@ def create_app() -> FastAPI:
         GeminiProvider(
             settings.gemini_api_key,
             model=settings.gemini_model,
+            fallback_models=settings.gemini_model_fallbacks,
             timeout_seconds=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,
         ),

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiErrorCode,
   CaseSearchResult,
@@ -85,8 +85,16 @@ const ERROR_COPY: Record<ApiErrorCode, ErrorCopy> = {
   },
 };
 
+const QUICK_PROMPTS = [
+  "What are the eligibility basics for Express Entry?",
+  "What documents are required for a study permit?",
+  "How does sponsorship for a spouse work in Canada?",
+];
+
 const ASSISTANT_BOOTSTRAP_TEXT =
   "Welcome to IMMCAD. Ask a Canada immigration question to begin.";
+
+const MAX_MESSAGE_LENGTH = 8000;
 
 type SubmissionPhase = "idle" | "chat" | "cases";
 
@@ -130,12 +138,25 @@ function buildMessage(
   };
 }
 
+function buildStatusTone(status: SupportContext["status"] | null): string {
+  if (status === "success") {
+    return "bg-emerald-100 text-emerald-800 border-emerald-300";
+  }
+  if (status === "error") {
+    return "bg-red-100 text-red-800 border-red-300";
+  }
+  return "bg-slate-100 text-slate-700 border-slate-300";
+}
+
 export function ChatShell({
   apiBaseUrl,
   legalDisclaimer
 }: ChatShellProps): JSX.Element {
   const sessionIdRef = useRef(buildSessionId());
   const messageCounterRef = useRef(0);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const endOfThreadRef = useRef<HTMLDivElement | null>(null);
+
   const [draft, setDraft] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [chatError, setChatError] = useState<{
@@ -165,6 +186,15 @@ export function ChatShell({
   ]);
 
   const endpointLabel = useMemo(() => apiBaseUrl.replace(/\/+$/, ""), [apiBaseUrl]);
+  const trimmedDraft = draft.trim();
+  const sendDisabled = isSubmitting || !trimmedDraft;
+  const remainingCharacters = MAX_MESSAGE_LENGTH - draft.length;
+
+  useEffect(() => {
+    if (typeof endOfThreadRef.current?.scrollIntoView === "function") {
+      endOfThreadRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages, isSubmitting]);
 
   const submitPrompt = async (
     prompt: string,
@@ -174,8 +204,8 @@ export function ChatShell({
       return;
     }
 
-    const trimmedDraft = prompt.trim();
-    if (!trimmedDraft) {
+    const promptToSubmit = prompt.trim();
+    if (!promptToSubmit) {
       return;
     }
 
@@ -183,7 +213,7 @@ export function ChatShell({
       const userMessageId = nextMessageId("user", messageCounterRef);
       setMessages((currentMessages) => [
         ...currentMessages,
-        buildMessage(userMessageId, "user", trimmedDraft)
+        buildMessage(userMessageId, "user", promptToSubmit)
       ]);
       setDraft("");
     }
@@ -198,7 +228,7 @@ export function ChatShell({
     try {
       const chatResult = await apiClient.sendChatMessage({
         session_id: sessionIdRef.current,
-        message: trimmedDraft,
+        message: promptToSubmit,
         locale: "en-CA",
         mode: "standard",
       });
@@ -212,7 +242,7 @@ export function ChatShell({
           retryable: errorCopy.retryable,
           traceId: chatResult.traceId,
         });
-        setRetryPrompt(errorCopy.retryable ? trimmedDraft : null);
+        setRetryPrompt(errorCopy.retryable ? promptToSubmit : null);
         setSupportContext({
           endpoint: "/api/chat",
           status: "error",
@@ -253,7 +283,7 @@ export function ChatShell({
       setSubmissionPhase("cases");
       setRelatedCasesStatus("Loading related case results...");
       const caseSearchResult = await apiClient.searchCases({
-        query: trimmedDraft,
+        query: promptToSubmit,
         jurisdiction: "ca",
         limit: 5,
       });
@@ -288,6 +318,7 @@ export function ChatShell({
     } finally {
       setIsSubmitting(false);
       setSubmissionPhase("idle");
+      textareaRef.current?.focus();
     }
   };
 
@@ -303,201 +334,257 @@ export function ChatShell({
     void submitPrompt(retryPrompt, { isRetry: true });
   };
 
+  const onQuickPromptClick = (prompt: string): void => {
+    if (isSubmitting) {
+      return;
+    }
+    setDraft(prompt);
+    textareaRef.current?.focus();
+  };
+
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-4 rounded-2xl border border-slate-300 bg-white/95 p-4 shadow-xl md:p-6">
-      <header className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-warning">
-        <p className="font-semibold">Canada legal scope notice</p>
-        <p className="mt-1">{legalDisclaimer}</p>
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 rounded-3xl border border-slate-300/90 bg-white/95 p-4 shadow-[0_18px_48px_rgba(15,23,42,0.16)] md:p-6">
+      <header className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 to-amber-100 p-4 text-sm text-warning">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-lg font-semibold text-slate-900">Canada legal scope notice</p>
+          <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+            Informational only
+          </span>
+        </div>
+        <p className="mt-2 leading-6 text-slate-800">{legalDisclaimer}</p>
       </header>
 
-      {chatError ? (
-        <div
-          aria-live="assertive"
-          className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900"
-        >
-          <p className="font-semibold">{chatError.title}</p>
-          <p className="mt-1">{chatError.detail}</p>
-          <p className="mt-2 text-xs">{chatError.action}</p>
-          <p className="mt-1 text-xs">Trace ID: {chatError.traceId ?? "Unavailable"}</p>
-          {chatError.retryable && retryPrompt ? (
-            <button
-              className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-500"
-              disabled={isSubmitting}
-              onClick={onRetryLastRequest}
-              type="button"
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,1fr)]">
+        <div className="space-y-4">
+          {chatError ? (
+            <div
+              aria-live="assertive"
+              className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900"
             >
-              Retry last request
-            </button>
+              <p className="font-semibold">{chatError.title}</p>
+              <p className="mt-1">{chatError.detail}</p>
+              <p className="mt-2 text-xs">{chatError.action}</p>
+              <p className="mt-1 text-xs">Trace ID: {chatError.traceId ?? "Unavailable"}</p>
+              {chatError.retryable && retryPrompt ? (
+                <button
+                  className="mt-2 min-h-[44px] min-w-[44px] rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition duration-200 ease-out hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-500"
+                  disabled={isSubmitting}
+                  onClick={onRetryLastRequest}
+                  type="button"
+                >
+                  Retry last request
+                </button>
+              ) : null}
+            </div>
           ) : null}
-        </div>
-      ) : null}
 
-      <div
-        aria-live="polite"
-        className="h-[52vh] min-h-[360px] overflow-y-auto rounded-lg border border-slate-200 bg-panel p-3"
-      >
-        <ol className="space-y-3">
-          {messages.map((message) => (
-            <li
-              className={`flex ${
-                message.author === "user" ? "justify-end" : "justify-start"
-              }`}
-              key={message.id}
+          <section className="rounded-xl border border-slate-200 bg-white p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h1 className="text-xl font-semibold text-slate-900 md:text-2xl">IMMCAD Assistant</h1>
+              <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700">
+                Canada immigration
+              </span>
+            </div>
+            <div
+              aria-busy={isSubmitting}
+              aria-live="polite"
+              aria-relevant="additions"
+              className="h-[52vh] min-h-[360px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-3"
+              role="log"
             >
-              <article
-                className={`max-w-[86%] rounded-xl px-3 py-2 text-sm leading-relaxed md:max-w-[74%] ${
-                  message.author === "user"
-                    ? "bg-accent text-white"
-                    : "border border-slate-200 bg-white text-ink"
-                }`}
-              >
-                <p>{message.content}</p>
-                {message.author === "assistant" && message.isPolicyRefusal ? (
-                  <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                    <p className="font-semibold uppercase tracking-wide">
-                      Policy refusal response
-                    </p>
-                    <p className="mt-1">
-                      Rephrase the request as general immigration information (eligibility
-                      criteria, official process steps, or document requirements).
-                    </p>
-                    {message.traceId ? (
-                      <p className="mt-1 text-[11px] text-amber-800">
-                        Trace ID: {message.traceId}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-                {message.author === "assistant" && message.citations?.length ? (
-                  <div className="mt-3 border-t border-slate-200 pt-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Sources
-                    </p>
-                    <ul className="mt-2 flex flex-wrap gap-2 text-xs">
-                      {message.citations.map((citation) => (
-                        <li key={`${message.id}-${citation.url}`}>
-                          <a
-                            aria-label={`Open citation: ${citation.title}${citation.pin ? ` (${citation.pin})` : ""}`}
-                            className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 font-medium text-slate-900 underline-offset-2 transition hover:bg-slate-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                            href={citation.url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            <span>{citation.title}</span>
-                            {citation.pin ? (
-                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">
-                                {citation.pin}
-                              </span>
-                            ) : null}
-                          </a>
-                          {citation.snippet ? (
-                            <p className="mt-1 max-w-sm text-[11px] text-slate-600">
-                              {citation.snippet}
+              <ol className="space-y-3">
+                {messages.map((message) => (
+                  <li
+                    className={`flex ${
+                      message.author === "user" ? "justify-end" : "justify-start"
+                    }`}
+                    key={message.id}
+                  >
+                    <article
+                      className={`max-w-[90%] rounded-xl px-3 py-2 text-sm leading-7 md:max-w-[78%] ${
+                        message.author === "user"
+                          ? "bg-gradient-to-br from-blue-900 to-blue-700 text-white"
+                          : "border border-slate-200 bg-white text-ink"
+                      }`}
+                    >
+                      <p>{message.content}</p>
+                      {message.author === "assistant" && message.isPolicyRefusal ? (
+                        <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                          <p className="font-semibold uppercase tracking-wide">
+                            Policy refusal response
+                          </p>
+                          <p className="mt-1">
+                            Rephrase the request as general immigration information (eligibility
+                            criteria, official process steps, or document requirements).
+                          </p>
+                          {message.traceId ? (
+                            <p className="mt-1 text-[11px] text-amber-800">
+                              Trace ID: {message.traceId}
                             </p>
                           ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                        </div>
+                      ) : null}
+                      {message.author === "assistant" && message.citations?.length ? (
+                        <div className="mt-3 border-t border-slate-200 pt-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                            Sources
+                          </p>
+                          <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {message.citations.map((citation) => (
+                              <li key={`${message.id}-${citation.url}`}>
+                                <a
+                                  aria-label={`Open citation: ${citation.title}${citation.pin ? ` (${citation.pin})` : ""}`}
+                                  className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 font-medium text-slate-900 underline-offset-2 transition duration-200 ease-out hover:bg-slate-100 hover:underline"
+                                  href={citation.url}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  <span>{citation.title}</span>
+                                  {citation.pin ? (
+                                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">
+                                      {citation.pin}
+                                    </span>
+                                  ) : null}
+                                </a>
+                                {citation.snippet ? (
+                                  <p className="mt-1 max-w-sm text-[11px] text-slate-600">
+                                    {citation.snippet}
+                                  </p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {message.author === "assistant" && message.disclaimer ? (
+                        <p className="mt-2 border-t border-slate-200 pt-2 text-xs text-muted">
+                          {message.disclaimer}
+                        </p>
+                      ) : null}
+                      {message.author === "assistant" && message.traceId && !message.isPolicyRefusal ? (
+                        <p className="mt-2 text-[11px] text-slate-500">Trace ID: {message.traceId}</p>
+                      ) : null}
+                    </article>
+                  </li>
+                ))}
+                {isSubmitting ? (
+                  <li className="flex justify-start">
+                    <article className="max-w-[90%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-ink md:max-w-[78%]">
+                      <p className="motion-safe:animate-pulse text-slate-600">
+                        {submissionPhase === "cases"
+                          ? "Loading related case references..."
+                          : "Submitting your question..."}
+                      </p>
+                    </article>
+                  </li>
                 ) : null}
-                {message.author === "assistant" && message.disclaimer ? (
-                  <p className="mt-2 border-t border-slate-200 pt-2 text-xs text-muted">
-                    {message.disclaimer}
-                  </p>
-                ) : null}
-                {message.author === "assistant" && message.traceId && !message.isPolicyRefusal ? (
-                  <p className="mt-2 text-[11px] text-slate-500">Trace ID: {message.traceId}</p>
-                ) : null}
-              </article>
-            </li>
-          ))}
-          {isSubmitting ? (
-            <li className="flex justify-start">
-              <article className="max-w-[86%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-ink md:max-w-[74%]">
-                <p className="animate-pulse text-slate-600">
-                  {submissionPhase === "cases"
-                    ? "Loading related case references..."
-                    : "Submitting your question..."}
-                </p>
-              </article>
-            </li>
-          ) : null}
-        </ol>
-      </div>
+              </ol>
+              <div ref={endOfThreadRef} />
+            </div>
+          </section>
 
-      <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-        <p className="font-semibold text-slate-800">Related case search</p>
-        {relatedCasesStatus ? <p className="mt-1 text-slate-600">{relatedCasesStatus}</p> : null}
-        {relatedCases.length ? (
-          <ul className="mt-2 space-y-2 text-xs text-slate-700">
-            {relatedCases.map((result) => (
-              <li className="rounded-md border border-slate-200 bg-white p-2" key={result.case_id}>
-                <a
-                  className="font-medium text-slate-900 underline underline-offset-2"
-                  href={result.url}
-                  rel="noreferrer"
-                  target="_blank"
+          <section className="rounded-xl border border-slate-200 bg-white p-3">
+            <form className="space-y-3" onSubmit={onSubmit}>
+              <label className="block text-sm font-semibold text-slate-700" htmlFor="chat-input">
+                Ask a Canada immigration question
+              </label>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Quick prompts">
+                {QUICK_PROMPTS.map((prompt) => (
+                  <button
+                    className="min-h-[44px] min-w-[44px] rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 transition duration-200 ease-out hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSubmitting}
+                    key={prompt}
+                    onClick={() => onQuickPromptClick(prompt)}
+                    type="button"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                className="h-28 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-base leading-7 text-ink shadow-sm transition duration-200 ease-out focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+                disabled={isSubmitting}
+                id="chat-input"
+                maxLength={MAX_MESSAGE_LENGTH}
+                name="chat-input"
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="Example: What are the eligibility basics for Express Entry?"
+                ref={textareaRef}
+                value={draft}
+              />
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs text-muted">API target: {endpointLabel}</p>
+                  <p className="text-[11px] text-slate-500">{remainingCharacters} characters remaining</p>
+                  {isSubmitting ? (
+                    <p aria-live="polite" className="text-[11px] text-slate-500">
+                      {submissionPhase === "cases"
+                        ? "Searching related cases..."
+                        : "Sending request..."}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  className="min-h-[44px] min-w-[120px] rounded-lg bg-gradient-to-r from-blue-900 to-blue-700 px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-out hover:from-blue-800 hover:to-blue-600 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400"
+                  disabled={sendDisabled}
+                  type="submit"
                 >
-                  {result.title}
-                </a>
-                <p className="mt-1">{result.citation}</p>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
+                  {isSubmitting
+                    ? submissionPhase === "cases"
+                      ? "Loading..."
+                      : "Sending..."
+                    : "Send"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
 
-      <form className="space-y-2" onSubmit={onSubmit}>
-        <label className="block text-sm font-medium text-slate-700" htmlFor="chat-input">
-          Ask a Canada immigration question
-        </label>
-        <textarea
-          className="h-24 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-ink shadow-sm outline-none ring-accent transition focus:border-accent focus:ring-2"
-          disabled={isSubmitting}
-          id="chat-input"
-          name="chat-input"
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="Example: What are the eligibility basics for Express Entry?"
-          value={draft}
-        />
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs text-muted">API target: {endpointLabel}</p>
-            {isSubmitting ? (
-              <p aria-live="polite" className="text-[11px] text-slate-500">
-                {submissionPhase === "cases"
-                  ? "Searching related cases..."
-                  : "Sending request..."}
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="font-semibold text-slate-800">Related case search</p>
+              <span
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${buildStatusTone(supportContext?.status ?? null)}`}
+              >
+                {supportContext?.status ?? "idle"}
+              </span>
+            </div>
+            {relatedCasesStatus ? <p className="mt-1 text-slate-600">{relatedCasesStatus}</p> : null}
+            {relatedCases.length ? (
+              <ul className="mt-2 space-y-2 text-xs text-slate-700">
+                {relatedCases.map((result) => (
+                  <li className="rounded-md border border-slate-200 bg-white p-2" key={result.case_id}>
+                    <a
+                      className="font-medium text-slate-900 underline underline-offset-2"
+                      href={result.url}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {result.title}
+                    </a>
+                    <p className="mt-1">{result.citation}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            <p className="font-semibold text-slate-800">Support context</p>
+            <p className="mt-1">API target: {endpointLabel}</p>
+            <p>Last endpoint: {supportContext?.endpoint ?? "Not called yet"}</p>
+            <p>Last outcome: {supportContext ? supportContext.status : "Not available"}</p>
+            <p>Last error code: {supportContext?.code ?? "None"}</p>
+            <p>Trace ID: {supportContext?.traceId ?? "Unavailable"}</p>
+            {supportContext?.traceIdMismatch ? (
+              <p className="mt-1 font-medium text-red-700">
+                Trace mismatch detected between header and error body.
               </p>
             ) : null}
-          </div>
-          <button
-            className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-500"
-            disabled={isSubmitting}
-            type="submit"
-          >
-            {isSubmitting
-              ? submissionPhase === "cases"
-                ? "Loading..."
-                : "Sending..."
-              : "Send"}
-          </button>
-        </div>
-      </form>
-
-      <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-        <p className="font-semibold text-slate-800">Support context</p>
-        <p className="mt-1">API target: {endpointLabel}</p>
-        <p>Last endpoint: {supportContext?.endpoint ?? "Not called yet"}</p>
-        <p>Last outcome: {supportContext ? supportContext.status : "Not available"}</p>
-        <p>Last error code: {supportContext?.code ?? "None"}</p>
-        <p>Trace ID: {supportContext?.traceId ?? "Unavailable"}</p>
-        {supportContext?.traceIdMismatch ? (
-          <p className="mt-1 font-medium text-red-700">
-            Trace mismatch detected between header and error body.
-          </p>
-        ) : null}
-      </section>
+          </section>
+        </aside>
+      </div>
     </section>
   );
 }

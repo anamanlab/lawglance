@@ -15,11 +15,13 @@ class GeminiProvider:
         api_key: str | None,
         *,
         model: str,
+        fallback_models: tuple[str, ...] = (),
         timeout_seconds: float,
         max_retries: int,
     ) -> None:
         self.api_key = api_key
         self.model = model
+        self.fallback_models = fallback_models
         self.timeout_seconds = timeout_seconds
         self.max_retries = max(0, max_retries)
 
@@ -47,27 +49,41 @@ class GeminiProvider:
 
         answer = ""
         last_error: ProviderError | None = None
-        for attempt in range(self.max_retries + 1):
-            try:
-                response = client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.2,
-                    ),
-                )
-                answer = response.text or ""
-                break
-            except Exception as exc:  # pragma: no cover
-                last_error = map_provider_exception(self.name, exc)
+        models_to_try = [self.model, *self.fallback_models]
+        for model_name in models_to_try:
+            for attempt in range(self.max_retries + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.2,
+                        ),
+                    )
+                    answer = response.text or ""
+                    if answer:
+                        break
+                    last_error = ProviderError(
+                        self.name,
+                        "provider_error",
+                        f"Empty Gemini response from model '{model_name}'",
+                    )
+                except Exception as exc:  # pragma: no cover
+                    last_error = map_provider_exception(self.name, exc)
 
-            if attempt < self.max_retries:
-                time.sleep(0.4 * (attempt + 1))
-                continue
-            if last_error:
-                raise last_error
+                if attempt < self.max_retries:
+                    time.sleep(0.4 * (attempt + 1))
+                    continue
+            if answer:
+                break
 
         if not answer:
+            if last_error:
+                raise ProviderError(
+                    self.name,
+                    last_error.code,
+                    f"{last_error.message} (models tried: {', '.join(models_to_try)})",
+                ) from last_error
             raise ProviderError(self.name, "provider_error", "Empty Gemini response")
 
         return ProviderResult(

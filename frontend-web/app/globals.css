@@ -4,11 +4,50 @@
 
 :root {
   color-scheme: light;
+  --imm-bg: #f8fafc;
+  --imm-bg-soft: #e8eef8;
+  --imm-card: #ffffff;
+  --imm-text: #0f172a;
+  --imm-navy: #1e3a8a;
+  --imm-blue: #1e40af;
+  --imm-gold: #b45309;
+  --imm-focus: #1d4ed8;
 }
 
 body {
   margin: 0;
-  background: #e2e8f0;
-  color: #0f172a;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(30, 58, 138, 0.07), transparent 35%),
+    radial-gradient(circle at 90% 0%, rgba(180, 83, 9, 0.08), transparent 30%),
+    linear-gradient(180deg, var(--imm-bg) 0%, var(--imm-bg-soft) 100%);
+  color: var(--imm-text);
+  font-family: var(--font-body), "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading), Georgia, "Times New Roman", serif;
+}
+
+a:focus-visible,
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--imm-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

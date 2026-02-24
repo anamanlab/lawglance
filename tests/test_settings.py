@@ -81,3 +81,39 @@ def test_load_settings_parses_cors_origins_csv(monkeypatch: pytest.MonkeyPatch) 
         "https://immcad.example",
         "https://admin.immcad.example",
     )
+
+
+def test_load_settings_trims_sensitive_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", " production ")
+    monkeypatch.setenv("API_BEARER_TOKEN", " secret-token ")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+
+    settings = load_settings()
+    assert settings.environment == "production"
+    assert settings.api_bearer_token == "secret-token"
+
+
+def test_load_settings_uses_latest_gemini_default_with_stable_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL_FALLBACKS", raising=False)
+
+    settings = load_settings()
+    assert settings.gemini_model == "gemini-3-flash-preview"
+    assert settings.gemini_model_fallbacks == ("gemini-2.5-flash",)
+
+
+def test_load_settings_excludes_primary_model_from_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3-flash-preview")
+    monkeypatch.setenv(
+        "GEMINI_MODEL_FALLBACKS",
+        "gemini-3-flash-preview, gemini-2.5-flash, gemini-2.5-flash-lite",
+    )
+
+    settings = load_settings()
+    assert settings.gemini_model_fallbacks == ("gemini-2.5-flash", "gemini-2.5-flash-lite")

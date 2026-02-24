@@ -4,7 +4,9 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
+import pytest
 
+from immcad_api.errors import ProviderApiError
 from immcad_api.schemas import CaseSearchRequest
 from immcad_api.sources.canlii_client import CanLIIClient
 
@@ -131,3 +133,35 @@ def test_canlii_falls_back_on_http_error(monkeypatch) -> None:
 
     assert len(response.results) == 2
     assert response.results[0].case_id.startswith("FCT-")
+
+
+def test_canlii_raises_without_api_key_when_scaffold_fallback_disabled(monkeypatch) -> None:
+    def _should_not_call_http(*args, **kwargs):  # pragma: no cover - defensive guard
+        raise AssertionError("httpx.Client should not be called when api_key is None")
+
+    monkeypatch.setattr("immcad_api.sources.canlii_client.httpx.Client", _should_not_call_http)
+
+    client = CanLIIClient(api_key=None, allow_scaffold_fallback=False)
+    request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=2)
+
+    with pytest.raises(ProviderApiError, match="Case-law source is currently unavailable") as exc_info:
+        client.search_cases(request)
+
+    assert exc_info.value.code == "SOURCE_UNAVAILABLE"
+    assert exc_info.value.status_code == 503
+
+
+def test_canlii_raises_on_http_error_when_scaffold_fallback_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(raise_error=True),
+    )
+
+    client = CanLIIClient(api_key="test-key", allow_scaffold_fallback=False)
+    request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=2)
+
+    with pytest.raises(ProviderApiError, match="Case-law source is currently unavailable") as exc_info:
+        client.search_cases(request)
+
+    assert exc_info.value.code == "SOURCE_UNAVAILABLE"
+    assert exc_info.value.status_code == 503

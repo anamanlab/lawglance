@@ -15,3 +15,7 @@ __pycache__/
 artifacts/
 scripts/ralph/archive/
 scripts/ralph/.last-branch
+frontend-web/node_modules/
+frontend-web/.next/
+frontend-web/out/
+frontend-web/coverage/

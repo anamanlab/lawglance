@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from immcad_api.main import create_app  # noqa: E402
+from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
+from immcad_api.providers import ProviderError, ProviderResult  # noqa: E402
 
 
 client = TestClient(create_app())
@@ -51,7 +53,10 @@ def test_chat_policy_block_response() -> None:
     assert response.status_code == 200
     body = response.json()
 
+    assert body["answer"] == POLICY_REFUSAL_TEXT
     assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["disclaimer"] == DISCLAIMER_TEXT
     assert body["fallback_used"]["used"] is False
     assert body["fallback_used"]["reason"] == "policy_block"
 
@@ -105,7 +110,10 @@ def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     assert unauthorized.status_code == 401
-    assert unauthorized.json()["error"]["code"] == "UNAUTHORIZED"
+    unauthorized_body = unauthorized.json()
+    assert unauthorized_body["error"]["code"] == "UNAUTHORIZED"
+    assert unauthorized_body["error"]["trace_id"]
+    assert unauthorized.headers["x-trace-id"] == unauthorized_body["error"]["trace_id"]
 
     authorized = secured_client.post(
         "/api/chat",
@@ -118,6 +126,33 @@ def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     assert authorized.status_code == 200
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_bearer_auth_enforced_for_production_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    secured_client = TestClient(create_app())
+
+    unauthorized = secured_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What is IRPA section 11 about?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert unauthorized.status_code == 401
+    body = unauthorized.json()
+    assert body["error"]["code"] == "UNAUTHORIZED"
+    assert body["error"]["trace_id"]
+    assert unauthorized.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
 def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -140,6 +175,113 @@ def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.Monk
     body = response.json()
     assert body["error"]["code"] == "PROVIDER_ERROR"
     assert body["error"]["trace_id"]
+
+
+def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    openai_calls = {"count": 0}
+
+    def flaky_openai_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+        del self, message, citations, locale
+        openai_calls["count"] += 1
+        if openai_calls["count"] == 1:
+            raise ProviderError("openai", "timeout", "transient timeout")
+        return ProviderResult(
+            provider="openai",
+            answer="Recovered primary response",
+            citations=[
+                {
+                    "source_id": "IRPA_s11",
+                    "title": "IRPA section 11",
+                    "url": "https://laws-lois.justice.gc.ca/eng/acts/I-2.5/section-11.html",
+                    "pin": "s.11",
+                    "snippet": "A foreign national must apply before entering Canada.",
+                }
+            ],
+            confidence="medium",
+        )
+
+    def gemini_fallback_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+        del self, message, citations, locale
+        return ProviderResult(
+            provider="gemini",
+            answer="Fallback response",
+            citations=[
+                {
+                    "source_id": "IRPA_s11",
+                    "title": "IRPA section 11",
+                    "url": "https://laws-lois.justice.gc.ca/eng/acts/I-2.5/section-11.html",
+                    "pin": "s.11",
+                    "snippet": "A foreign national must apply before entering Canada.",
+                }
+            ],
+            confidence="medium",
+        )
+
+    monkeypatch.setattr("immcad_api.main.OpenAIProvider.generate", flaky_openai_generate)
+    monkeypatch.setattr("immcad_api.main.GeminiProvider.generate", gemini_fallback_generate)
+
+    transient_client = TestClient(create_app())
+    first = transient_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    second = transient_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert first.status_code == 200
+    assert first.headers["x-trace-id"]
+    first_body = first.json()
+    assert first_body["fallback_used"]["used"] is True
+    assert first_body["fallback_used"]["provider"] == "gemini"
+    assert first_body["fallback_used"]["reason"] == "timeout"
+
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["fallback_used"]["used"] is False
+    assert second_body["fallback_used"]["provider"] is None
+    assert second_body["fallback_used"]["reason"] is None
+
+
+def test_safe_constrained_response_when_synthetic_citations_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    constrained_client = TestClient(create_app())
+
+    response = constrained_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What are the basic PR eligibility pathways?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["disclaimer"] == DISCLAIMER_TEXT
 
 
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -167,4 +309,109 @@ def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert first.status_code == 200
     assert second.status_code == 429
-    assert second.json()["error"]["code"] == "RATE_LIMITED"
+    body = second.json()
+    assert body["error"]["code"] == "RATE_LIMITED"
+    assert body["error"]["trace_id"]
+    assert second.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_client_id(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr("immcad_api.main._resolve_rate_limit_client_id", no_client_id)
+    validation_client = TestClient(create_app())
+
+    response = validation_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Explain PR pathways in brief.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["message"] == "Unable to determine client identifier for rate limiting"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_canlii_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    hardened_client = TestClient(create_app())
+
+    response = hardened_client.post(
+        "/api/search/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "query": "express entry inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
+    metrics_client = TestClient(create_app())
+
+    ok_response = metrics_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    refusal_response = metrics_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Please represent me and file my application",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+    validation_error_response = metrics_client.post(
+        "/api/chat",
+        json={"session_id": "short", "message": ""},
+    )
+    metrics = metrics_client.get("/ops/metrics")
+
+    assert ok_response.status_code == 200
+    assert refusal_response.status_code == 200
+    assert validation_error_response.status_code == 422
+    assert metrics.status_code == 200
+
+    payload = metrics.json()
+    request_metrics = payload["request_metrics"]
+
+    assert request_metrics["requests"]["total"] >= 3
+    assert request_metrics["requests"]["rate_per_minute"] > 0
+    assert request_metrics["errors"]["total"] >= 1
+    assert request_metrics["refusal"]["total"] >= 1
+    assert "fallback" in request_metrics
+    assert request_metrics["latency_ms"]["sample_count"] >= 3
+    assert request_metrics["latency_ms"]["p50"] >= 0
+    assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
+    assert "provider_routing_metrics" in payload

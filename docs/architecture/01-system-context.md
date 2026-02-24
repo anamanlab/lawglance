@@ -53,7 +53,7 @@ Out of scope:
 
 ```mermaid
 graph TD
-    U[User] --> FE[Chat UI\nCurrent: Streamlit\nTarget: Next.js]
+    U[User] --> FE[Chat UI\nProduction: Next.js\nLegacy dev-only: Streamlit app.py]
     FE --> BE[IMMCAD Backend\nRAG + Policy + Provider Router]
     BE --> VS[Vector Store\nChroma]
     BE --> RS[Redis\nSession and Cache]
@@ -66,5 +66,5 @@ graph TD
 
 ## Architectural Pattern
 
-- Current: single-process modular script architecture.
-- Target MVP: modular monolith backend with clean module boundaries and provider abstraction.
+- Production: Next.js frontend plus modular monolith backend with clean module boundaries and provider abstraction.
+- Legacy dev-only: single-process Streamlit script architecture retained in `app.py`.

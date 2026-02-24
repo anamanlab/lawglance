@@ -5,6 +5,7 @@ from datetime import date
 
 import httpx
 
+from immcad_api.errors import SourceUnavailableError
 from immcad_api.schemas import CaseSearchRequest, CaseSearchResponse, CaseSearchResult
 
 
@@ -13,10 +14,11 @@ class CanLIIClient:
     api_key: str | None
     base_url: str = "https://api.canlii.org/v1"
     timeout_seconds: float = 8.0
+    allow_scaffold_fallback: bool = True
 
     def search_cases(self, request: CaseSearchRequest) -> CaseSearchResponse:
         if not self.api_key:
-            return self._fallback(request)
+            return self._fallback_or_error(request)
 
         headers = {"Authorization": f"Token {self.api_key}"}
         params = {
@@ -36,11 +38,13 @@ class CanLIIClient:
                 response.raise_for_status()
                 payload = response.json()
         except Exception:
-            return self._fallback(request)
+            return self._fallback_or_error(request)
 
         cases = self._extract_cases(payload)
+        if cases is None:
+            return self._fallback_or_error(request)
         if not cases:
-            return self._fallback(request)
+            return CaseSearchResponse(results=[])
 
         results: list[CaseSearchResult] = []
         for item in cases[: request.limit]:
@@ -75,9 +79,14 @@ class CanLIIClient:
 
         return CaseSearchResponse(results=results)
 
-    def _extract_cases(self, payload) -> list[dict]:
+    def _fallback_or_error(self, request: CaseSearchRequest) -> CaseSearchResponse:
+        if self.allow_scaffold_fallback:
+            return self._fallback(request)
+        raise SourceUnavailableError("Case-law source is currently unavailable. Please retry later.")
+
+    def _extract_cases(self, payload) -> list[dict] | None:
         if not isinstance(payload, dict):
-            return []
+            return None
 
         if isinstance(payload.get("cases"), list):
             return payload["cases"]
@@ -85,7 +94,7 @@ class CanLIIClient:
             return payload["results"]
         if isinstance(payload.get("caseResults"), list):
             return payload["caseResults"]
-        return []
+        return None
 
     def _parse_decision_date(self, value: str | None) -> date:
         if not value:

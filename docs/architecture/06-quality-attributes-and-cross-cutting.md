@@ -67,7 +67,16 @@ Approach:
 ## Observability
 
 - Structured logs with correlation ID and session ID.
-- Metrics: latency, retrieval hit quality, policy block rate, fallback rate.
+- Metrics are exposed from `GET /ops/metrics` and include:
+  - request rate (`request_metrics.requests.rate_per_minute`)
+  - error rate (`request_metrics.errors.rate`)
+  - fallback rate (`request_metrics.fallback.rate`)
+  - refusal rate (`request_metrics.refusal.rate`)
+  - latency percentiles (`request_metrics.latency_ms.p50|p95|p99`)
+- Trace correlation path for triage:
+  - `x-trace-id` response header
+  - `error.trace_id` in error envelope bodies
+  - `immcad_api.audit` structured events (`audit_event.trace_id`)
 - Tracing for orchestration and tool calls.
 
 ## Maintainability

@@ -31,3 +31,10 @@ class PolicyBlockedError(ApiError):
 class ProviderApiError(ApiError):
     def __init__(self, message: str = "Provider error") -> None:
         super().__init__(code="PROVIDER_ERROR", message=message, status_code=502)
+
+
+class SourceUnavailableError(ProviderApiError):
+    def __init__(self, message: str = "Source is unavailable") -> None:
+        super().__init__(message=message)
+        self.code = "SOURCE_UNAVAILABLE"
+        self.status_code = 503

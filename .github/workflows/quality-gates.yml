@@ -21,6 +21,49 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Validate hardened runtime safety toggles
+        env:
+          PYTHONPATH: src
+          ENVIRONMENT: ci
+          API_BEARER_TOKEN: quality-gate-token
+          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
+        run: |
+          uv run python - <<'PY'
+          import os
+          from immcad_api.settings import load_settings
+
+          load_settings()
+          os.environ["ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS"] = "true"
+          try:
+              load_settings()
+          except ValueError as exc:
+              if "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false" not in str(exc):
+                  raise
+          else:
+              raise SystemExit("Expected hardened-mode synthetic citation guard to fail")
+          PY
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend-web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend-web
+
+      - name: Frontend typecheck
+        run: npm run typecheck --prefix frontend-web
+
+      - name: Frontend build
+        run: npm run build --prefix frontend-web
+
+      - name: Frontend contract tests
+        env:
+          CI: "true"
+        run: npm run test --prefix frontend-web
+
       - name: Lint API and tests scope
         run: uv run ruff check src/immcad_api tests
 
@@ -39,6 +82,9 @@ jobs:
 
       - name: Validate legal review checklist template
         run: uv run python scripts/validate_legal_review_checklist.py
+
+      - name: Scan for Canada domain leaks
+        run: uv run python scripts/scan_domain_leaks.py
 
       - name: Generate jurisdictional evaluation report
         env:

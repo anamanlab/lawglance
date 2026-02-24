@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from immcad_api.sources.required_sources import PRODUCTION_REQUIRED_SOURCE_IDS
+
 
 REGISTRY_PATH = Path("data/sources/canada-immigration/registry.json")
 
@@ -23,20 +25,7 @@ def test_registry_has_required_sources() -> None:
     sources = payload.get("sources", [])
     source_ids = {item.get("source_id") for item in sources}
 
-    required_ids = {
-        "IRPA",
-        "IRPR",
-        "CIT_ACT",
-        "CIT_REG",
-        "CIT_REG_NO2",
-        "IRCC_PDI",
-        "EE_MI_CURRENT",
-        "EE_MI_INVITES",
-        "CANLII_CASE_BROWSE",
-        "CANLII_CASE_CITATOR",
-    }
-
-    assert required_ids.issubset(source_ids)
+    assert PRODUCTION_REQUIRED_SOURCE_IDS.issubset(source_ids)
 
 
 def test_registry_source_shape_and_values() -> None:
@@ -50,3 +39,25 @@ def test_registry_source_shape_and_values() -> None:
         assert entry.get("instrument")
         assert entry.get("url", "").startswith("https://")
         assert entry.get("update_cadence") in allowed_cadence
+
+
+def test_registry_uses_canonical_tribunal_and_compliance_urls() -> None:
+    payload = _load_registry()
+    source_urls = {
+        entry["source_id"]: entry["url"]
+        for entry in payload.get("sources", [])
+        if entry.get("source_id") and entry.get("url")
+    }
+
+    expected = {
+        "IRB_ID_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-229/index.html",
+        "IRB_IAD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-230/index.html",
+        "IRB_RPD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-256/index.html",
+        "IRB_RAD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-257/index.html",
+        "PIPEDA": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
+        "CASL": "https://laws-lois.justice.gc.ca/eng/acts/E-1.6/",
+        "CANLII_TERMS": "https://www.canlii.org/info/terms.html",
+    }
+
+    for source_id, expected_url in expected.items():
+        assert source_urls[source_id] == expected_url

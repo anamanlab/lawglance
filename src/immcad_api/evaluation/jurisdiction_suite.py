@@ -9,7 +9,7 @@ from typing import Literal
 from immcad_api.policy.compliance import POLICY_REFUSAL_TEXT
 from immcad_api.providers import ProviderRouter, ScaffoldProvider
 from immcad_api.schemas import ChatRequest
-from immcad_api.services import ChatService
+from immcad_api.services import ChatService, StaticGroundingAdapter, scaffold_grounded_citations
 
 ExpectedBehavior = Literal["grounded_info", "policy_refusal"]
 
@@ -130,7 +130,10 @@ def evaluate_jurisdictional_suite(
     min_policy_accuracy: float = 100.0,
 ) -> JurisdictionSuiteReport:
     router = ProviderRouter(providers=[ScaffoldProvider()], primary_provider_name="scaffold")
-    chat_service = ChatService(provider_router=router)
+    chat_service = ChatService(
+        provider_router=router,
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+    )
 
     results: list[JurisdictionSuiteCaseResult] = []
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import pytest
+
 from immcad_api.providers import ProviderError, ProviderResult, ProviderRouter
 
 
@@ -116,3 +118,11 @@ def test_router_resets_circuit_after_window() -> None:
 
     metrics = router.telemetry_snapshot()
     assert metrics["openai"]["success"] == 1
+
+
+def test_router_requires_primary_provider_first_in_order() -> None:
+    router_primary = _SuccessProvider(name="openai")
+    router_fallback = _SuccessProvider(name="gemini")
+
+    with pytest.raises(ValueError, match="primary provider to be first"):
+        ProviderRouter([router_fallback, router_primary], "openai")

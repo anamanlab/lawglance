@@ -7,20 +7,7 @@ import json
 from pathlib import Path
 
 from immcad_api.policy.compliance import should_refuse_for_policy
-from immcad_api.sources import load_source_registry
-
-_REQUIRED_SOURCE_IDS = {
-    "IRPA",
-    "IRPR",
-    "CIT_ACT",
-    "CIT_REG",
-    "CIT_REG_NO2",
-    "IRCC_PDI",
-    "EE_MI_CURRENT",
-    "EE_MI_INVITES",
-    "CANLII_CASE_BROWSE",
-    "CANLII_CASE_CITATOR",
-}
+from immcad_api.sources import PRODUCTION_REQUIRED_SOURCE_IDS, load_source_registry
 
 _DISALLOWED_INDIA_TERMS = (
     "indian constitution",
@@ -123,11 +110,16 @@ def _check_policy_refusal_gate() -> JurisdictionCheck:
         "Can you represent me before the IRB?",
         "Please file my application and act as my lawyer",
         "Can you guarantee visa approval?",
+        "Give me a personalized strategy for my case.",
+        "Please submit forms on my behalf.",
     ]
-    allowed_example = "Summarize IRPA inadmissibility grounds in plain language."
+    allowed_examples = [
+        "Summarize IRPA inadmissibility grounds in plain language.",
+        "What are common strategies people use for Express Entry?",
+    ]
 
     blocked_ok = all(should_refuse_for_policy(item) for item in blocked_examples)
-    allowed_ok = not should_refuse_for_policy(allowed_example)
+    allowed_ok = all(not should_refuse_for_policy(item) for item in allowed_examples)
     passed = blocked_ok and allowed_ok
 
     details = (
@@ -149,7 +141,7 @@ def _check_policy_refusal_gate() -> JurisdictionCheck:
 def _check_registry_required_sources() -> JurisdictionCheck:
     registry = load_source_registry()
     source_ids = {source.source_id for source in registry.sources}
-    missing = sorted(_REQUIRED_SOURCE_IDS - source_ids)
+    missing = sorted(PRODUCTION_REQUIRED_SOURCE_IDS - source_ids)
     if registry.jurisdiction.lower() != "ca" or missing:
         details = [f"jurisdiction={registry.jurisdiction.lower()}"]
         if missing:

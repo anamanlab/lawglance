@@ -7,3 +7,553 @@ Started: 2026-02-23
 - Canada-only legal scope is mandatory; avoid India-domain terms outside legacy archival files.
 
 ---
+## 2026-02-23 18:19:13 -0300 - US-001
+- Implemented a reusable domain-leak scanner (`scripts/scan_domain_leaks.py`) that scans source/docs paths for disallowed India-domain legal terms, supports an explicit legacy-file allowlist, and reports file/line context with non-zero exit on violations.
+- Files changed
+- `scripts/scan_domain_leaks.py`
+- `tests/test_domain_leak_scanner.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Implement validation scripts as importable modules with a small `main()` that returns an exit code so unit tests can cover both library behavior and CLI output.
+  - Gotcha: `make` is not installed here, so `make quality` must be executed via the Makefile command sequence manually; full `pytest` currently fails earlier on a pre-existing unrelated `ChatService` constructor mismatch from dirty workspace changes.
+  - Useful context: `scripts/scan_domain_leaks.py` defaults to scanning top-level app modules plus `src/immcad_api` and `docs`, with allowlisted legacy files for expected historical references.
+---
+## 2026-02-23 18:33:41 -0300 - US-002
+- Wired the domain-leak scanner into both local and CI quality gates by adding a dedicated Makefile target and making it part of `quality`, plus a new `quality-gates.yml` step that runs the scanner before evaluation artifacts.
+- Files changed
+- `Makefile`
+- `.github/workflows/quality-gates.yml`
+- `tests/test_ralph_prd_json.py`
+- `src/immcad_api/services/chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Add new guardrail scripts as first-class Makefile targets, then compose them into `quality` and mirror the same order in CI workflows.
+  - Gotcha: `make` is not installed in this environment, so `make quality` must be executed via the Makefile command sequence manually and in order.
+  - Useful context: Updating story `passes` flags requires `tests/test_ralph_prd_json.py` to validate boolean shape instead of enforcing all stories as incomplete.
+---
+## 2026-02-23 19:17:44 -0300 - US-003
+- Implemented structured audit events in the chat flow for `policy_block` and `provider_error`, threading `trace_id` from the API route to `ChatService` and emitting non-PII metadata (`locale`, `mode`, `message_length`, plus provider/error code when applicable).
+- Files changed
+- `src/immcad_api/api/routes/chat.py`
+- `src/immcad_api/services/chat_service.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Emit audit logs through a dedicated logger (`immcad_api.audit`) with a single structured `audit_event` payload for stable tests and downstream parsing.
+  - Gotcha: `scripts/ralph/prd.json` can differ by branch, so pick the story from the active branch-local PRD before coding.
+  - Useful context: Pass `trace_id` from route handlers into service methods whenever service-layer audit events are required.
+---
+## 2026-02-23 19:29:38 -0300 - US-004
+- Added a new ingestion checkpoint recovery runbook with explicit checkpoint file location, corruption recovery flow, full/cadence replay commands, and a post-recovery verification checklist.
+- Files changed
+- `docs/release/ingestion-checkpoint-recovery.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Keep operational runbooks command-driven with copy/paste-ready shell blocks and checklist verification commands for faster on-call execution.
+  - Gotcha: Ralph PRD branch pointers can differ across branches; verify and follow the branch-local story backlog before implementation.
+  - Useful context: Ingestion checkpoint state lives at `artifacts/ingestion/checkpoints.json` and can be safely rebuilt by replaying `scripts/run_ingestion_jobs.py` with `--state-path`.
+---
+## 2026-02-23 19:53:34 -0300 - US-005
+- Implemented a release artifact validator (`scripts/validate_release_artifacts.py`) that enforces presence, readability, non-empty content, and JSON validity for required jurisdiction evaluation artifacts, then wired it into `release-gates.yml` before smoke/hygiene/upload steps.
+- Files changed: `.github/workflows/release-gates.yml`, `scripts/validate_release_artifacts.py`, `tests/test_validate_release_artifacts.py`, `scripts/ralph/prd.json`, `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: keep release gate validators importable with a small CLI wrapper so unit tests can directly assert failure categories without shelling out.
+  - Gotcha: running `ruff` on YAML paths produces parser noise; lint only Python paths and validate workflows via CI execution.
+  - Useful context: release evidence now hard-fails if any of the four eval artifacts are missing, blank, or malformed JSON before upload.
+---
+## 2026-02-23 20:13:18 -0300 - US-001
+- What was implemented
+- Added the missing tribunal rules source IDs for ID/IAD/RPD/RAD and compliance source IDs for PIPEDA, CASL, and CanLII Terms to the canonical Canada source registry with valid HTTPS URLs and allowed source metadata fields.
+- Files changed
+- `data/sources/canada-immigration/registry.json`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern: Keep the legal source registry grouped by legal domain (statutes/regulations/policy/case-law) so future source additions remain reviewable and diff-friendly.
+  - Gotcha: `make` is unavailable in this environment, so `make quality` must be executed via the exact Makefile command sequence.
+  - Useful context: `source_type` is constrained to `statute|regulation|policy|case_law` and `update_cadence` to `daily|weekly|scheduled_incremental`; invalid values fail registry load/quality checks.
+---
+## 2026-02-23 20:17:46 -0300 - US-002
+- What was implemented
+- Enforced strict source-registry validation by introducing a canonical required production source ID set (including tribunal and compliance IDs), wiring it into the source-registry validator and jurisdiction readiness checks, and adding tests that assert explicit missing-ID failure output.
+- Files changed
+- `src/immcad_api/sources/required_sources.py`
+- `src/immcad_api/sources/__init__.py`
+- `scripts/validate_source_registry.py`
+- `src/immcad_api/evaluation/jurisdiction.py`
+- `tests/test_canada_registry.py`
+- `tests/test_validate_source_registry.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize compliance-critical ID allowlists in one importable module so validators, runtime checks, and tests cannot drift.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command chain manually and in order.
+  - Useful context
+  - `scripts/validate_source_registry.py` now returns non-zero with `[ERROR] Missing required source IDs: ...` and is executed in both local quality and CI quality gates.
+---
+## 2026-02-23 20:21:16 -0300 - US-003
+- What was implemented
+- Disabled synthetic CanLII scaffold case output for `production`/`prod`/`ci` by wiring environment-aware fallback policy into `CanLIIClient`; unavailable CanLII now raises a safe provider error instead of returning synthetic cases.
+- Added coverage for strict CanLII behavior (no API key / HTTP failure with scaffold fallback disabled) and an API contract test asserting `/api/search/cases` returns a structured `PROVIDER_ERROR` envelope with matching `trace_id` in production mode.
+- Documented case-law fallback behavior to clarify non-prod scaffold behavior vs production-safe error behavior.
+- Files changed
+- `src/immcad_api/sources/canlii_client.py`
+- `src/immcad_api/main.py`
+- `tests/test_canlii_client.py`
+- `tests/test_api_scaffold.py`
+- `src/immcad_api/README.md`
+- `docs/architecture/api-contracts.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Gate scaffold/dev-only fallbacks at composition boundaries (`create_app`) and pass explicit behavior flags into adapters so production constraints stay centralized and testable.
+  - Gotcha
+  - `make` is unavailable in this environment; run the exact `quality` target command chain manually in Makefile order to preserve gate parity.
+  - Useful context
+  - Provider error envelopes already include `error.trace_id` and `x-trace-id` through shared exception handlers, so source/client failures can be surfaced safely without route-specific envelope code.
+---
+## 2026-02-23 20:24:57 -0300 - US-004
+- What was implemented
+- Expanded policy refusal matching to cover additional representation, on-behalf filing, personalized strategy, and broader guarantee-request phrases while preserving informational query access.
+- Added blocked+allowed policy prompt tests and strengthened refusal contract assertions so policy-block responses stay low-confidence with the standard disclaimer.
+- Files changed
+- `src/immcad_api/policy/compliance.py`
+- `src/immcad_api/evaluation/jurisdiction.py`
+- `tests/test_policy_compliance.py`
+- `tests/test_chat_service.py`
+- `tests/test_api_scaffold.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Pair expanded refusal matchers with both blocked and neutral allow-list tests to reduce false positives while widening safety coverage.
+  - Gotcha
+  - Regexes with optional word windows (`(?: [a-z]+){0,n}`) still need explicit spaces before trailing anchors to match zero-word variants.
+  - Useful context
+  - Policy refusal contract is enforced via `POLICY_REFUSAL_TEXT`, `confidence="low"`, and `DISCLAIMER_TEXT`; asserting these in both service and API tests catches regressions early.
+---
+## 2026-02-23 20:29:02 -0300 - US-005
+- What was implemented
+- Wired `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` into runtime settings and `ChatService`, enforced production fail-fast when synthetic citations are enabled, and added an API test for safe constrained responses when grounded citations are unavailable.
+- Files changed
+- `.env.example`
+- `docs/architecture/api-contracts.md`
+- `src/immcad_api/README.md`
+- `src/immcad_api/main.py`
+- `src/immcad_api/settings.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_settings.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Enforce production-only safety invariants in `load_settings()` and pass explicit flags into services from `create_app()` so behavior is deterministic across environments.
+  - Gotcha
+  - Existing production-mode tests must set all required hardening env vars (now including `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`) or app creation fails by design.
+- Useful context
+- With synthetic citations disabled, chat responses use the existing citation-enforcement safe fallback text and return `confidence="low"` with empty citations instead of fabricating references.
+---
+## 2026-02-23 20:32:28 -0300 - US-006
+- What was implemented
+- Locked provider routing contract by requiring the router's declared primary provider to be the first provider in ordered routing.
+- Added API coverage for a transient OpenAI timeout that falls back to Gemini and asserts stable `fallback_used.reason = "timeout"` propagation in the chat response, plus recovery on the next request back to primary.
+- Added router unit coverage to fail fast when provider order violates the primary-first routing invariant.
+- Files changed
+- `src/immcad_api/providers/router.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_provider_router_circuit_breaker.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Enforce critical routing invariants in constructor validation and back them with integration tests that assert response-envelope fields, not only internal router state.
+  - Gotcha
+  - `make` is unavailable in this environment; run the exact `quality` Makefile command chain manually and in order to preserve gate equivalence.
+  - Useful context
+- `fallback_used.reason` in API responses comes from router `last_error.code`; transient primary failures should be validated at API level to prevent contract regressions.
+---
+## 2026-02-23 20:35:54 -0300 - US-007
+- What was implemented
+- Strengthened API security coverage by adding tests that enforce bearer-token auth behavior across `production`/`prod`/`ci` modes and verify unauthorized responses return structured envelopes with trace correlation headers.
+- Added regression coverage for rate-limiter client ID resolution failures to ensure `/api/*` requests return structured `400 VALIDATION_ERROR` envelopes with `trace_id` and matching `x-trace-id`.
+- Expanded rate-limit/auth envelope assertions to validate trace header-to-body consistency on `401` and `429` responses.
+- Files changed
+- `tests/test_api_scaffold.py`
+- `tests/test_settings.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For middleware-level guards, assert both HTTP status and trace correlation (`error.trace_id` == `x-trace-id`) so observability contracts stay intact.
+  - Gotcha
+  - Production-mode tests require `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`; otherwise app boot fails before auth/rate-limit checks execute.
+  - Useful context
+  - Simulating rate-limit client identity failures is easiest by monkeypatching `_resolve_rate_limit_client_id` to return `None`, which exercises the exact 400 envelope branch.
+---
+## 2026-02-23 20:38:25 -0300 - US-008
+- What was implemented
+- Added explicit non-PII audit logging guarantees for chat policy-block and provider-error paths by strengthening tests to assert raw user input is absent from both structured `audit_event` payloads and emitted log message text.
+- Files changed
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Add shared assertions that scan serialized structured logs plus rendered logger message text to prevent accidental PII regressions in observability code.
+  - Gotcha
+  - `make quality` is required by process, but this environment lacks `make`; run the exact `quality` command chain from `Makefile` in-order as a functional equivalent.
+  - Useful context
+  - `immcad_api.audit` records expose structured payloads under `record.audit_event`, which is the most reliable hook for stable non-PII compliance tests.
+---
+## 2026-02-23 20:41:35 -0300 - US-009
+- What was implemented
+- Enforced strict legal checklist sign-off in release gates by removing the bypass input and always running `scripts/validate_legal_review_checklist.py --require-checked`.
+- Extended checklist validation so strict mode now fails when `Reviewer` or `Date` sign-off fields are missing/blank in addition to unchecked required items.
+- Added regression tests to lock strict sign-off behavior and ensure required legal evaluation artifacts remain in release evidence uploads.
+- Files changed
+- `.github/workflows/release-gates.yml`
+- `scripts/validate_legal_review_checklist.py`
+- `tests/test_legal_review_checklist.py`
+- `tests/test_release_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep checklist validation split between structure mode (template quality) and strict mode (release sign-off enforcement) so CI and release workflows can enforce different guarantees cleanly.
+  - Gotcha
+  - Workflow-level bypass inputs can silently weaken compliance gates; remove optional toggles when a gate must be mandatory for release.
+  - Useful context
+  - Required release evidence artifacts are uploaded under the `release-eval-artifacts` bundle and should stay synchronized with `scripts/validate_release_artifacts.py` required paths.
+---
+## 2026-02-23 20:47:33 -0300 - US-010
+- What was implemented
+- Added a production observability baseline by introducing request-level telemetry aggregation (request/error/fallback/refusal rates + latency percentiles), wiring it into API middleware/chat outcomes, and exposing `GET /ops/metrics` with request and provider-routing metrics.
+- Documented observability contracts, actionable alert thresholds, and a trace-ID incident triage runbook with explicit correlation flow.
+- Files changed
+- `src/immcad_api/telemetry/request_metrics.py`
+- `src/immcad_api/telemetry/__init__.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/api/routes/chat.py`
+- `tests/test_request_metrics.py`
+- `tests/test_api_scaffold.py`
+- `docs/architecture/api-contracts.md`
+- `docs/architecture/06-quality-attributes-and-cross-cutting.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `docs/release/incident-observability-runbook.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Capture API metrics in middleware `finally` blocks so early auth/rate-limit returns and handled exceptions are all counted consistently.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command chain manually and in order to preserve gate parity.
+  - Useful context
+  - `GET /ops/metrics` reports process-window request/error rates and chat-specific fallback/refusal rates, while provider circuit/failure counters remain under `provider_routing_metrics`.
+---
+## 2026-02-23 20:51:03 -0300 - US-011
+- What was implemented
+- Added a dedicated backup and recovery operational targets runbook covering backup frequency, retention windows, pruning policy, RTO/RPO targets, explicit role ownership, restore verification checklist, and drill cadence.
+- Updated deployment/operations architecture documentation to link the new runbook and summarize baseline backup, retention, and recovery targets.
+- Files changed
+- `docs/release/backup-and-recovery-operational-targets.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep architecture sections concise and point to runbooks for operationally executable checklists/targets.
+  - Gotcha
+  - `make` is not installed in this environment; run the exact `quality` Makefile command sequence manually and in order.
+  - Useful context
+  - Backup and recovery operational targets are now centralized in `docs/release/backup-and-recovery-operational-targets.md` for release and incident workflows.
+---
+## 2026-02-23 20:54:45 -0300 - US-012
+- What was implemented
+- Documented frontend integration expectations for chat success/refusal/error envelopes and explicit `x-trace-id`/`error.trace_id` handling in the architecture API contract.
+- Added an implementation-ready Next.js + Tailwind minimal chat migration feature doc with phased delivery steps and UI contract requirements.
+- Files changed
+- `docs/architecture/api-contracts.md`
+- `docs/features/nextjs-minimal-chat-ui-plan.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend migration docs split into two layers: immutable API envelope contract in `docs/architecture/api-contracts.md` and execution sequencing in `docs/features/*`.
+  - Gotcha
+  - The environment does not provide `make`; run the exact `quality` Makefile command chain manually and in order to preserve gate equivalence.
+  - Useful context
+  - Refusal responses are `200` chat payloads with `fallback_used.reason = "policy_block"`; only transport failures use `ErrorEnvelope` with `error.trace_id`.
+---
+## 2026-02-23 21:06:53 -0300 - US-001
+- What was implemented
+- Corrected authoritative compliance source links in the Canada source registry by replacing the stale CASL URL with the canonical Justice Laws Act reference and updating CanLII Terms to its canonical terms page.
+- Added targeted registry tests to assert canonical tribunal/compliance URLs for IRB rules plus PIPEDA/CASL/CanLII Terms.
+- Files changed
+- `data/sources/canada-immigration/registry.json`
+- `tests/test_canada_registry.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Add explicit canonical URL assertions for compliance-critical source IDs so link regressions are caught by unit tests instead of downstream runtime checks.
+  - Gotcha
+  - A source URL can satisfy trusted-domain checks but still be stale (CASL returned HTTP 404), so validate endpoint health before treating it as canonical.
+  - Useful context
+  - `make` is unavailable in this environment; run the exact `quality` Makefile command sequence manually and in order.
+---
+## 2026-02-23 21:10:08 -0300 - US-002
+- What was implemented
+- Added a dedicated hardened-mode source-unavailable contract for CanLII by introducing `SOURCE_UNAVAILABLE` errors (HTTP 503) when scaffold fallback is disabled, and updated API exception handling to preserve structured error codes from provider exceptions.
+- Added/updated tests to enforce hardened behavior across `production`/`prod`/`ci` and verify CanLII does not emit synthetic scaffold cases when unavailable in those modes.
+- Files changed
+- `src/immcad_api/errors.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/schemas.py`
+- `src/immcad_api/sources/canlii_client.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_canlii_client.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Let provider-domain exceptions carry explicit `code`/`status` metadata and have a single global exception handler emit those values unchanged to keep API contracts precise.
+  - Gotcha
+  - Hardcoding provider error codes in shared handlers silently flattens distinct failure contracts (for example source unavailability vs generic provider failure).
+  - Useful context
+  - Hardened modes (`production`/`prod`/`ci`) now return `error.code = SOURCE_UNAVAILABLE` with HTTP 503 for unavailable CanLII source paths, while development keeps scaffold fallback behavior.
+---
+## 2026-02-23 21:12:43 -0300 - US-003
+- What was implemented
+- Expanded hardened startup guard coverage by parametrizing synthetic-citation rejection tests across `production`/`prod`/`ci` environments.
+- Added a direct `ChatService` constrained-response test to lock the no-synthetic-citations behavior when grounded citations are absent.
+- Files changed
+- `tests/test_settings.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For environment hardening flags, always use parametrized tests across all accepted mode aliases to prevent drift between `production`, `prod`, and `ci` semantics.
+  - Gotcha
+  - `make quality` is required by process but `make` is unavailable in this environment, so execute the exact Makefile `quality` command chain in-order as an equivalent gate.
+  - Useful context
+  - `ChatService(..., allow_scaffold_synthetic_citations=False)` combined with empty routed citations deterministically triggers the safe constrained response (`confidence="low"`, no citations).
+---
+## 2026-02-23 21:17:22 -0300 - US-004
+- What was implemented
+- Replaced `ChatService` hardcoded scaffold citation defaults with a grounding adapter contract (`GroundingAdapter`) and a default safe adapter that returns no citations unless explicit grounded sources are provided.
+- Wired app/runtime composition to inject explicit grounded citations via `StaticGroundingAdapter` only when configured, and updated jurisdiction suite composition to pass explicit grounded sources for grounded-case coverage.
+- Added/updated chat service unit tests for both grounded and ungrounded adapter paths, including assertions that raw user message content is not leaked through response payload citations.
+- Files changed
+- `src/immcad_api/services/grounding.py`
+- `src/immcad_api/services/chat_service.py`
+- `src/immcad_api/services/__init__.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/evaluation/jurisdiction_suite.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep grounding retrieval behind a small adapter protocol so chat orchestration stays provider-agnostic and scaffold/dev citation behavior can be injected at composition time.
+  - Gotcha
+  - When replacing default citation behavior, remember to update evaluation harness composition paths (for example jurisdiction suite) that depend on explicit grounded-citation coverage expectations.
+  - Useful context
+  - In this environment `make` is unavailable; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
+---
+## 2026-02-23 21:20:01 -0300 - US-005
+- What was implemented
+- Expanded policy refusal matching to cover additional representation, filing-on-behalf, and guarantee phrasing variants while keeping neutral informational prompts allowed.
+- Added broader blocked/allowed unit test coverage and extended chat service refusal-contract coverage so newly blocked guarantee phrasing still returns the standard refusal/disclaimer contract.
+- Files changed
+- `src/immcad_api/policy/compliance.py`
+- `tests/test_policy_compliance.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Expand refusal regexes together with paired blocked+allowed prompt tests to increase safety coverage without introducing false positives.
+  - Gotcha
+  - Guarantee-related wording appears in neutral informational questions too, so refusal patterns should target representation/personal-outcome intent rather than generic legal discussion terms.
+  - Useful context
+  - `make` is unavailable in this environment; execute the exact Makefile `quality` command chain in-order as the required equivalent gate.
+---
+## 2026-02-23 21:30:06 -0300 - US-006
+- What was implemented
+- Scaffolded `frontend-web` as a Next.js App Router + Tailwind TypeScript app with production-safe runtime env handling for `NEXT_PUBLIC_IMMCAD_API_BASE_URL`.
+- Implemented a minimal chat-first shell with a Canada legal scope disclaimer banner, message area, and composer placeholder flow (no backend API integration yet).
+- Added frontend run/build/typecheck scripts (package + Makefile), README run instructions, and executed browser verification screenshots for desktop and mobile viewports.
+- Files changed
+- `.env.example`
+- `.gitignore`
+- `Makefile`
+- `README.md`
+- `frontend-web/.eslintrc.json`
+- `frontend-web/.gitignore`
+- `frontend-web/README.md`
+- `frontend-web/app/globals.css`
+- `frontend-web/app/layout.tsx`
+- `frontend-web/app/page.tsx`
+- `frontend-web/components/chat-shell.tsx`
+- `frontend-web/lib/runtime-config.ts`
+- `frontend-web/next-env.d.ts`
+- `frontend-web/next.config.mjs`
+- `frontend-web/package-lock.json`
+- `frontend-web/package.json`
+- `frontend-web/postcss.config.js`
+- `frontend-web/tailwind.config.ts`
+- `frontend-web/tsconfig.json`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend runtime config validation centralized in a small server-side helper so production safety checks stay consistent and easy to test.
+  - Gotcha
+  - `make` is unavailable in this environment; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
+- Useful context
+  - `dev-browser` skill is not present in this runtime, so UI verification used Playwright CLI screenshots (`/tmp/immcad-us006-home.png` and `/tmp/immcad-us006-mobile.png`) against the local Next.js dev server.
+---
+## 2026-02-23 21:37:46 -0300 - US-007
+- What was implemented
+- Added a typed frontend API client for `POST /api/chat` and `POST /api/search/cases` with unified error-envelope parsing, `x-trace-id` capture, and header/body trace mismatch detection.
+- Replaced scaffolded chat behavior with live API integration in `ChatShell`, including policy-refusal handling (`fallback_used.reason = "policy_block"`), user-safe auth/validation/provider error messaging, and support-context trace display.
+- Added optional frontend bearer-token runtime wiring and documentation updates so protected API deployments can be exercised from the Next.js client.
+- Verified UI rendering in browser at desktop and mobile viewport sizes using Playwright screenshots (`/tmp/immcad-us007-home.png`, `/tmp/immcad-us007-mobile.png`).
+- Files changed
+- `.env.example`
+- `frontend-web/README.md`
+- `frontend-web/app/page.tsx`
+- `frontend-web/components/chat-shell.tsx`
+- `frontend-web/lib/api-client.ts`
+- `frontend-web/lib/runtime-config.ts`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize API envelope parsing and trace capture in one client module so UI components can map outcomes by error code without duplicating transport logic.
+  - Gotcha
+  - `make` and the `dev-browser` skill are unavailable in this environment; run the exact Makefile quality command chain manually and use Playwright CLI screenshot fallback for browser verification.
+  - Useful context
+  - For strict trace-correlation requirements, treat `x-trace-id` as canonical and surface header/body mismatches explicitly in support context to flag integration defects early.
+---
+## 2026-02-23 21:52:19 -0300 - US-008
+- What was implemented
+- Added accessible citation-chip rendering in `ChatShell` using interactive link pills with title/url/pin metadata and optional snippet text.
+- Added clear policy-refusal UX with actionable guidance plus trace-reference visibility in the assistant message flow.
+- Added recoverable error retry for chat submissions (`Retry last request`) and explicit loading states for submission and related-case fetch phases.
+- Verified UI behavior in browser using Playwright fallback screenshots for citation, refusal, error+retry, and mobile layouts.
+- Files changed
+- `frontend-web/components/chat-shell.tsx`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize chat send + retry through a single `submitPrompt()` path with an `isRetry` flag so state transitions stay consistent.
+  - Gotcha
+  - Browser verification against a local stub API needs CORS headers enabled or client-side fetch calls fail before UI states can render.
+  - Useful context
+  - UI verification artifacts were captured at `/tmp/immcad-us008-desktop-citations.png`, `/tmp/immcad-us008-desktop-refusal.png`, `/tmp/immcad-us008-desktop-error-retry.png`, and `/tmp/immcad-us008-mobile-home.png`.
+---
+## 2026-02-23 21:57:52 -0300 - US-009
+- What was implemented
+- Added a frontend contract-test harness with Vitest + Testing Library and deterministic fixtures for chat/case success, policy-refusal, and structured error envelopes.
+- Added API-client contract coverage for success responses, policy-refusal passthrough, and trace-id mismatch detection between `x-trace-id` and error body trace IDs.
+- Added ChatShell UI contract tests for citation chip rendering, refusal UX, retryable error state, and trace-id surfacing in both message/support contexts.
+- Wired frontend typecheck and contract tests into CI quality gates (`quality-gates.yml`) with Node setup and cached npm dependencies.
+- Files changed
+- `.github/workflows/quality-gates.yml`
+- `frontend-web/package.json`
+- `frontend-web/package-lock.json`
+- `frontend-web/vitest.config.ts`
+- `frontend-web/tests/api-client.contract.test.ts`
+- `frontend-web/tests/chat-shell.contract.test.tsx`
+- `frontend-web/tests/fixtures/chat-contract-fixtures.ts`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend contract fixtures in a dedicated `tests/fixtures` module so both API-client and UI tests assert the same deterministic payloads.
+  - Gotcha
+  - Vitest + jsdom test runs require explicit DOM cleanup between tests to avoid duplicated rendered roots and ambiguous element queries.
+  - Useful context
+  - `make` is unavailable in this environment; run the exact Makefile `quality` command chain in-order as the required equivalent gate before committing.
+---
+## 2026-02-23 22:02:18 -0300 - US-010
+- What was implemented
+- Added frontend gate coverage in both quality and release workflows with explicit Node setup plus frontend install, build, and contract-test steps.
+- Added hardened runtime safety validation steps that assert synthetic-citation toggles are enforced in `ci` mode, so misconfiguration fails the gate deterministically.
+- Added frontend release evidence generation (`artifacts/evals/frontend-test-summary.xml`) and required it in both release artifact upload and validator enforcement.
+- Added workflow/validator regression tests to lock the new gate and artifact requirements.
+- Files changed
+- `.github/workflows/quality-gates.yml`
+- `.github/workflows/release-gates.yml`
+- `scripts/validate_release_artifacts.py`
+- `tests/test_release_gates_workflow.py`
+- `tests/test_validate_release_artifacts.py`
+- `tests/test_quality_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For production-hardening env toggles, add an explicit negative assertion in CI (flip env var to unsafe value and require startup guard failure) instead of only relying on happy-path smoke tests.
+  - Gotcha
+  - `make` is not available in this environment, so execute the exact Makefile `quality` command chain in-order as the equivalent required gate.
+  - Useful context
+  - Release evidence validation now requires `artifacts/evals/frontend-test-summary.xml`; release workflow generates it via Vitest JUnit output before artifact upload.
+---
+## 2026-02-23 22:07:06 -0300 - US-011
+- What was implemented
+- Updated developer-facing docs to make Next.js (`frontend-web`) + `immcad_api` the production runtime path, moved Streamlit to explicit legacy/dev-only guidance, and aligned onboarding/run commands accordingly.
+- Added explicit legacy notice in `app.py` (module docstring + runtime warning banner) so Streamlit sessions signal non-production status.
+- Verified the legacy Streamlit UI in browser using Playwright screenshot fallback (`/tmp/immcad-us011-streamlit.png`) against a local Streamlit run.
+- Files changed
+- `README.md`
+- `docs/development-environment.md`
+- `scripts/setup_dev_env.sh`
+- `app.py`
+- `docs/architecture/README.md`
+- `docs/architecture/01-system-context.md`
+- `docs/architecture/02-container-and-service-architecture.md`
+- `docs/architecture/08-architecture-debt-and-improvement-plan.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - When migrating runtime ownership, update both onboarding docs and architecture narratives in the same commit to avoid conflicting "current vs target" instructions.
+  - Gotcha
+  - `make` and `dev-browser` are unavailable in this execution environment; run `make quality` first for compliance, then use exact `quality` target commands plus Playwright CLI screenshots when those tools are missing.
+  - Useful context
+  - `./scripts/validate_architecture_docs.sh` catches stale architecture references quickly and should remain in the quality sequence for doc-heavy stories.
+---
+## 2026-02-23 22:15:21 -0300 - US-012
+- What was implemented
+- Added staging end-to-end smoke coverage by extending `scripts/run_api_smoke_tests.sh` to validate chat submit, policy-refusal response contract, citation display payload shape, and related case-search output while capturing `x-trace-id` values into `artifacts/evals/staging-smoke-report.json`.
+- Updated staging and release workflows to run the smoke lane in `ENVIRONMENT=staging`, upload smoke artifacts (report + response payloads + server log), and emit rollback-runbook guidance on failure.
+- Added rollback trigger documentation at `docs/release/staging-smoke-rollback-criteria.md` and linked it from deployment/operations architecture docs.
+- Added regression tests to lock staging smoke workflow/script expectations and rollback guidance references.
+- Files changed
+- `.github/workflows/staging-smoke.yml`
+- `.github/workflows/release-gates.yml`
+- `scripts/run_api_smoke_tests.sh`
+- `docs/release/staging-smoke-rollback-criteria.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `tests/test_staging_smoke_workflow.py`
+- `tests/test_release_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Persist smoke verification details to a machine-readable artifact (contracts + trace IDs) so workflow retries and incident triage share the same evidence source.
+  - Gotcha
+  - `ENVIRONMENT=ci` enforces `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`, which prevents citation-chip contract validation; staging smoke should run under `ENVIRONMENT=staging` for deterministic citation payload checks.
+  - Useful context
+  - The smoke script now writes `artifacts/evals/staging-smoke-report.json` and logs trace IDs for chat submit, refusal, and case search, which aligns directly with observability runbook correlation flow.
+---

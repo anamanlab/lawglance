@@ -101,5 +101,7 @@ cat <<'EOF'
 Next steps:
 1. Update OPENAI_API_KEY in .env
 2. Verify setup: ./scripts/verify_dev_env.sh
-3. Start app: uv run streamlit run app.py
+3. Start backend API: make api-dev
+4. Start frontend UI (new terminal): make frontend-install && make frontend-dev
+5. Legacy dev-only UI (optional): uv run streamlit run app.py
 EOF

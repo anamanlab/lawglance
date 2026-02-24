@@ -1,31 +1,49 @@
-# Ralph in IMMCAD
+# Ralph in IMMCAD (Codex-first)
 
-This directory contains a Ralph loop setup adapted for IMMCAD.
+This directory contains the Ralph autonomous loop configured for IMMCAD.
 
 ## Files
 
-- `ralph.sh` - autonomous iteration loop (`amp` or `claude`)
-- `prd.json` - executable story backlog for the loop
-- `progress.txt` - append-only iteration log
+- `ralph.sh` - autonomous iteration loop (`codex` default, also `amp` and `claude`)
+- `CODEX.md` - prompt template for Codex
 - `CLAUDE.md` - prompt template for Claude Code
 - `prompt.md` - prompt template for Amp
+- `prd.json` - executable story backlog for the loop
+- `progress.txt` - append-only iteration log
 
 ## Run
 
 From repo root:
 
 ```bash
-bash scripts/ralph/ralph.sh --tool claude 10
+# Codex default
+bash scripts/ralph/ralph.sh 25
+
+# Codex explicit
+bash scripts/ralph/ralph.sh --tool codex 25
 ```
 
-or
+Optional:
 
 ```bash
-bash scripts/ralph/ralph.sh --tool amp 10
+bash scripts/ralph/ralph.sh --tool amp 25
+bash scripts/ralph/ralph.sh --tool claude 25
 ```
 
-## Notes
+Preflight (no iteration execution):
 
+```bash
+bash scripts/ralph/ralph.sh --tool codex --check
+```
+
+## Setup hardening
+
+- Runner fails fast when the selected prompt file is missing or empty.
 - Branch is controlled by `scripts/ralph/prd.json` `branchName`.
 - Previous run state is archived under `scripts/ralph/archive/` when branch changes.
-- Keep stories small enough for one context window.
+
+If you see prompt errors, validate:
+
+```bash
+ls -la scripts/ralph/CODEX.md
+```

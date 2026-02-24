@@ -1,11 +1,11 @@
-name: Staging API Smoke Tests
+name: Staging End-to-End Smoke Tests
 
 on:
   pull_request:
   workflow_dispatch:
 
 jobs:
-  smoke-api:
+  smoke-e2e:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,9 +19,29 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Run API smoke tests
+      - name: Run staging smoke tests
         env:
           API_BEARER_TOKEN: smoke-token
-          ENVIRONMENT: ci
+          ENVIRONMENT: staging
           ENABLE_SCAFFOLD_PROVIDER: "true"
+          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"
+          STAGING_SMOKE_REPORT_PATH: artifacts/evals/staging-smoke-report.json
         run: bash scripts/run_api_smoke_tests.sh
+
+      - name: Upload staging smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-smoke-artifacts
+          path: |
+            artifacts/evals/staging-smoke-report.json
+            /tmp/immcad_smoke.log
+            /tmp/immcad_chat.json
+            /tmp/immcad_refusal.json
+            /tmp/immcad_cases.json
+
+      - name: Rollback trigger guidance
+        if: failure()
+        run: |
+          echo "Staging smoke checks failed."
+          echo "Follow rollback trigger criteria in docs/release/staging-smoke-rollback-criteria.md."

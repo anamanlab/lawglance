@@ -1,75 +1,187 @@
 {
   "project": "IMMCAD",
-  "branchName": "ralph/canada-hardening-next-loop",
-  "description": "Canada production hardening backlog for IMMCAD API, ingestion, and compliance workflows.",
+  "branchName": "ralph/phase2-frontend-authoritative-runtime",
+  "description": "Phase 2 backlog to launch Next.js frontend and enforce authoritative-only runtime behavior for Canada immigration legal outputs.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Add domain-leak scanner for Canada scope",
-      "description": "As a maintainer, I want automated scanning for disallowed India-domain terms so that Canada scope regressions are blocked in CI.",
+      "title": "Correct authoritative legal source links",
+      "description": "As a legal/compliance owner, I want authoritative registry links corrected so required sources point to current canonical references.",
       "acceptanceCriteria": [
-        "Add a scanner script that flags disallowed India-domain terms in source/docs paths with an explicit allowlist for legacy archived files",
-        "Script exits non-zero when violations are found and prints file/line context",
+        "Update source registry entries for outdated tribunal/compliance URLs to canonical references",
+        "Add/adjust tests to assert corrected source URLs where applicable",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Wire domain-leak scanner into quality gates",
-      "description": "As a release owner, I want CI to enforce domain leakage checks so that jurisdiction mismatches are caught before merge.",
+      "title": "Disable synthetic CanLII fallback in production",
+      "description": "As a user, I want case-law results to be authoritative in production so synthetic fallback cases are never returned.",
       "acceptanceCriteria": [
-        "Integrate domain-leak scanner into Makefile quality target",
-        "Add scanner execution step to quality-gates workflow",
+        "In production/prod/ci modes, CanLII client does not emit synthetic scaffold cases",
+        "Case search returns structured source-unavailable response contract when CanLII is unavailable in hardened modes",
+        "Add tests for hardened-mode behavior and development-mode behavior",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Add audit log events for policy blocks and provider failures",
-      "description": "As an operator, I want structured audit events for high-risk chat outcomes so that incidents can be triaged quickly.",
+      "title": "Enforce no synthetic citations in production",
+      "description": "As a legal reliability owner, I want synthetic citations blocked in production so responses remain source-authentic.",
       "acceptanceCriteria": [
-        "Emit structured log entries containing trace_id, event_type, and minimal non-PII metadata for policy_block and provider_error paths",
-        "Add tests validating log emission in both scenarios",
+        "Introduce setting for synthetic citation allowance and wire it into app creation",
+        "Startup fails in production/prod/ci if synthetic citations are enabled",
+        "Add tests for startup guard and constrained response path when grounded citations are absent",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Add ingestion checkpoint recovery runbook",
-      "description": "As an on-call engineer, I want a documented checkpoint recovery playbook so that ingestion can be safely resumed after failures.",
+      "title": "Implement grounded citation adapter contract",
+      "description": "As a platform engineer, I want chat service citation inputs to come from a grounding adapter contract instead of static scaffold defaults.",
       "acceptanceCriteria": [
-        "Document checkpoint file location, corruption recovery, and replay procedure",
-        "Include verification checklist after recovery",
-        "Typecheck passes"
+        "Introduce grounding adapter interface used by ChatService for citation candidate retrieval",
+        "Default implementation returns safe empty list unless explicit grounded source is provided",
+        "Unit tests cover grounded and ungrounded paths with no raw user content leakage",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
       "id": "US-005",
-      "title": "Add release artifact verification checklist step",
-      "description": "As a release manager, I want release-gates to verify required evaluation artifacts exist and are readable so that sign-off is evidence-based.",
+      "title": "Expand policy refusal coverage",
+      "description": "As a compliance owner, I want broader refusal detection for representation and personalized strategy requests while preserving legitimate informational answers.",
       "acceptanceCriteria": [
-        "Add a script that validates required eval artifacts exist with non-empty content",
-        "Run this script in release-gates before completion",
+        "Add additional blocked patterns for representation, filing-on-behalf, and guarantee phrasing variants",
+        "Add allowed-case tests to prevent over-blocking neutral informational prompts",
+        "Preserve refusal response contract and disclaimer behavior",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Scaffold Next.js and Tailwind frontend",
+      "description": "As a user, I want a minimal chat-first web app so I can use IMMCAD without Streamlit in production.",
+      "acceptanceCriteria": [
+        "Create Next.js app scaffold with Tailwind and production-safe env handling",
+        "Implement minimalist chat layout shell with disclaimer banner and message area",
+        "Add frontend scripts and README run instructions",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement frontend API integration with trace IDs",
+      "description": "As a user, I want chat interactions to call backend APIs reliably and expose trace IDs for support.",
+      "acceptanceCriteria": [
+        "Frontend client integrates with POST /api/chat and POST /api/search/cases",
+        "Success and error flows capture x-trace-id and display it in UI support context",
+        "Handle auth, validation, policy-refusal, and provider-error envelopes consistently",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Render citation chips and refusal/error UX states",
+      "description": "As a user, I want clear citation and safety UX so I can understand source provenance and system limits.",
+      "acceptanceCriteria": [
+        "Render citation chips with title/url/pin and accessible interactions",
+        "Render clear refusal and error states with actionable guidance and trace reference",
+        "Add loading and retry states for chat submission",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Add frontend quality and contract tests",
+      "description": "As a release manager, I want frontend tests validating chat contract behavior so regressions are blocked before merge.",
+      "acceptanceCriteria": [
+        "Add frontend unit/contract tests for chat success, policy-refusal, and error envelope handling",
+        "Add tests for citation rendering and trace-id surfacing",
+        "Tests run in CI with deterministic fixtures",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Add frontend CI and release evidence integration",
+      "description": "As an operator, I want frontend build/test and runtime safety checks integrated into gates so releases are production-ready.",
+      "acceptanceCriteria": [
+        "Quality/release workflows include frontend install/build/test steps",
+        "Release evidence includes frontend test summary artifact",
+        "Gates fail when production safety toggles for synthetic behavior are misconfigured",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Mark Streamlit as legacy and update docs",
+      "description": "As a maintainer, I want documentation aligned to the new frontend architecture so developers follow the correct production path.",
+      "acceptanceCriteria": [
+        "Update README and architecture docs to set Next.js frontend as production path",
+        "Mark Streamlit app.py as legacy/dev-only path with explicit note",
+        "Update run commands and onboarding notes",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Add staging end-to-end smoke workflow",
+      "description": "As a release manager, I want staging smoke checks covering frontend-to-backend critical paths before promotion.",
+      "acceptanceCriteria": [
+        "Add staging smoke script/workflow validating chat submit, refusal path, and citation display contract",
+        "Smoke output includes trace-id capture for debugging",
+        "Document rollback trigger criteria when smoke fails",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": true,
       "notes": ""
     }
   ]

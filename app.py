@@ -1,3 +1,10 @@
+"""Legacy Streamlit UI for IMMCAD.
+
+Production runtime uses the Next.js frontend in `frontend-web` with the
+FastAPI backend in `src/immcad_api`. Keep this app for local development and
+migration troubleshooting only.
+"""
+
 import os
 import streamlit as st
 import random
@@ -13,6 +20,11 @@ from langchain.schema import HumanMessage, AIMessage
 
 # Set page configuration
 st.set_page_config(page_title="LawGlance", page_icon="logo/logo.png", layout="wide")
+
+st.warning(
+    "Legacy development interface: production runtime uses frontend-web "
+    "(Next.js) with the immcad_api backend.",
+)
 
 # Load environment variables
 load_dotenv()

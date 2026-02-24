@@ -128,7 +128,8 @@ def test_validate_court_source_payload_handles_malformed_scc_json_without_raisin
     summary = validate_court_source_payload("SCC_DECISIONS", b"{not-json")
 
     assert summary is not None
-    assert summary.records_invalid == 1
+    assert summary.records_total == 0
+    assert summary.records_invalid == 0
     assert summary.records_valid == 0
     assert summary.errors
     assert "payload_parse_error" in summary.errors[0]
@@ -138,7 +139,8 @@ def test_validate_court_source_payload_handles_malformed_fc_xml_without_raising(
     summary = validate_court_source_payload("FC_DECISIONS", b"<rss><channel><item>")
 
     assert summary is not None
-    assert summary.records_invalid == 1
+    assert summary.records_total == 0
+    assert summary.records_invalid == 0
     assert summary.records_valid == 0
     assert summary.errors
     assert "payload_parse_error" in summary.errors[0]

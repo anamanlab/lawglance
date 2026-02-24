@@ -11,6 +11,7 @@ REQUIRED_RELEASE_ARTIFACTS = (
     Path("artifacts/evals/jurisdiction-eval-report.md"),
     Path("artifacts/evals/jurisdictional-suite-report.json"),
     Path("artifacts/evals/jurisdictional-suite-report.md"),
+    Path("artifacts/evals/frontend-test-summary.xml"),
 )
 
 

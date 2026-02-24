@@ -486,3 +486,26 @@ Started: 2026-02-23
   - Useful context
   - `make` is unavailable in this environment; run the exact Makefile `quality` command chain in-order as the required equivalent gate before committing.
 ---
+## 2026-02-23 22:02:18 -0300 - US-010
+- What was implemented
+- Added frontend gate coverage in both quality and release workflows with explicit Node setup plus frontend install, build, and contract-test steps.
+- Added hardened runtime safety validation steps that assert synthetic-citation toggles are enforced in `ci` mode, so misconfiguration fails the gate deterministically.
+- Added frontend release evidence generation (`artifacts/evals/frontend-test-summary.xml`) and required it in both release artifact upload and validator enforcement.
+- Added workflow/validator regression tests to lock the new gate and artifact requirements.
+- Files changed
+- `.github/workflows/quality-gates.yml`
+- `.github/workflows/release-gates.yml`
+- `scripts/validate_release_artifacts.py`
+- `tests/test_release_gates_workflow.py`
+- `tests/test_validate_release_artifacts.py`
+- `tests/test_quality_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For production-hardening env toggles, add an explicit negative assertion in CI (flip env var to unsafe value and require startup guard failure) instead of only relying on happy-path smoke tests.
+  - Gotcha
+  - `make` is not available in this environment, so execute the exact Makefile `quality` command chain in-order as the equivalent required gate.
+  - Useful context
+  - Release evidence validation now requires `artifacts/evals/frontend-test-summary.xml`; release workflow generates it via Vitest JUnit output before artifact upload.
+---

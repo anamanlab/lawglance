@@ -21,6 +21,27 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Validate hardened runtime safety toggles
+        env:
+          ENVIRONMENT: ci
+          API_BEARER_TOKEN: quality-gate-token
+          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
+        run: |
+          uv run python - <<'PY'
+          import os
+          from immcad_api.settings import load_settings
+
+          load_settings()
+          os.environ["ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS"] = "true"
+          try:
+              load_settings()
+          except ValueError as exc:
+              if "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false" not in str(exc):
+                  raise
+          else:
+              raise SystemExit("Expected hardened-mode synthetic citation guard to fail")
+          PY
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,6 +54,9 @@ jobs:
 
       - name: Frontend typecheck
         run: npm run typecheck --prefix frontend-web
+
+      - name: Frontend build
+        run: npm run build --prefix frontend-web
 
       - name: Frontend contract tests
         env:

@@ -31,6 +31,10 @@ def _create_required_artifacts(tmp_path: Path) -> None:
         "# Suite\n\nStatus: pass",
         encoding="utf-8",
     )
+    (eval_dir / "frontend-test-summary.xml").write_text(
+        "<testsuite name=\"frontend-contract\"><testcase name=\"chat-contract\"/></testsuite>",
+        encoding="utf-8",
+    )
 
 
 def test_validate_release_artifacts_passes_with_required_files(tmp_path: Path) -> None:

@@ -37,10 +37,12 @@ def test_load_settings_has_circuit_breaker_defaults(monkeypatch: pytest.MonkeyPa
     assert settings.provider_circuit_breaker_open_seconds == 30.0
 
 
-def test_load_settings_rejects_synthetic_citations_in_production(
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_synthetic_citations_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
+    environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "true")
 

@@ -121,3 +121,26 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
     )
     for record in caplog.records:
         assert payload.message not in record.getMessage()
+
+
+def test_chat_service_returns_safe_constrained_response_without_synthetic_citations() -> None:
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        allow_scaffold_synthetic_citations=False,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-constrained-001")
+
+    assert response.answer.startswith("I do not have enough grounded legal context")
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is False
+    assert response.fallback_used.provider is None
+    assert response.fallback_used.reason is None

@@ -329,3 +329,20 @@ Started: 2026-02-23
   - Useful context
   - Hardened modes (`production`/`prod`/`ci`) now return `error.code = SOURCE_UNAVAILABLE` with HTTP 503 for unavailable CanLII source paths, while development keeps scaffold fallback behavior.
 ---
+## 2026-02-23 21:12:43 -0300 - US-003
+- What was implemented
+- Expanded hardened startup guard coverage by parametrizing synthetic-citation rejection tests across `production`/`prod`/`ci` environments.
+- Added a direct `ChatService` constrained-response test to lock the no-synthetic-citations behavior when grounded citations are absent.
+- Files changed
+- `tests/test_settings.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - For environment hardening flags, always use parametrized tests across all accepted mode aliases to prevent drift between `production`, `prod`, and `ci` semantics.
+  - Gotcha
+  - `make quality` is required by process but `make` is unavailable in this environment, so execute the exact Makefile `quality` command chain in-order as an equivalent gate.
+  - Useful context
+  - `ChatService(..., allow_scaffold_synthetic_citations=False)` combined with empty routed citations deterministically triggers the safe constrained response (`confidence="low"`, no citations).
+---

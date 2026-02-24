@@ -26,6 +26,30 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to source registry JSON (defaults to canonical registry).",
     )
     parser.add_argument(
+        "--court-validation-max-invalid-ratio",
+        type=float,
+        default=0.0,
+        help="Maximum tolerated invalid-record ratio for supported court feeds (0.0-1.0).",
+    )
+    parser.add_argument(
+        "--court-validation-min-valid-records",
+        type=int,
+        default=1,
+        help="Minimum valid court records required for supported court feeds.",
+    )
+    parser.add_argument(
+        "--court-validation-expected-year",
+        type=int,
+        default=None,
+        help="Optional expected court decision year for supported court feeds.",
+    )
+    parser.add_argument(
+        "--court-validation-year-window",
+        type=int,
+        default=0,
+        help="Allowed +/- year window when --court-validation-expected-year is set.",
+    )
+    parser.add_argument(
         "--timeout-seconds",
         type=float,
         default=30.0,
@@ -58,6 +82,10 @@ def main() -> int:
     report = run_ingestion_jobs(
         cadence=cadence,
         registry_path=args.registry,
+        court_validation_max_invalid_ratio=args.court_validation_max_invalid_ratio,
+        court_validation_min_valid_records=args.court_validation_min_valid_records,
+        court_validation_expected_year=args.court_validation_expected_year,
+        court_validation_year_window=args.court_validation_year_window,
         timeout_seconds=args.timeout_seconds,
         state_path=args.state_path,
     )

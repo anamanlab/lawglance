@@ -10,7 +10,13 @@ from typing import Callable
 import httpx
 
 from immcad_api.ingestion.planner import build_ingestion_plan_from_registry
-from immcad_api.sources import SourceRegistryEntry, load_source_registry
+from immcad_api.sources import (
+    CourtPayloadValidation,
+    CourtPayloadValidationConfig,
+    SourceRegistryEntry,
+    load_source_registry,
+    validate_court_source_payload,
+)
 from immcad_api.sources.source_registry import UpdateCadence
 
 
@@ -53,6 +59,9 @@ class IngestionSourceResult:
     bytes_fetched: int | None
     error: str | None
     fetched_at: str
+    records_total: int | None = None
+    records_valid: int | None = None
+    records_invalid: int | None = None
 
 
 @dataclass(frozen=True)
@@ -139,6 +148,7 @@ def _execute_jobs(
     sources: list[SourceRegistryEntry],
     fetcher: Fetcher,
     checkpoints: dict[str, SourceCheckpoint],
+    court_validation_config: CourtPayloadValidationConfig,
 ) -> tuple[IngestionExecutionReport, dict[str, SourceCheckpoint]]:
     started_at = _utc_now_iso()
     results: list[IngestionSourceResult] = []
@@ -152,6 +162,7 @@ def _execute_jobs(
             last_modified=checkpoint.last_modified if checkpoint else None,
         )
         try:
+            court_validation: CourtPayloadValidation | None = None
             fetch_result = fetcher(source, context)
 
             if fetch_result.http_status == 304:
@@ -185,6 +196,30 @@ def _execute_jobs(
                     f"Provider fetch returned empty payload for status={fetch_result.http_status}"
                 )
 
+            court_validation = validate_court_source_payload(
+                source.source_id,
+                fetch_result.payload,
+                validation_config=court_validation_config,
+            )
+            if court_validation is not None:
+                if court_validation.records_total == 0:
+                    raise ValueError(f"{source.source_id} payload did not include any decision records")
+                if court_validation.records_valid < court_validation_config.min_valid_records:
+                    raise ValueError(
+                        f"{source.source_id} validation failed: "
+                        f"valid records {court_validation.records_valid} below minimum "
+                        f"{court_validation_config.min_valid_records}"
+                    )
+                if court_validation.invalid_ratio > court_validation_config.max_invalid_ratio:
+                    first_errors = "; ".join(court_validation.errors[:3])
+                    raise ValueError(
+                        f"{source.source_id} validation failed: invalid ratio "
+                        f"{court_validation.records_invalid}/{court_validation.records_total} "
+                        f"({court_validation.invalid_ratio:.2f}) exceeds "
+                        f"{court_validation_config.max_invalid_ratio:.2f}"
+                        + (f" ({first_errors})" if first_errors else "")
+                    )
+
             checksum = hashlib.sha256(fetch_result.payload).hexdigest()
             results.append(
                 IngestionSourceResult(
@@ -198,6 +233,9 @@ def _execute_jobs(
                     bytes_fetched=len(fetch_result.payload),
                     error=None,
                     fetched_at=fetched_at,
+                    records_total=court_validation.records_total if court_validation else None,
+                    records_valid=court_validation.records_valid if court_validation else None,
+                    records_invalid=court_validation.records_invalid if court_validation else None,
                 )
             )
             updated_checkpoints[source.source_id] = SourceCheckpoint(
@@ -247,6 +285,10 @@ def run_ingestion_jobs(
     *,
     cadence: UpdateCadence | None = None,
     registry_path: str | Path | None = None,
+    court_validation_max_invalid_ratio: float = 0.0,
+    court_validation_min_valid_records: int = 1,
+    court_validation_expected_year: int | None = None,
+    court_validation_year_window: int = 0,
     timeout_seconds: float = 30.0,
     state_path: str | Path | None = None,
     fetcher: Fetcher | None = None,
@@ -254,6 +296,12 @@ def run_ingestion_jobs(
     jurisdiction, version, sources = _select_sources(registry_path, cadence)
     cadence_label = cadence or "all"
     checkpoints = _load_checkpoints(state_path)
+    court_validation_config = CourtPayloadValidationConfig(
+        max_invalid_ratio=court_validation_max_invalid_ratio,
+        min_valid_records=court_validation_min_valid_records,
+        expected_year=court_validation_expected_year,
+        year_window=court_validation_year_window,
+    )
 
     if fetcher is not None:
         report, updated_checkpoints = _execute_jobs(
@@ -263,6 +311,7 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=fetcher,
             checkpoints=checkpoints,
+            court_validation_config=court_validation_config,
         )
         _save_checkpoints(state_path, updated_checkpoints)
         return report
@@ -303,6 +352,7 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=_fetch,
             checkpoints=checkpoints,
+            court_validation_config=court_validation_config,
         )
 
     _save_checkpoints(state_path, updated_checkpoints)

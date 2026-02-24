@@ -1,0 +1,125 @@
+{
+  "version": "2026-02-23",
+  "jurisdiction": "ca",
+  "sources": [
+    {
+      "source_id": "IRPA",
+      "source_type": "statute",
+      "instrument": "Immigration and Refugee Protection Act",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/I-2.5/FullText.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRPR",
+      "source_type": "regulation",
+      "instrument": "Immigration and Refugee Protection Regulations",
+      "url": "https://laws.justice.gc.ca/eng/regulations/SOR-2002-227/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "CIT_ACT",
+      "source_type": "statute",
+      "instrument": "Citizenship Act",
+      "url": "https://laws.justice.gc.ca/eng/acts/c-29/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "CIT_REG",
+      "source_type": "regulation",
+      "instrument": "Citizenship Regulations",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-93-246/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "CIT_REG_NO2",
+      "source_type": "regulation",
+      "instrument": "Citizenship Regulations, No. 2",
+      "url": "https://laws-lois.justice.gc.ca/eng/Regulations/SOR-2015-124/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_ID_RULES",
+      "source_type": "regulation",
+      "instrument": "Immigration Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-229/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_IAD_RULES",
+      "source_type": "regulation",
+      "instrument": "Immigration Appeal Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-230/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_RPD_RULES",
+      "source_type": "regulation",
+      "instrument": "Refugee Protection Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-256/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRB_RAD_RULES",
+      "source_type": "regulation",
+      "instrument": "Refugee Appeal Division Rules",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-257/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "PIPEDA",
+      "source_type": "statute",
+      "instrument": "Personal Information Protection and Electronic Documents Act",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "CASL",
+      "source_type": "statute",
+      "instrument": "Canada's Anti-Spam Legislation",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/E-1.6/",
+      "update_cadence": "weekly"
+    },
+    {
+      "source_id": "IRCC_PDI",
+      "source_type": "policy",
+      "instrument": "IRCC Operational Instructions and Program Delivery Instructions",
+      "url": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/publications-manuals/operational-bulletins-manuals.html",
+      "update_cadence": "daily"
+    },
+    {
+      "source_id": "EE_MI_CURRENT",
+      "source_type": "policy",
+      "instrument": "Ministerial Instructions respecting Express Entry (current)",
+      "url": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-application-management-system/current.html",
+      "update_cadence": "daily"
+    },
+    {
+      "source_id": "EE_MI_INVITES",
+      "source_type": "policy",
+      "instrument": "Ministerial Instructions for Express Entry rounds/invitations",
+      "url": "https://www.canada.ca/en/immigration-refugees-citizenship/corporate/mandate/policies-operational-instructions-agreements/ministerial-instructions/express-entry-rounds/invitations.html",
+      "update_cadence": "daily"
+    },
+    {
+      "source_id": "CANLII_CASE_BROWSE",
+      "source_type": "case_law",
+      "instrument": "CanLII caseBrowse API",
+      "url": "https://github.com/canlii/API_documentation/blob/master/EN.md",
+      "update_cadence": "scheduled_incremental"
+    },
+    {
+      "source_id": "CANLII_CASE_CITATOR",
+      "source_type": "case_law",
+      "instrument": "CanLII caseCitator API",
+      "url": "https://github.com/canlii/API_documentation/blob/master/EN.md",
+      "update_cadence": "scheduled_incremental"
+    },
+    {
+      "source_id": "CANLII_TERMS",
+      "source_type": "policy",
+      "instrument": "CanLII Terms of Use",
+      "url": "https://www.canlii.org/info/terms.html",
+      "update_cadence": "weekly"
+    }
+  ]
+}

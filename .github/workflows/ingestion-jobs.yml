@@ -47,12 +47,16 @@ jobs:
             ingestion-state-
 
       - name: Run ingestion jobs
+        env:
+          DISPATCH_FAIL_ON_ERROR: ${{ github.event.inputs.fail_on_error || '' }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "schedule" ]; then
             fail_on_error="true"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            fail_on_error="${DISPATCH_FAIL_ON_ERROR:-true}"
           else
-            fail_on_error="${{ inputs.fail_on_error }}"
+            fail_on_error="true"
           fi
 
           cmd=(uv run python scripts/run_ingestion_jobs.py --cadence "${{ matrix.cadence }}" --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" --state-path ".cache/immcad/ingestion-checkpoints.json")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from immcad_api.policy.compliance import DEFAULT_TRUSTED_CITATION_DOMAINS
 from immcad_api.settings import load_settings
 
 
@@ -44,6 +45,7 @@ def test_load_settings_rejects_synthetic_citations_in_hardened_modes(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "true")
 
     with pytest.raises(ValueError, match="ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false"):
@@ -55,10 +57,39 @@ def test_load_settings_allows_disabled_synthetic_citations_in_production(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
 
     settings = load_settings()
     assert settings.allow_scaffold_synthetic_citations is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_explicit_trusted_domains_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.delenv("CITATION_TRUSTED_DOMAINS", raising=False)
+
+    with pytest.raises(ValueError, match="CITATION_TRUSTED_DOMAINS must be explicitly set"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_empty_parsed_trusted_domains_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", ",,")
+
+    with pytest.raises(ValueError, match="CITATION_TRUSTED_DOMAINS must define at least one trusted domain"):
+        load_settings()
 
 
 def test_load_settings_has_default_cors_origins(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -83,9 +114,36 @@ def test_load_settings_parses_cors_origins_csv(monkeypatch: pytest.MonkeyPatch) 
     )
 
 
+def test_load_settings_has_default_trusted_citation_domains(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("CITATION_TRUSTED_DOMAINS", raising=False)
+
+    settings = load_settings()
+    assert settings.citation_trusted_domains == DEFAULT_TRUSTED_CITATION_DOMAINS
+
+
+def test_load_settings_parses_trusted_citation_domains_csv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv(
+        "CITATION_TRUSTED_DOMAINS",
+        "laws-lois.justice.gc.ca,canlii.org,",
+    )
+
+    settings = load_settings()
+    assert settings.citation_trusted_domains == (
+        "laws-lois.justice.gc.ca",
+        "canlii.org",
+    )
+
+
 def test_load_settings_trims_sensitive_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", " production ")
     monkeypatch.setenv("API_BEARER_TOKEN", " secret-token ")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", " laws-lois.justice.gc.ca,canlii.org ")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
 
     settings = load_settings()

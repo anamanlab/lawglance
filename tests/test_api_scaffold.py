@@ -181,6 +181,7 @@ def test_bearer_auth_enforced_for_production_modes(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     secured_client = TestClient(create_app())
 
@@ -395,6 +396,7 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.delenv("CANLII_API_KEY", raising=False)
     hardened_client = TestClient(create_app())

@@ -23,6 +23,7 @@ jobs:
           ENVIRONMENT: ci
           API_BEARER_TOKEN: release-gate-token
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
+          CITATION_TRUSTED_DOMAINS: laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
         run: |
           uv run python - <<'PY'
           import os

@@ -278,9 +278,13 @@ def create_app() -> FastAPI:
 
     @app.get("/ops/metrics", tags=["ops"])
     def ops_metrics() -> dict[str, object]:
+        canlii_metrics_snapshot = (
+            canlii_usage_limiter.snapshot() if hasattr(canlii_usage_limiter, "snapshot") else {}
+        )
         return {
             "request_metrics": request_metrics.snapshot(),
             "provider_routing_metrics": provider_router.telemetry_snapshot(),
+            "canlii_usage_metrics": canlii_metrics_snapshot,
         }
 
     return app

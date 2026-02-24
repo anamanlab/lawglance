@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke canlii-key-verify canlii-live-smoke hygiene quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -62,6 +62,12 @@ ingestion-run:
 
 staging-smoke:
 	bash scripts/run_api_smoke_tests.sh
+
+canlii-key-verify:
+	bash scripts/verify_canlii_api_key.sh
+
+canlii-live-smoke:
+	bash scripts/run_canlii_live_smoke.sh
 
 hygiene:
 	bash scripts/check_repository_hygiene.sh

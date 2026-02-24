@@ -20,6 +20,7 @@ class CanLIIUsageLease(Protocol):
 
 class CanLIIUsageLimiter(Protocol):
     def acquire(self) -> CanLIIUsageLease: ...
+    def snapshot(self) -> dict[str, object]: ...
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,12 @@ class InMemoryCanLIIUsageLimiter:
         self._daily_count = 0
         self._second_window_start = int(time.time())
         self._second_count = 0
+        self._blocked_counts: dict[str, int] = {
+            "daily_limit": 0,
+            "per_second_limit": 0,
+            "concurrent_limit": 0,
+            "unknown_limit": 0,
+        }
 
     def _advance_windows(self, now_epoch_seconds: int) -> None:
         now_day = datetime.now(tz=UTC).date()
@@ -74,10 +81,13 @@ class InMemoryCanLIIUsageLimiter:
             self._advance_windows(now_epoch_seconds)
 
             if self._in_flight >= self.limits.max_in_flight:
+                self._blocked_counts["concurrent_limit"] += 1
                 raise CanLIIUsageLimitExceeded("concurrent_limit")
             if self._second_count >= self.limits.per_second_limit:
+                self._blocked_counts["per_second_limit"] += 1
                 raise CanLIIUsageLimitExceeded("per_second_limit")
             if self._daily_count >= self.limits.daily_limit:
+                self._blocked_counts["daily_limit"] += 1
                 raise CanLIIUsageLimitExceeded("daily_limit")
 
             self._in_flight += 1
@@ -90,6 +100,31 @@ class InMemoryCanLIIUsageLimiter:
         with self._lock:
             if self._in_flight > 0:
                 self._in_flight -= 1
+
+    def snapshot(self) -> dict[str, object]:
+        now_epoch_seconds = int(time.time())
+        with self._lock:
+            self._advance_windows(now_epoch_seconds)
+            daily_count = self._daily_count
+            second_count = self._second_count
+            in_flight = self._in_flight
+            blocked_counts = dict(self._blocked_counts)
+
+        return {
+            "mode": "in_memory",
+            "limits": {
+                "daily_limit": self.limits.daily_limit,
+                "per_second_limit": self.limits.per_second_limit,
+                "max_in_flight": self.limits.max_in_flight,
+            },
+            "usage": {
+                "daily_count": daily_count,
+                "daily_remaining": max(self.limits.daily_limit - daily_count, 0),
+                "second_count": second_count,
+                "in_flight": in_flight,
+            },
+            "blocked": blocked_counts,
+        }
 
 
 _REDIS_ACQUIRE_SCRIPT = """
@@ -171,6 +206,13 @@ class RedisCanLIIUsageLimiter:
         self.limits = limits
         self.lock_ttl_ms = max(int(lock_ttl_seconds * 1000), 1_000)
         self.key_prefix = key_prefix
+        self._lock = Lock()
+        self._blocked_counts: dict[str, int] = {
+            "daily_limit": 0,
+            "per_second_limit": 0,
+            "concurrent_limit": 0,
+            "unknown_limit": 0,
+        }
 
     def _daily_key(self) -> str:
         return f"{self.key_prefix}:daily:{datetime.now(tz=UTC).date().isoformat()}"
@@ -209,11 +251,15 @@ class RedisCanLIIUsageLimiter:
         if result == 0:
             return _RedisCanLIIUsageLease(limiter=self, token=token)
         if result == 1:
+            self._record_blocked("concurrent_limit")
             raise CanLIIUsageLimitExceeded("concurrent_limit")
         if result == 2:
+            self._record_blocked("per_second_limit")
             raise CanLIIUsageLimitExceeded("per_second_limit")
         if result == 3:
+            self._record_blocked("daily_limit")
             raise CanLIIUsageLimitExceeded("daily_limit")
+        self._record_blocked("unknown_limit")
         raise CanLIIUsageLimitExceeded("unknown_limit")
 
     def _release(self, token: str) -> None:
@@ -221,6 +267,48 @@ class RedisCanLIIUsageLimiter:
             self.redis_client.eval(_REDIS_RELEASE_SCRIPT, 1, self._lock_key(), token)
         except Exception:
             return None
+
+    def _record_blocked(self, reason: str) -> None:
+        with self._lock:
+            self._blocked_counts[reason] = self._blocked_counts.get(reason, 0) + 1
+
+    def _redis_int(self, key: str) -> int:
+        try:
+            value = self.redis_client.get(key)
+            if value is None:
+                return 0
+            if isinstance(value, bytes):
+                value = value.decode("utf-8")
+            return int(value)
+        except Exception:
+            return 0
+
+    def snapshot(self) -> dict[str, object]:
+        daily_count = self._redis_int(self._daily_key())
+        second_count = self._redis_int(self._second_key())
+        try:
+            in_flight = 1 if self.redis_client.exists(self._lock_key()) else 0
+        except Exception:
+            in_flight = 0
+
+        with self._lock:
+            blocked_counts = dict(self._blocked_counts)
+
+        return {
+            "mode": "redis",
+            "limits": {
+                "daily_limit": self.limits.daily_limit,
+                "per_second_limit": self.limits.per_second_limit,
+                "max_in_flight": self.limits.max_in_flight,
+            },
+            "usage": {
+                "daily_count": daily_count,
+                "daily_remaining": max(self.limits.daily_limit - daily_count, 0),
+                "second_count": second_count,
+                "in_flight": in_flight,
+            },
+            "blocked": blocked_counts,
+        }
 
 
 def build_canlii_usage_limiter(

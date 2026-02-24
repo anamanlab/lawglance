@@ -52,6 +52,10 @@ Endpoints:
 - Run registry-driven ingestion jobs and emit JSON report:
   - `uv run python scripts/run_ingestion_jobs.py --cadence daily`
   - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
+- Verify CanLII API key access:
+  - `make canlii-key-verify`
+- Run live CanLII case-search smoke against deployed API:
+  - `IMMCAD_API_BASE_URL=https://<backend> IMMCAD_API_BEARER_TOKEN=<token> make canlii-live-smoke`
 - Generate jurisdictional scoring report (JSON + Markdown):
   - `uv run python scripts/generate_jurisdiction_eval_report.py`
 - Run jurisdictional behavior suite (policy refusal + citation checks):

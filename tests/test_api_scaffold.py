@@ -415,3 +415,4 @@ def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
     assert "provider_routing_metrics" in payload
+    assert "canlii_usage_metrics" in payload

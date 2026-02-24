@@ -36,6 +36,7 @@ jobs:
 
       - name: Validate hardened runtime safety toggles
         env:
+          PYTHONPATH: src
           ENVIRONMENT: ci
           API_BEARER_TOKEN: release-gate-token
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"

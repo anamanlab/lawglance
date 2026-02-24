@@ -1,6 +1,20 @@
-import redis
+"""Legacy Redis cache adapter (deprecated).
+
+This module is retained only for historical compatibility and offline evaluation.
+Production runtime must route through `src/immcad_api`.
+"""
+
+from __future__ import annotations
+
 import hashlib
-from langchain_community.chat_message_histories import RedisChatMessageHistory
+import warnings
+
+warnings.warn(
+    "cache.py is deprecated and retained for legacy compatibility only; "
+    "production runtime uses immcad_api.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 class RedisCache:
     """
@@ -45,6 +59,14 @@ class RedisCache:
         - Relies on LangChain's RedisChatMessageHistory for managing ongoing conversation state.
     """
     def __init__(self, redis_url):
+        try:
+            import redis
+        except Exception as exc:  # pragma: no cover - legacy import guard
+            raise RuntimeError(
+                "Legacy Redis cache dependencies are not available. "
+                "Install redis to use legacy/local_rag/cache.py."
+            ) from exc
+
         self.redis_url = redis_url
         self.redis_client = redis.Redis.from_url(redis_url)
 
@@ -57,10 +79,18 @@ class RedisCache:
         return value.decode("utf-8") if value else None
 
     def set(self, key, value, ttl=None):
-        if ttl:
+        if ttl is not None:
             self.redis_client.setex(key, ttl, value)
         else:
             self.redis_client.set(key, value)
 
     def get_chat_history(self, session_id):
+        try:
+            from langchain_community.chat_message_histories import RedisChatMessageHistory
+        except Exception as exc:  # pragma: no cover - legacy import guard
+            raise RuntimeError(
+                "Legacy chat history dependencies are not available. "
+                "Install langchain-community to use Redis-backed chat history."
+            ) from exc
+
         return RedisChatMessageHistory(session_id=session_id, url=self.redis_url)

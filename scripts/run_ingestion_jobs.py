@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -26,28 +27,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to source registry JSON (defaults to canonical registry).",
     )
     parser.add_argument(
-        "--court-validation-max-invalid-ratio",
-        type=float,
-        default=0.0,
-        help="Maximum tolerated invalid-record ratio for supported court feeds (0.0-1.0).",
+        "--source-policy",
+        default=os.getenv("SOURCE_POLICY_PATH"),
+        help="Optional path to source policy JSON/YAML (defaults to config/source_policy.yaml).",
     )
     parser.add_argument(
-        "--court-validation-min-valid-records",
-        type=int,
-        default=1,
-        help="Minimum valid court records required for supported court feeds.",
-    )
-    parser.add_argument(
-        "--court-validation-expected-year",
-        type=int,
-        default=None,
-        help="Optional expected court decision year for supported court feeds.",
-    )
-    parser.add_argument(
-        "--court-validation-year-window",
-        type=int,
-        default=0,
-        help="Allowed +/- year window when --court-validation-expected-year is set.",
+        "--environment",
+        default=os.getenv("ENVIRONMENT", "development"),
+        help="Runtime environment for policy gates (development/staging/production/prod/ci).",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -82,10 +69,8 @@ def main() -> int:
     report = run_ingestion_jobs(
         cadence=cadence,
         registry_path=args.registry,
-        court_validation_max_invalid_ratio=args.court_validation_max_invalid_ratio,
-        court_validation_min_valid_records=args.court_validation_min_valid_records,
-        court_validation_expected_year=args.court_validation_expected_year,
-        court_validation_year_window=args.court_validation_year_window,
+        source_policy_path=args.source_policy,
+        environment=args.environment,
         timeout_seconds=args.timeout_seconds,
         state_path=args.state_path,
     )
@@ -97,7 +82,8 @@ def main() -> int:
     print(
         "Ingestion report generated "
         f"(cadence={report.cadence}, total={report.total}, "
-        f"succeeded={report.succeeded}, not_modified={report.not_modified}, failed={report.failed})"
+        f"succeeded={report.succeeded}, not_modified={report.not_modified}, "
+        f"blocked={report.blocked}, failed={report.failed})"
     )
     print(f"Report path: {output_path}")
     print(f"State path: {args.state_path}")

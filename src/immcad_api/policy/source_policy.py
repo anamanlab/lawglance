@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+import yaml
 
 
 SourceClass = Literal["official", "unofficial", "commercial"]
@@ -57,13 +58,19 @@ def _candidate_paths(path: str | Path | None) -> list[Path]:
 
 def _load_policy_payload(path: Path) -> dict[str, object]:
     raw = path.read_text(encoding="utf-8")
+    suffix = path.suffix.lower()
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "Source policy must be valid JSON or JSON-compatible YAML. "
-            f"Could not parse {path}"
-        ) from exc
+        if suffix == ".json":
+            payload = json.loads(raw)
+        elif suffix in {".yaml", ".yml"}:
+            payload = yaml.safe_load(raw)
+        else:
+            raise ValueError(f"Unsupported source policy format for {path} (expected .json/.yaml/.yml)")
+    except (json.JSONDecodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"Source policy parse failed for {path}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Source policy root payload must be an object: {path}")
+    return payload
 
 
 def load_source_policy(path: str | Path | None = None) -> SourcePolicy:
@@ -119,4 +126,3 @@ def is_source_export_allowed(
     if entry.export_fulltext_allowed:
         return True, "source_export_allowed"
     return False, "source_export_blocked_by_policy"
-

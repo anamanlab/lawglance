@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlparse
 
 from immcad_api.schemas import Citation
 
@@ -13,6 +14,120 @@ POLICY_REFUSAL_TEXT = (
     "I can provide general informational guidance only. "
     "I cannot provide personalized legal advice or represent you in legal proceedings."
 )
+
+SAFE_CONSTRAINED_RESPONSE = (
+    "I do not have enough grounded legal context to answer safely. "
+    "Please refine your question or provide more details."
+)
+
+DEFAULT_TRUSTED_CITATION_DOMAINS: tuple[str, ...] = (
+    "laws-lois.justice.gc.ca",
+    "justice.gc.ca",
+    "canada.ca",
+    "ircc.canada.ca",
+    "canlii.org",
+)
+
+
+def normalize_trusted_domains(domains: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    if not domains:
+        return ()
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for domain in domains:
+        candidate = domain.strip().lower().strip(".")
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized.append(candidate)
+    return tuple(normalized)
+
+
+def _is_domain_trusted(url: str, trusted_domains: tuple[str, ...]) -> bool:
+    if not trusted_domains:
+        return False
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").strip().lower().strip(".")
+    if not hostname:
+        return False
+    for domain in trusted_domains:
+        if hostname == domain or hostname.endswith(f".{domain}"):
+            return True
+    return False
+
+
+def _coerce_citation(value: Citation | dict[str, object] | object) -> Citation | None:
+    if isinstance(value, Citation):
+        return value
+    if isinstance(value, dict):
+        try:
+            return Citation.model_validate(value)
+        except Exception:
+            return None
+    return None
+
+
+def _citation_lookup_key(citation: Citation) -> tuple[str, str, str]:
+    return (
+        citation.source_id.strip().lower(),
+        citation.url.strip().lower(),
+        citation.pin.strip().lower(),
+    )
+
+
+def _is_well_formed_citation(citation: Citation, *, trusted_domains: tuple[str, ...]) -> bool:
+    if not citation.source_id.strip():
+        return False
+    if not citation.title.strip():
+        return False
+    if not citation.pin.strip():
+        return False
+    if not citation.snippet.strip():
+        return False
+    url = citation.url.strip().lower()
+    if not url.startswith("https://"):
+        return False
+    if not _is_domain_trusted(url, trusted_domains):
+        return False
+    return True
+
+
+def verify_grounded_citations(
+    citations: list[Citation | dict[str, object] | object],
+    *,
+    grounded_citations: list[Citation],
+    trusted_domains: tuple[str, ...],
+) -> list[Citation]:
+    if not grounded_citations:
+        return []
+    normalized_trusted_domains = normalize_trusted_domains(trusted_domains)
+    if not normalized_trusted_domains:
+        return []
+
+    grounded_index: dict[tuple[str, str, str], Citation] = {}
+    for grounded in grounded_citations:
+        if not _is_well_formed_citation(grounded, trusted_domains=normalized_trusted_domains):
+            continue
+        grounded_index[_citation_lookup_key(grounded)] = grounded.model_copy(deep=True)
+
+    if not grounded_index:
+        return []
+
+    verified: list[Citation] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw_citation in citations:
+        citation = _coerce_citation(raw_citation)
+        if citation is None:
+            continue
+        if not _is_well_formed_citation(citation, trusted_domains=normalized_trusted_domains):
+            continue
+        key = _citation_lookup_key(citation)
+        grounded = grounded_index.get(key)
+        if grounded is None or key in seen:
+            continue
+        verified.append(grounded.model_copy(deep=True))
+        seen.add(key)
+    return verified
 
 
 def should_refuse_for_policy(message: str) -> bool:
@@ -37,13 +152,22 @@ def should_refuse_for_policy(message: str) -> bool:
     return any(re.search(pattern, normalized) for pattern in blocked_patterns)
 
 
-def enforce_citation_requirement(answer: str, citations: list[Citation]) -> tuple[str, list[Citation], str]:
-    if citations:
-        return answer, citations, "medium"
-
-    return (
-        "I do not have enough grounded legal context to answer safely. "
-        "Please refine your question or provide more details.",
-        [],
-        "low",
+def enforce_citation_requirement(
+    answer: str,
+    citations: list[Citation | dict[str, object] | object],
+    *,
+    grounded_citations: list[Citation],
+    trusted_domains: tuple[str, ...] | list[str] | None = None,
+) -> tuple[str, list[Citation], str]:
+    normalized_trusted_domains = normalize_trusted_domains(
+        trusted_domains if trusted_domains is not None else DEFAULT_TRUSTED_CITATION_DOMAINS
     )
+    validated_citations = verify_grounded_citations(
+        citations,
+        grounded_citations=grounded_citations,
+        trusted_domains=normalized_trusted_domains,
+    )
+    if validated_citations:
+        return answer, validated_citations, "medium"
+
+    return (SAFE_CONSTRAINED_RESPONSE, [], "low")

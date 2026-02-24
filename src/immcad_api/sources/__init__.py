@@ -1,7 +1,6 @@
 from immcad_api.sources.canada_courts import (
     CourtDecisionRecord,
     CourtPayloadValidation,
-    CourtPayloadValidationConfig,
     parse_decisia_rss_feed,
     parse_scc_json_feed,
     validate_court_source_payload,
@@ -18,7 +17,6 @@ from immcad_api.sources.source_registry import (
 __all__ = [
     "CourtDecisionRecord",
     "CourtPayloadValidation",
-    "CourtPayloadValidationConfig",
     "CanLIIClient",
     "PRODUCTION_REQUIRED_SOURCE_IDS",
     "SourceRegistry",

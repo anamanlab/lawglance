@@ -12,7 +12,7 @@ SRC_PATH = REPO_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
-from immcad_api.ops import (  # noqa: E402
+from immcad_api.ops import (
     build_alert_report,
     build_metrics_url,
     evaluate_alert_rules,

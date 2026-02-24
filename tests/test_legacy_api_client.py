@@ -1,14 +1,8 @@
 from __future__ import annotations
 
 import httpx
-from pathlib import Path
-import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from legacy_api_client import LegacyApiClient, build_backend_api_url  # noqa: E402
+from legacy_api_client import LegacyApiClient, build_backend_api_url
 
 
 def _build_response(

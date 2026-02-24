@@ -8,7 +8,6 @@ from .alert_evaluator import (
     fetch_ops_metrics,
     load_alert_rules,
 )
-from .case_law_conformance import run_case_law_conformance
 
 __all__ = [
     "AlertCheckResult",
@@ -19,5 +18,4 @@ __all__ = [
     "evaluate_alert_rules",
     "fetch_ops_metrics",
     "load_alert_rules",
-    "run_case_law_conformance",
 ]

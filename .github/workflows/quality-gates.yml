@@ -18,7 +18,6 @@ jobs:
 
       - name: Dependency review (PR)
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803
         with:
           fail-on-severity: high
@@ -94,11 +93,6 @@ jobs:
           PYTHONPATH: src
         run: uv run python scripts/validate_source_registry.py
 
-      - name: Run case-law conformance (warning-only)
-        env:
-          PYTHONPATH: src
-        run: uv run python scripts/run_case_law_conformance.py --output artifacts/ingestion/case-law-conformance-report.json
-
       - name: Validate legal review checklist template
         run: uv run python scripts/validate_legal_review_checklist.py
 
@@ -157,10 +151,3 @@ jobs:
           path: |
             artifacts/docs/doc-maintenance-report.md
             artifacts/docs/doc-maintenance-report.json
-
-      - name: Upload case-law conformance artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: case-law-conformance-report
-          path: artifacts/ingestion/case-law-conformance-report.json

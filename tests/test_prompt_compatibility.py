@@ -21,6 +21,10 @@ def _load_legacy_prompt_module():
     spec = importlib.util.spec_from_file_location("legacy_prompts", LEGACY_PROMPTS_PATH)
     if spec is None or spec.loader is None:
         raise FileNotFoundError(f"Unable to load legacy prompts module spec: {LEGACY_PROMPTS_PATH}")
+    if not isinstance(spec.loader, importlib.abc.Loader):
+        raise TypeError(
+            f"Unsupported loader type for legacy prompts module: {type(spec.loader).__name__}"
+        )
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     loader = cast(importlib.abc.Loader, spec.loader)

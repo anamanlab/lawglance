@@ -1,3 +1,75 @@
+# Task Plan - 2026-02-24 - Senior Lead MVP Next Steps
+
+## Current Focus
+- Drive a controlled MVP closure sequence for production-safe legal research delivery (source correctness, policy enforcement, CI reliability, and runtime safety).
+
+## Plan
+- [x] Phase 0 (24h): Complete release safety preconditions.
+- [x] Confirm `.env-backups/` is ignored and no backup artifacts are tracked (`git ls-files '.env-backups/**'`).
+- [x] Finalize workflow dedup/concurrency and artifact semantics in `quality-gates.yml` and `release-gates.yml`.
+- [x] Run: `scripts/venv_exec.sh pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_ops_alerts_workflow.py`.
+- [x] Phase 1 (48h): Close in-flight parser and ingestion-policy work.
+- [x] Finish SCC/FC/FCA parser hardening in `src/immcad_api/sources/canada_courts.py` and registry wording consistency.
+- [x] Validate ingestion policy behavior with: `scripts/venv_exec.sh pytest -q tests/test_canada_courts.py tests/test_ingestion_jobs.py tests/test_canada_registry.py tests/test_validate_source_registry.py`.
+- [x] Phase 2 (72h): Lock runtime/API safety.
+- [x] Close remaining auth/prompt/citation/export gate checks (`main.py`, `settings.py`, `app.py`, `policy/prompts.py`, `policy/source_policy.py`).
+- [x] Run: `scripts/venv_exec.sh pytest -q tests/test_api_scaffold.py tests/test_chat_service.py tests/test_source_policy.py tests/test_export_policy_gate.py`.
+- [x] Phase 3 (96h): Tooling/docs alignment and final gate.
+- [ ] Complete Makefile hermeticity + docs-maintenance script fixes and test hardening backlog.
+- [ ] Run final gate: `scripts/venv_exec.sh mypy src tests`, `scripts/venv_exec.sh ruff check src/immcad_api scripts tests`, targeted pytest matrix, and `scripts/venv_exec.sh python scripts/validate_source_registry.py`.
+- [ ] Delivery control:
+- [ ] Ship as one PR per phase; do not mix workflow/security with parser/runtime changes.
+- [ ] Update this section and associated plan sections with concrete evidence before marking done.
+
+## Review
+- Phase 0 evidence:
+  - `git ls-files '.env-backups/**'` returned no tracked backup files.
+  - `scripts/venv_exec.sh pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_ops_alerts_workflow.py` -> `13 passed`.
+- Phase 1 evidence:
+  - Hardened FCA parsing fallback for HTML listings and parse-error fallback in `src/immcad_api/sources/canada_courts.py`.
+  - `scripts/venv_exec.sh pytest -q tests/test_canada_courts.py tests/test_ingestion_jobs.py tests/test_canada_registry.py tests/test_validate_source_registry.py` -> `25 passed`.
+- Phase 2 evidence:
+  - Updated hardened-mode API tests for full env contract and runtime source-unavailable simulation in `tests/test_api_scaffold.py`.
+  - `scripts/venv_exec.sh pytest -q tests/test_api_scaffold.py tests/test_chat_service.py tests/test_source_policy.py tests/test_export_policy_gate.py` -> `50 passed`.
+- Phase 3 evidence:
+  - Fixed lint blocker in `scripts/generate_ingestion_plan.py`.
+  - Final verification batch:
+    - `scripts/venv_exec.sh ruff check src/immcad_api scripts tests` -> pass.
+    - targeted pytest verification matrix -> `72 passed`.
+    - `scripts/venv_exec.sh python scripts/validate_source_registry.py` -> pass.
+    - `scripts/venv_exec.sh python scripts/run_ingestion_smoke.py ...` -> pass.
+    - `scripts/venv_exec.sh python scripts/run_case_law_conformance.py --strict ...` -> pass (`fail=0`).
+- Type-check tool gap:
+  - `scripts/venv_exec.sh mypy src tests` failed because `mypy` is not installed in this environment.
+  - `scripts/venv_exec.sh pyright --version` also not available.
+- Continuation update (research/remediation alignment):
+  - Implemented source-level fetch policy support:
+    - added canonical config file `config/fetch_policy.yaml`,
+    - added loader module `src/immcad_api/ingestion/source_fetch_policy.py` with shared `CONFIG_FETCH_POLICY_PATH`,
+    - wired retry budget + per-source timeout behavior into `src/immcad_api/ingestion/jobs.py`,
+    - added CLI support via `--fetch-policy` in `scripts/run_ingestion_jobs.py`.
+  - Added ingestion retry-budget regression tests in `tests/test_ingestion_jobs.py` (success-after-retry and exhausted-retry paths).
+  - Aligned research docs to current policy decisions:
+    - updated provider wording in `docs/research/canada-legal-ai-source-and-ingestion-guide.md` to separate `vLex (vLex Canada)` and `Lexum / CanLII commercial API`,
+    - updated Phase 1 citation threshold language in `docs/research/canada-legal-ai-production-implementation-plan.md` (`>= 90%` onboarding, `>= 99%` steady-state target).
+  - Verification:
+    - `scripts/venv_exec.sh ruff check src/immcad_api/ingestion/source_fetch_policy.py src/immcad_api/ingestion/jobs.py scripts/run_ingestion_jobs.py tests/test_ingestion_jobs.py` -> pass.
+    - `scripts/venv_exec.sh pytest -q tests/test_ingestion_jobs.py tests/test_canada_courts.py tests/test_source_policy.py tests/test_case_law_conformance_script.py tests/test_release_gates_workflow.py tests/test_quality_gates_workflow.py` -> `44 passed`.
+    - `scripts/venv_exec.sh python scripts/run_ingestion_jobs.py --cadence daily --output /tmp/ingestion-daily.json --state-path /tmp/ingestion-daily-state.json` -> pass.
+- Additional hardening pass:
+  - Updated rate-limiter logger to module-scoped naming in `src/immcad_api/middleware/rate_limit.py` and made logger-capture test robust in `tests/test_rate_limiters.py`.
+  - Added explicit loader type guard before `exec_module` in `tests/test_prompt_compatibility.py`.
+  - Verification:
+    - `scripts/venv_exec.sh pytest -q tests/test_rate_limiters.py tests/test_prompt_compatibility.py tests/test_legacy_runtime_convergence.py tests/test_doc_maintenance.py tests/test_ingestion_smoke_script.py` -> `24 passed`.
+    - `scripts/venv_exec.sh ruff check src/immcad_api/middleware/rate_limit.py tests/test_rate_limiters.py tests/test_prompt_compatibility.py` -> pass.
+- Fetch-policy coverage expansion:
+  - Added dedicated fetch-policy unit tests in `tests/test_source_fetch_policy.py` (explicit missing-path behavior, default-file loading, source override parsing, invalid schema guard).
+  - Verification:
+    - `scripts/venv_exec.sh pytest -q tests/test_source_fetch_policy.py tests/test_ingestion_jobs.py` -> `14 passed`.
+    - `scripts/venv_exec.sh ruff check src/immcad_api/ingestion/source_fetch_policy.py tests/test_source_fetch_policy.py` -> pass.
+
+---
+
 # Task Plan - 2026-02-24 - Canada Legal Research Agent Source Guide
 
 ## Current Focus

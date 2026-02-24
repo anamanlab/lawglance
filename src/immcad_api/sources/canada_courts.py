@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from email.utils import parsedate_to_datetime
+import html
 import json
 import logging
 import re
 from typing import Any, Literal
+from urllib.parse import urljoin
 import xml.etree.ElementTree as ET
 
 LOGGER = logging.getLogger(__name__)
@@ -19,6 +21,10 @@ _COURT_CITATION_PATTERNS: dict[CourtCode, re.Pattern[str]] = {
     "FC": re.compile(r"\b(19|20)\d{2}\s+FC\s+\d+\b", re.IGNORECASE),
     "FCA": re.compile(r"\b(19|20)\d{2}\s+(FCA|CAF)\s+\d+\b", re.IGNORECASE),
 }
+_SCC_REPORT_CITATION_PATTERN = re.compile(
+    r"\[\d{4}\]\s+\d+\s+SCR\s+\d+",
+    re.IGNORECASE,
+)
 
 _SOURCE_TO_COURT: dict[str, CourtCode] = {
     "SCC_DECISIONS": "SCC",
@@ -123,7 +129,20 @@ def _iter_json_item_dicts(node: object) -> list[dict[str, Any]]:
         return results
     if isinstance(node, dict):
         results: list[dict[str, Any]] = []
-        if any(key in node for key in ("title", "link", "url", "pubDate", "date", "decisionDate")):
+        has_link = any(key in node for key in ("link", "url"))
+        has_item_metadata = any(
+            key in node
+            for key in (
+                "title",
+                "id",
+                "pubDate",
+                "date",
+                "decisionDate",
+                "date_published",
+                "date_modified",
+            )
+        )
+        if has_link and has_item_metadata:
             results.append(node)
             return results
         for value in node.values():
@@ -145,10 +164,18 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
             or _dict_text(item.get("publishedDate"))
             or _dict_text(item.get("pubDate"))
             or _dict_text(item.get("date"))
+            or _dict_text(item.get("date_published"))
+            or _dict_text(item.get("date_modified"))
         )
-        citation = _extract_citation(
-            f"{title} {_dict_text(item.get('description')) or ''}",
-            court_code="SCC",
+        citation = (
+            _dict_text(item.get("_neutral_citation"))
+            or _dict_text(item.get("neutralCitation"))
+            or _dict_text(item.get("_report_citation"))
+            or _dict_text(item.get("reportCitation"))
+            or _extract_citation(
+                f"{title} {_dict_text(item.get('description')) or ''}",
+                court_code="SCC",
+            )
         )
         case_id = (
             _dict_text(item.get("id"))
@@ -173,6 +200,44 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
                 pdf_url=pdf_url,
             )
         )
+    return records
+
+
+def parse_fca_decisions_html_feed(payload: bytes) -> list[CourtDecisionRecord]:
+    text = payload.decode("utf-8")
+    item_pattern = re.compile(
+        r'<li class="[^"]*list-item-expanded[^"]*">.*?'
+        r'<a[^>]+href="(?P<link>/fca-caf/decisions/en/item/(?P<case_id>\d+)/index\.do)"[^>]*>'
+        r"(?P<title>.*?)</a>.*?"
+        r'<span class="citation">(?P<citation>[^<]+)</span>.*?'
+        r'<span class="publicationDate">(?P<publication_date>\d{4}-\d{2}-\d{2})</span>.*?'
+        r'(?:href="(?P<pdf>/fca-caf/decisions/en/\d+/1/document\.do)".*?)?'
+        r"</li>",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    records: list[CourtDecisionRecord] = []
+    for match in item_pattern.finditer(text):
+        title = html.unescape(re.sub(r"<[^>]+>", "", match.group("title"))).strip()
+        citation = html.unescape(match.group("citation")).strip()
+        decision_date = _parse_date(match.group("publication_date"))
+        link = urljoin("https://decisions.fca-caf.gc.ca", match.group("link"))
+        pdf_relative = match.group("pdf")
+        pdf_url = urljoin("https://decisions.fca-caf.gc.ca", pdf_relative) if pdf_relative else _derive_pdf_url(link)
+
+        records.append(
+            CourtDecisionRecord(
+                source_id="FCA_DECISIONS",
+                court_code="FCA",
+                case_id=match.group("case_id"),
+                title=title or "Untitled",
+                citation=citation,
+                decision_date=decision_date,
+                decision_url=link,
+                pdf_url=pdf_url,
+            )
+        )
+
     return records
 
 
@@ -232,7 +297,14 @@ def validate_decision_record(
         errors.append("missing_citation")
     else:
         pattern = _COURT_CITATION_PATTERNS[expected_court_code]
-        if not pattern.search(record.citation):
+        if expected_court_code == "SCC":
+            has_valid_scc_citation = bool(
+                pattern.search(record.citation)
+                or _SCC_REPORT_CITATION_PATTERN.search(record.citation)
+            )
+            if not has_valid_scc_citation:
+                errors.append("invalid_citation_pattern")
+        elif not pattern.search(record.citation):
             errors.append("invalid_citation_pattern")
     if expected_year is not None:
         if record.decision_date is None:
@@ -258,7 +330,17 @@ def validate_court_source_payload(
         elif source_id == "FC_DECISIONS":
             records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FC")
         elif source_id == "FCA_DECISIONS":
-            records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FCA")
+            try:
+                records = parse_decisia_rss_feed(
+                    payload,
+                    source_id=source_id,
+                    court_code="FCA",
+                )
+            except ET.ParseError:
+                records = parse_fca_decisions_html_feed(payload)
+            if not records:
+                # Decisia can return an HTML listing page instead of RSS for FCA.
+                records = parse_fca_decisions_html_feed(payload)
         else:  # pragma: no cover
             return None
     except (json.JSONDecodeError, ET.ParseError, UnicodeDecodeError) as exc:

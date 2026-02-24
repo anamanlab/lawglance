@@ -191,7 +191,7 @@ These controls reflect common cross-vendor guidance (OpenAI Agents SDK, Anthropi
 ### Initial thresholds
 
 - Freshness lag: `< 24h`
-- Citation presence: `>= 99%` on factual legal responses
+- Citation presence: `>= 90%` on factual legal responses during Phase 1 onboarding (`>= 99%` is the steady-state target after conformance + policy-enforcement stabilization)
 - Parse success: `>= 98%`
 - Refusal on low confidence: `>= 95%`
 - Unsupported claim rate: `<= 1%`

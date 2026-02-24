@@ -56,7 +56,7 @@ def test_build_rate_limiter_logs_fallback_when_redis_unavailable(
 
     monkeypatch.setitem(sys.modules, "redis", types.SimpleNamespace(Redis=_BrokenRedis))
 
-    with caplog.at_level(logging.WARNING, logger="immcad_api.rate_limit"):
+    with caplog.at_level(logging.WARNING, logger=build_rate_limiter.__module__):
         limiter = build_rate_limiter(limit_per_minute=10, redis_url="redis://localhost:6379/0")
 
     assert isinstance(limiter, InMemoryRateLimiter)

@@ -1,0 +1,18 @@
+default:
+  timeout_seconds: 30
+  max_retries: 1
+  retry_backoff_seconds: 0.5
+
+sources:
+  SCC_DECISIONS:
+    timeout_seconds: 20
+    max_retries: 2
+    retry_backoff_seconds: 0.5
+  FC_DECISIONS:
+    timeout_seconds: 20
+    max_retries: 2
+    retry_backoff_seconds: 0.5
+  FCA_DECISIONS:
+    timeout_seconds: 20
+    max_retries: 2
+    retry_backoff_seconds: 0.5

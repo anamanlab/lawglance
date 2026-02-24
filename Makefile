@@ -7,10 +7,10 @@ verify:
 	./scripts/verify_dev_env.sh
 
 dev:
-	uv run streamlit run app.py
+	./scripts/venv_exec.sh streamlit run app.py
 
 api-dev:
-	uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+	./scripts/venv_exec.sh uvicorn immcad_api.main:app --app-dir src --reload --port 8000
 
 frontend-install:
 	cd frontend-web && npm install
@@ -25,40 +25,40 @@ frontend-typecheck:
 	cd frontend-web && npm run typecheck
 
 lint:
-	uv run ruff check .
+	./scripts/venv_exec.sh ruff check .
 
 lint-api:
-	uv run ruff check src/immcad_api tests
+	./scripts/venv_exec.sh ruff check src/immcad_api tests
 
 format:
-	uv run ruff format .
+	./scripts/venv_exec.sh ruff format .
 
 test:
-	uv run pytest -q
+	./scripts/venv_exec.sh pytest -q
 
 arch-generate:
-	uv run python scripts/generate_module_dependency_diagram.py
+	./scripts/venv_exec.sh python scripts/generate_module_dependency_diagram.py
 
 arch-validate:
 	./scripts/validate_architecture_docs.sh
 
 source-registry-validate:
-	uv run python scripts/validate_source_registry.py
+	./scripts/venv_exec.sh python scripts/validate_source_registry.py
 
 legal-review-validate:
-	uv run python scripts/validate_legal_review_checklist.py
+	./scripts/venv_exec.sh python scripts/validate_legal_review_checklist.py
 
 domain-leak-scan:
-	uv run python scripts/scan_domain_leaks.py
+	./scripts/venv_exec.sh python scripts/scan_domain_leaks.py
 
 jurisdiction-eval:
-	uv run python scripts/generate_jurisdiction_eval_report.py
+	./scripts/venv_exec.sh python scripts/generate_jurisdiction_eval_report.py
 
 jurisdiction-suite:
-	uv run python scripts/run_jurisdictional_test_suite.py
+	./scripts/venv_exec.sh python scripts/run_jurisdictional_test_suite.py
 
 ingestion-run:
-	uv run python scripts/run_ingestion_jobs.py
+	./scripts/venv_exec.sh python scripts/run_ingestion_jobs.py
 
 staging-smoke:
 	bash scripts/run_api_smoke_tests.sh

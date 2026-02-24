@@ -168,3 +168,7 @@ docker stop immcad-redis && docker rm immcad-redis
   - Verify `OPENAI_API_KEY` in `.env`.
 - Redis warnings:
   - App can run without Redis, but session caching may be degraded.
+- `NotImplementedError: /dev/urandom (or equivalent) not found` in restricted sandboxes:
+  - Use `./scripts/venv_exec.sh <command>` (for example `./scripts/venv_exec.sh pytest -q`).
+  - This wrapper enables deterministic local fallbacks for entropy and asyncio cross-thread wakeups only when the runtime cannot support them natively.
+  - Do not rely on these fallbacks for production runtime security guarantees.

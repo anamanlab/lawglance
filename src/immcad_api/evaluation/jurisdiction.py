@@ -18,7 +18,7 @@ _DISALLOWED_INDIA_TERMS = (
     "india",
 )
 
-# FCA decisions are served from the dedicated FCA decisions portal.
+# FCA decisions are served under decisions.fct-cf.gc.ca (fca-caf path), not a separate host.
 _ALLOWED_URL_MARKERS = (
     "canada.ca",
     "justice.gc.ca",
@@ -26,7 +26,6 @@ _ALLOWED_URL_MARKERS = (
     "github.com/canlii",
     "decisions.scc-csc.ca",
     "decisions.fct-cf.gc.ca",
-    "decisions.fca-caf.gc.ca",
 )
 
 

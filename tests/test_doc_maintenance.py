@@ -81,6 +81,22 @@ def test_inject_toc_replaces_existing_table_of_contents() -> None:
     assert result.updated_content.count("- [Alpha](#alpha)") == 1
 
 
+def test_inject_toc_replacement_normalizes_trailing_spacing() -> None:
+    content = (
+        "# Doc\n\n"
+        "## Table of Contents\n\n"
+        "- [Old](#old)\n\n\n"
+        "## Alpha\n\n"
+        "## Beta\n"
+    )
+
+    result = inject_toc(content, min_headings=2)
+
+    assert result.changed is True
+    assert "## Table of Contents\n\n- [Alpha](#alpha)\n- [Beta](#beta)\n## Alpha" in result.updated_content
+    assert "\n\n\n## Alpha" not in result.updated_content
+
+
 def test_validate_relative_link_reports_missing_anchor(tmp_path: Path) -> None:
     file_path = tmp_path / "docs" / "index.md"
     file_path.parent.mkdir()

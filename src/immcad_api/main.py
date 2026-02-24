@@ -22,7 +22,7 @@ from immcad_api.services import (
     scaffold_grounded_citations,
 )
 from immcad_api.settings import load_settings
-from immcad_api.sources import CanLIIClient
+from immcad_api.sources import CanLIIClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
 
@@ -148,6 +148,7 @@ def create_app() -> FastAPI:
         )
     )
     source_policy = load_source_policy()
+    source_registry = load_source_registry()
 
     has_api_bearer_token = bool(settings.api_bearer_token)
 
@@ -175,9 +176,23 @@ def create_app() -> FastAPI:
         request_path = request.url.path
         is_api_request = request_path.startswith("/api")
         is_ops_request = request_path.startswith("/ops")
-        requires_bearer_auth = has_api_bearer_token and (is_ops_request or is_api_request)
+        requires_bearer_auth = is_ops_request or (is_api_request and has_api_bearer_token)
         try:
             if requires_bearer_auth:
+                if is_ops_request and not has_api_bearer_token:
+                    error = ErrorEnvelope(
+                        error={
+                            "code": "UNAUTHORIZED",
+                            "message": "API_BEARER_TOKEN must be configured to access ops endpoints",
+                            "trace_id": request.state.trace_id,
+                        }
+                    )
+                    status_code = 401
+                    return JSONResponse(
+                        status_code=status_code,
+                        content=error.model_dump(),
+                        headers={"x-trace-id": request.state.trace_id},
+                    )
                 auth_header = request.headers.get("authorization", "")
                 expected = f"Bearer {settings.api_bearer_token}"
                 if not secrets.compare_digest(auth_header, expected):
@@ -282,7 +297,10 @@ def create_app() -> FastAPI:
         build_case_router(
             case_search_service,
             source_policy=source_policy,
+            source_registry=source_registry,
+            request_metrics=request_metrics,
             export_policy_gate_enabled=settings.export_policy_gate_enabled,
+            export_max_download_bytes=settings.export_max_download_bytes,
         )
     )
 

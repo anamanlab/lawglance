@@ -60,8 +60,8 @@ def _replace_existing_toc(content: str, toc: str) -> str:
     if not match:
         return content
     start, end = match.span()
-    replacement = toc
-    tail = content[end:]
+    replacement = toc.rstrip("\n") + "\n"
+    tail = content[end:].lstrip("\n")
     return content[:start] + replacement + tail
 
 

@@ -216,3 +216,53 @@ def test_load_settings_defaults_export_policy_gate_disabled(
 
     settings = load_settings()
     assert settings.export_policy_gate_enabled is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_defaults_export_policy_gate_enabled_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.delenv("EXPORT_POLICY_GATE_ENABLED", raising=False)
+
+    settings = load_settings()
+    assert settings.export_policy_gate_enabled is True
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_disabled_export_policy_gate_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "false")
+
+    with pytest.raises(ValueError, match="EXPORT_POLICY_GATE_ENABLED must be true"):
+        load_settings()
+
+
+def test_load_settings_has_default_export_max_download_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("EXPORT_MAX_DOWNLOAD_BYTES", raising=False)
+
+    settings = load_settings()
+    assert settings.export_max_download_bytes == 10 * 1024 * 1024
+
+
+def test_load_settings_rejects_non_positive_export_max_download_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("EXPORT_MAX_DOWNLOAD_BYTES", "0")
+
+    with pytest.raises(ValueError, match="EXPORT_MAX_DOWNLOAD_BYTES must be >= 1"):
+        load_settings()

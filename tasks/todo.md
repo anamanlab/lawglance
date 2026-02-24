@@ -235,94 +235,94 @@
 ### Track C — Runtime/API Hardening (`P0/P1`)
 - [x] `src/immcad_api/main.py`: protect `/ops` endpoints regardless of `API_BEARER_TOKEN` nullability.
 - [x] `src/immcad_api/settings.py`: hardened `CITATION_TRUSTED_DOMAINS` must reject comma-only/empty parsed values.
-- [ ] `app.py`: sanitize markdown citation fields (`title`, `pin`) and validate/allowlist URL schemes.
+- [x] `app.py`: sanitize markdown citation fields (`title`, `pin`) and validate/allowlist URL schemes.
 - [x] `src/immcad_api/policy/prompts.py`: include user question placeholder in `QA_PROMPT`.
 - [x] `src/immcad_api/policy/source_policy.py`: parse YAML/JSON based on file type (default path is `.yaml`).
-- [ ] `legacy_api_client.py`: narrow transport exception handling and log failures.
-- [ ] `legacy/local_rag/lawglance_main.py`: remove module-level `basicConfig`, use module logger, add cache TTL write.
+- [x] `legacy_api_client.py`: narrow transport exception handling and log failures.
+- [x] `legacy/local_rag/lawglance_main.py`: remove module-level `basicConfig`, use module logger, add cache TTL write.
 
 ### Track D — Ingestion/Source/Policy Correctness (`P1`)
-- [ ] `src/immcad_api/sources/canada_courts.py`:
+- [x] `src/immcad_api/sources/canada_courts.py`:
   - scalar text coercion in `_dict_text`,
   - dedupe recursion behavior in `_iter_json_item_dicts`,
   - catch parse/decode failures and convert to controlled validation outcome.
-- [ ] `scripts/scan_domain_leaks.py`: ensure fallback to root legacy file set if `legacy/local_rag` structure is missing.
-- [ ] `src/immcad_api/evaluation/jurisdiction.py`: remove incorrect `decisions.fca-caf.gc.ca` allow marker and clarify FCA hosting note.
-- [ ] `data/sources/canada-immigration/registry.json`: normalize SCC/FCA instrument text wording.
-- [ ] Align rights/citation policy docs and config:
+- [x] `scripts/scan_domain_leaks.py`: ensure fallback to root legacy file set if `legacy/local_rag` structure is missing.
+- [x] `src/immcad_api/evaluation/jurisdiction.py`: remove incorrect `decisions.fca-caf.gc.ca` allow marker and clarify FCA hosting note.
+- [x] `data/sources/canada-immigration/registry.json`: normalize SCC/FCA instrument text wording.
+- [x] Align rights/citation policy docs and config:
   - `docs/release/source-rights-matrix.md`,
   - `config/source_policy.yaml` (CANLII_TERMS, A2AJ, REFUGEE_LAW_LAB citation flags).
 
 ### Track E — Ops Alert Evaluator + URL/Value Semantics (`P1`)
-- [ ] `src/immcad_api/ops/alert_evaluator.py`:
+- [x] `src/immcad_api/ops/alert_evaluator.py`:
   - base URL normalization ordering in `build_metrics_url`,
   - treat bool metric values as non-numeric,
   - correct healthy/breach message semantics.
-- [ ] `scripts/vercel_env_sync.py`: tighten literal `\\n` trimming logic to avoid corrupting valid encoded values.
-- [ ] Update related tests:
+- [x] `scripts/vercel_env_sync.py`: tighten literal `\\n` trimming logic to avoid corrupting valid encoded values.
+- [x] Update related tests:
   - `tests/test_ops_alert_evaluator.py` (repo-root anchored config path),
   - `tests/test_ops_alerts_workflow.py` (path anchoring + cron assertion robustness).
 
 ### Track F — Makefile Hermeticity + Guardrails (`P1`)
-- [ ] `Makefile`:
+- [x] `Makefile`:
   - remove non-hermetic `ingestion-smoke` from mandatory `quality`,
   - add optional integration-quality target or flag-based inclusion,
   - add `TS` fail-fast guard for restore target usage,
   - pass `--environment $(ENV)` for `vercel-env-push-dry-run` if supported.
-- [ ] `docs/development-environment.md`: replace hardcoded restore timestamp with placeholder.
+- [x] `docs/development-environment.md`: replace hardcoded restore timestamp with placeholder.
 
 ### Track G — Doc-Maintenance Reliability (`P1/P2`)
-- [ ] `scripts/check_repository_hygiene.sh`: explicit `git grep` exit-code branching (`0/1/other`).
-- [ ] `scripts/doc_maintenance/audit.py`:
+- [x] `scripts/check_repository_hygiene.sh`: explicit `git grep` exit-code branching (`0/1/other`).
+- [x] `scripts/doc_maintenance/audit.py`:
   - recursive glob semantics (`**`) correctness,
   - subprocess timeout behavior and non-blocking git metadata reads,
   - prose-only word count (frontmatter/code/inlines/URLs handling).
-- [ ] `scripts/doc_maintenance/optimizer.py`:
+- [x] `scripts/doc_maintenance/optimizer.py`:
   - TOC replacement normalization,
   - TOC detection via regex not plain substring,
   - prevent self-referential TOC generation.
-- [ ] `scripts/doc_maintenance/styler.py`:
+- [x] `scripts/doc_maintenance/styler.py`:
   - skip fenced code links/line-length checks,
   - safe parsing for optional/invalid `max_line_length`.
-- [ ] `scripts/doc_maintenance/validator.py`:
+- [x] `scripts/doc_maintenance/validator.py`:
   - guarded local-anchor file read with error reporting.
 
 ### Track H — Test Contract Hardening (`P1/P2`)
-- [ ] `tests/test_api_scaffold.py`:
+- [x] `tests/test_api_scaffold.py`:
   - assert trace header in unsupported locale/mode validation path,
   - assert disclaimer on trusted-domain-constrained response path.
-- [ ] `tests/test_chat_service.py`:
+- [x] `tests/test_chat_service.py`:
   - enforce non-PII audit helper on grounding failure event,
   - add disclaimer/fallback/prompt-leak checks for untrusted-domain rejection,
   - add answer/prompt-leak assertions for trusted-domain acceptance path.
-- [ ] `tests/test_ingestion_jobs.py`: parametrize internal runtime behavior (`development` and `internal_runtime` or equivalent).
-- [ ] `tests/test_rate_limiters.py`: capture correct logger namespace.
-- [ ] `tests/test_canada_courts.py`: assert `court_code` is preserved.
-- [ ] `tests/test_ingestion_smoke_script.py`: add subprocess timeout and safer payload key assertions including `second_run["succeeded"]`.
-- [ ] `tests/test_prompt_compatibility.py`: robust spec/loader guards, `sys.modules` registration before `exec_module`.
-- [ ] `tests/test_legacy_runtime_convergence.py`: avoid runtime module import side effects (`find_spec` + static symbol checks), tighten forbidden import matching.
+- [x] `tests/test_ingestion_jobs.py`: parametrize internal runtime behavior (`development` and `internal_runtime` or equivalent).
+- [x] `tests/test_rate_limiters.py`: capture correct logger namespace.
+- [x] `tests/test_canada_courts.py`: assert `court_code` is preserved.
+- [x] `tests/test_ingestion_smoke_script.py`: add subprocess timeout and safer payload key assertions including `second_run["succeeded"]`.
+- [x] `tests/test_prompt_compatibility.py`: robust spec/loader guards, `sys.modules` registration before `exec_module`.
+- [x] `tests/test_legacy_runtime_convergence.py`: avoid runtime module import side effects (`find_spec` + static symbol checks), tighten forbidden import matching.
 
 ### Track I — Documentation and Task-Plan Consistency (`P2`)
-- [ ] `AGENTS.md`:
+- [x] `AGENTS.md`:
   - add `tasks/` entry under project structure,
   - fix numbered workflow list nested markdown indentation.
 - [ ] `tasks/todo.md`:
   - [ ] add missing `## Review` stubs for Framework Usage Audit and Rights Matrix task blocks.
   - [x] remove duplicate Source Policy Handoff Audit block.
-- [ ] `docs/architecture/09-documentation-automation.md`: clarify `docs-fix` only refreshes TOC and manual follow-up requirements.
-- [ ] `docs/research/README.md`: convert machine-specific absolute links to relative links.
-- [ ] `docs/research/canada-legal-ai-production-implementation-plan.md`:
+- [x] `docs/architecture/09-documentation-automation.md`: clarify `docs-fix` only refreshes TOC and manual follow-up requirements.
+- [x] `docs/research/README.md`: convert machine-specific absolute links to relative links.
+- [x] `docs/research/canada-legal-ai-production-implementation-plan.md`:
   - heading-level hierarchy fixes,
   - terminology/provider naming fixes (`vLex` vs `Lexum/CanLII API`),
   - timeline consistency across sections,
   - abbreviation definition (`Refugee Law Lab (RLL)`),
   - remove Context7 misattribution in section title/wording,
   - explicit freshness threshold cross-reference where ambiguous.
-- [ ] `docs/research/canada-legal-ai-source-and-ingestion-guide.md`:
+- [x] `docs/research/canada-legal-ai-source-and-ingestion-guide.md`:
   - ensure cross-document links resolve,
   - adjust Phase 1 citation threshold framing/path to 99%,
   - add explicit Refugee Law Lab search-indexing prohibition controls.
-- [ ] `docs/plans/2026-02-24-canada-legal-readiness-remediation-plan.md`:
+- [x] `docs/plans/2026-02-24-canada-legal-readiness-remediation-plan.md`:
   - declare concrete test file paths for tasks,
   - canonical fetch-policy config path contract,
   - final verification gate includes type-check and added test files.
@@ -664,3 +664,53 @@
 - Archive refs were created for all at-risk local/gone-upstream branches to prevent work loss.
 - `feature/source-registry-loader` content is functionally superseded by current `main` (core loader/tests already present and evolved).
 - `feature-api-scaffold` does not merge cleanly into current `main`; must be handled via selective extraction, not branch merge.
+
+---
+
+# Task Plan - 2026-02-24 - MVP Gaps and Launch Plan
+
+## Current Focus
+- Identify MVP-critical product and engineering gaps after recent policy/export gate work, then define a concrete launch plan with acceptance criteria.
+
+## Key Gaps / Risks (MVP)
+- [x] `Export gate default-off risk`: `EXPORT_POLICY_GATE_ENABLED` can disable enforcement if misconfigured in production.
+- [x] `Export fetch safety`: export route downloads full response in-memory; no size cap/streaming guard yet.
+- [x] `Redirect/domain trust`: export uses redirects; final URL/domain trust is not revalidated after redirect chain.
+- [x] `Auth posture consistency`: API auth behavior depends on `API_BEARER_TOKEN`; ensure production always sets and validates.
+- [x] `Operational visibility`: no explicit export audit metric/event in `/ops/metrics` for allow/deny/fetch-failure paths.
+- [x] `Runbook gap`: no concise operator runbook for env flags needed to launch safely (`API_BEARER_TOKEN`, `CITATION_TRUSTED_DOMAINS`, `EXPORT_POLICY_GATE_ENABLED`).
+- [x] `Workflow confidence`: ensure release/quality workflows execute all MVP-critical tests (export gate + policy + ops alerts).
+
+## Plan
+- [x] Phase 1 (P0): Lock production-safe defaults.
+- [x] Enforce export policy gate in production mode by default (or fail startup when production and gate disabled).
+- [x] Add settings validation tests for this production requirement.
+- [x] Phase 2 (P0): Harden export download path.
+- [x] Add max-download-size guard and reject oversized responses with clear error envelope.
+- [x] Revalidate effective/final URL host after redirects before returning payload.
+- [x] Add tests covering redirect-to-untrusted-host and oversized-export rejection.
+- [x] Phase 3 (P0/P1): Strengthen security and observability.
+- [x] Emit structured audit event/metric for export allow/deny/fetch-fail outcomes.
+- [x] Extend `/ops/metrics` counters for export policy decisions and failures.
+- [x] Add tests asserting metrics increment on blocked and successful export flows.
+- [x] Phase 4 (P1): Operational readiness and workflow gate coverage.
+- [x] Add/update operator runbook section with required env vars and safe defaults.
+- [x] Ensure quality/release workflows include `tests/test_export_policy_gate.py` in critical test set.
+- [x] Execute targeted validation suite and capture evidence.
+
+## MVP Exit Criteria
+- [x] Production startup fails if export gate is effectively disabled.
+- [x] Export endpoint enforces source policy and trusted-domain constraints with tests.
+- [x] Export endpoint has bounded memory/risk behavior (size limit or streaming) with tests.
+- [x] `/ops/metrics` reports export policy outcomes.
+- [x] CI required workflows run export/policy test suites and pass.
+
+## Review
+- Implemented production-safe settings enforcement for export policy gate and ops auth behavior.
+- Replaced export endpoint contract-only response with bounded download flow (size guard + redirect host revalidation + source registry host validation).
+- Added export outcome telemetry (`allowed`, `blocked`, `fetch_failures`, `too_large`, `policy_reasons`) to `/ops/metrics`.
+- Updated release gates workflow to run `tests/test_source_policy.py`, `tests/test_export_policy_gate.py`, and `tests/test_ops_alert_evaluator.py`.
+- Updated docs with hardened env requirements for export controls and ops metrics auth.
+- Validation evidence:
+  - `scripts/venv_exec.sh pytest -q tests/test_export_policy_gate.py tests/test_api_scaffold.py tests/test_source_policy.py tests/test_request_metrics.py tests/test_settings.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_ops_alert_evaluator.py tests/test_ops_alerts_workflow.py`
+  - Result: `96 passed`.

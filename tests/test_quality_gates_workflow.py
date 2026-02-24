@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-WORKFLOW_PATH = Path(".github/workflows/quality-gates.yml")
+WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "quality-gates.yml"
 REQUIRED_FRONTEND_QUALITY_STEPS = [
     "Install frontend dependencies",
     "Frontend build",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 import math
 from threading import Lock
 import time
@@ -24,6 +24,12 @@ class RequestMetrics:
         self._chat_requests = 0
         self._chat_fallbacks = 0
         self._chat_refusals = 0
+        self._export_attempts = 0
+        self._export_allowed = 0
+        self._export_blocked = 0
+        self._export_fetch_failures = 0
+        self._export_too_large = 0
+        self._export_policy_reasons: Counter[str] = Counter()
         self._latencies_ms: deque[float] = deque(maxlen=max_latency_samples)
 
     def record_api_response(self, *, status_code: int, duration_seconds: float) -> None:
@@ -42,6 +48,20 @@ class RequestMetrics:
             if refusal_used:
                 self._chat_refusals += 1
 
+    def record_export_outcome(self, *, outcome: str, policy_reason: str | None = None) -> None:
+        with self._lock:
+            self._export_attempts += 1
+            if outcome == "allowed":
+                self._export_allowed += 1
+            elif outcome == "blocked":
+                self._export_blocked += 1
+            elif outcome == "fetch_failed":
+                self._export_fetch_failures += 1
+            elif outcome == "too_large":
+                self._export_too_large += 1
+            if policy_reason:
+                self._export_policy_reasons[policy_reason] += 1
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             elapsed_seconds = max(self._time_fn() - self._started_at, 1e-9)
@@ -50,6 +70,12 @@ class RequestMetrics:
             chat_requests = self._chat_requests
             chat_fallbacks = self._chat_fallbacks
             chat_refusals = self._chat_refusals
+            export_attempts = self._export_attempts
+            export_allowed = self._export_allowed
+            export_blocked = self._export_blocked
+            export_fetch_failures = self._export_fetch_failures
+            export_too_large = self._export_too_large
+            export_policy_reasons = dict(self._export_policy_reasons)
             latencies = list(self._latencies_ms)
 
         request_rate_per_minute = (api_requests / elapsed_seconds) * 60.0
@@ -74,6 +100,14 @@ class RequestMetrics:
             "refusal": {
                 "total": chat_refusals,
                 "rate": refusal_rate,
+            },
+            "export": {
+                "attempts": export_attempts,
+                "allowed": export_allowed,
+                "blocked": export_blocked,
+                "fetch_failures": export_fetch_failures,
+                "too_large": export_too_large,
+                "policy_reasons": export_policy_reasons,
             },
             "latency_ms": {
                 "sample_count": len(latencies),

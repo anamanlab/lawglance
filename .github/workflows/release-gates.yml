@@ -25,6 +25,15 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Run backend policy and export guard tests
+        env:
+          PYTHONPATH: src
+        run: |
+          uv run pytest -q \
+            tests/test_source_policy.py \
+            tests/test_export_policy_gate.py \
+            tests/test_ops_alert_evaluator.py
+
       - name: Validate hardened runtime safety toggles
         env:
           ENVIRONMENT: ci

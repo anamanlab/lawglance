@@ -301,6 +301,7 @@ def test_safe_constrained_response_when_synthetic_citations_disabled(
     assert body["confidence"] == "low"
     assert body["answer"].startswith("I do not have enough grounded legal context")
     assert body["disclaimer"] == DISCLAIMER_TEXT
+    assert body["disclaimer"] == DISCLAIMER_TEXT
 
 
 def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_grounding_sources(
@@ -461,6 +462,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["errors"]["total"] >= 1
     assert request_metrics["refusal"]["total"] >= 1
     assert "fallback" in request_metrics
+    assert "export" in request_metrics
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
@@ -488,7 +490,7 @@ def test_ops_metrics_requires_auth_when_bearer_token_configured(
     assert authorized.status_code == 200
 
 
-def test_ops_metrics_does_not_require_auth_when_bearer_token_unset(
+def test_ops_metrics_requires_bearer_token_configuration_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
@@ -496,4 +498,8 @@ def test_ops_metrics_does_not_require_auth_when_bearer_token_unset(
 
     response = open_client.get("/ops/metrics")
 
-    assert response.status_code == 200
+    assert response.status_code == 401
+    body = response.json()
+    assert body["error"]["code"] == "UNAUTHORIZED"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]

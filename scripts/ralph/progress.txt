@@ -533,3 +533,27 @@ Started: 2026-02-23
   - Useful context
   - `./scripts/validate_architecture_docs.sh` catches stale architecture references quickly and should remain in the quality sequence for doc-heavy stories.
 ---
+## 2026-02-23 22:15:21 -0300 - US-012
+- What was implemented
+- Added staging end-to-end smoke coverage by extending `scripts/run_api_smoke_tests.sh` to validate chat submit, policy-refusal response contract, citation display payload shape, and related case-search output while capturing `x-trace-id` values into `artifacts/evals/staging-smoke-report.json`.
+- Updated staging and release workflows to run the smoke lane in `ENVIRONMENT=staging`, upload smoke artifacts (report + response payloads + server log), and emit rollback-runbook guidance on failure.
+- Added rollback trigger documentation at `docs/release/staging-smoke-rollback-criteria.md` and linked it from deployment/operations architecture docs.
+- Added regression tests to lock staging smoke workflow/script expectations and rollback guidance references.
+- Files changed
+- `.github/workflows/staging-smoke.yml`
+- `.github/workflows/release-gates.yml`
+- `scripts/run_api_smoke_tests.sh`
+- `docs/release/staging-smoke-rollback-criteria.md`
+- `docs/architecture/07-deployment-and-operations.md`
+- `tests/test_staging_smoke_workflow.py`
+- `tests/test_release_gates_workflow.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Persist smoke verification details to a machine-readable artifact (contracts + trace IDs) so workflow retries and incident triage share the same evidence source.
+  - Gotcha
+  - `ENVIRONMENT=ci` enforces `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`, which prevents citation-chip contract validation; staging smoke should run under `ENVIRONMENT=staging` for deterministic citation payload checks.
+  - Useful context
+  - The smoke script now writes `artifacts/evals/staging-smoke-report.json` and logs trace IDs for chat submit, refusal, and case search, which aligns directly with observability runbook correlation flow.
+---

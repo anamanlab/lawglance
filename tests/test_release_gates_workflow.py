@@ -9,6 +9,7 @@ REQUIRED_RELEASE_ARTIFACTS = [
     "artifacts/evals/jurisdictional-suite-report.json",
     "artifacts/evals/jurisdictional-suite-report.md",
     "artifacts/evals/frontend-test-summary.xml",
+    "artifacts/evals/staging-smoke-report.json",
 ]
 REQUIRED_FRONTEND_RELEASE_STEPS = [
     "Install frontend dependencies",
@@ -39,3 +40,9 @@ def test_release_gates_enforces_hardened_synthetic_citation_toggle() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Validate hardened runtime safety toggles" in workflow
     assert "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: \"false\"" in workflow
+
+
+def test_release_gates_links_staging_smoke_rollback_guidance() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "Rollback trigger guidance" in workflow
+    assert "docs/release/staging-smoke-rollback-criteria.md" in workflow

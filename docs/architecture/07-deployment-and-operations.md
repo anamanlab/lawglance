@@ -55,6 +55,7 @@ graph TD
   - Latency: `request_metrics.latency_ms.p95 > 8000` for 10 minutes.
 - Required runbook links:
   - Incident observability triage: `docs/release/incident-observability-runbook.md`
+  - Staging smoke rollback triggers: `docs/release/staging-smoke-rollback-criteria.md`
   - Backup/recovery operational targets: `docs/release/backup-and-recovery-operational-targets.md`
   - Ingestion checkpoint recovery: `docs/release/ingestion-checkpoint-recovery.md`
   - Legal release sign-off checklist: `docs/release/legal-review-checklist.md`

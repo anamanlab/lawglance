@@ -81,13 +81,20 @@ jobs:
       - name: Validate release evaluation artifacts
         run: uv run python scripts/validate_release_artifacts.py
 
-      - name: Run staging API smoke tests
+      - name: Run staging end-to-end smoke tests
         env:
           API_BEARER_TOKEN: release-smoke-token
-          ENVIRONMENT: ci
+          ENVIRONMENT: staging
           ENABLE_SCAFFOLD_PROVIDER: "true"
-          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
+          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"
+          STAGING_SMOKE_REPORT_PATH: artifacts/evals/staging-smoke-report.json
         run: bash scripts/run_api_smoke_tests.sh
+
+      - name: Rollback trigger guidance
+        if: failure()
+        run: |
+          echo "Staging smoke checks failed."
+          echo "Follow rollback trigger criteria in docs/release/staging-smoke-rollback-criteria.md."
 
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
@@ -103,3 +110,4 @@ jobs:
             artifacts/evals/jurisdictional-suite-report.json
             artifacts/evals/jurisdictional-suite-report.md
             artifacts/evals/frontend-test-summary.xml
+            artifacts/evals/staging-smoke-report.json

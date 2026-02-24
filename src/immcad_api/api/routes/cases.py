@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from fastapi import APIRouter, Request, Response
@@ -61,6 +61,22 @@ def build_case_router(
         safe_case = re.sub(r"[^A-Za-z0-9_.-]+", "-", case_id).strip("-") or "case"
         return f"{safe_source}-{safe_case}.{fmt}"
 
+    def _build_source_scoped_request_url(*, document_url: str, source_url: str) -> str:
+        document_parts = urlparse(document_url)
+        source_parts = urlparse(source_url)
+        scheme = source_parts.scheme or document_parts.scheme or "https"
+        netloc = source_parts.netloc
+        return urlunparse(
+            (
+                scheme,
+                netloc,
+                document_parts.path,
+                document_parts.params,
+                document_parts.query,
+                document_parts.fragment,
+            )
+        )
+
     @router.post("/search/cases", response_model=CaseSearchResponse)
     def search_cases(payload: CaseSearchRequest, request: Request, response: Response) -> CaseSearchResponse:
         trace_id = getattr(request.state, "trace_id", "")
@@ -107,9 +123,13 @@ def build_case_router(
                 policy_reason="export_url_not_allowed_for_source",
             )
 
+        request_url = _build_source_scoped_request_url(
+            document_url=str(payload.document_url),
+            source_url=str(source_entry.url),
+        )
         try:
             export_response = httpx.get(
-                str(payload.document_url),
+                request_url,
                 timeout=20.0,
                 follow_redirects=True,
             )

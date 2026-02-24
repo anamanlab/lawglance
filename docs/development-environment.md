@@ -147,7 +147,7 @@ CITATION_TRUSTED_DOMAINS=laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.ca
 Production/CI policy:
 
 - Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
-- `API_BEARER_TOKEN` is mandatory in `production`/`prod`/`ci`.
+- `IMMCAD_API_BEARER_TOKEN` is the canonical token variable and is mandatory in `production`/`prod`/`ci` (`API_BEARER_TOKEN` is supported only as a compatibility alias).
 - `CITATION_TRUSTED_DOMAINS` must be explicitly set in `production`/`prod`/`ci`.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
 

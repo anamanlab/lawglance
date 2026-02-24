@@ -102,10 +102,10 @@ These controls reflect common cross-vendor guidance (OpenAI Agents SDK, Anthropi
 
 ### Gate behavior
 
-1. Ingestion gate: block ingestion when source policy forbids environment (`internal` vs `production`).
-2. Retrieval gate: allow citation snippets when full export is disallowed.
-3. Export gate: deny full download when `export_fulltext_allowed=false`.
-4. Audit log: record blocked action, source, policy rule, and request ID.
+1. Ingestion gate: block ingestion when source policy marks `production_ingest_allowed: false` for production environment.
+2. Retrieval gate: suppress citations when `answer_citation_allowed: false`.
+3. Export gate: deny full download when `export_fulltext_allowed: false`.
+4. Audit log: record blocked action, source, and governing policy key (`production_ingest_allowed`, `answer_citation_allowed`, or `export_fulltext_allowed`) with request ID.
 
 ### Exit criteria
 
@@ -221,15 +221,22 @@ These controls reflect common cross-vendor guidance (OpenAI Agents SDK, Anthropi
 - If provider passes legal + technical review: add as Phase 2 fallback/coverage expansion.
 - If not: continue with official-source-first architecture and revisit quarterly.
 
+### Exit criteria
+
+- Provider diligence memo delivered by end of Week 4.
+- Legal review verdict (`proceed`/`defer`/`reject`) stored under `artifacts/compliance/provider-diligence/`.
+- Coverage/SLA threshold is met, or an explicit official-source-first fallback decision is documented.
+- Final go/no-go decision recorded before Week 4 production-promotion checkpoint.
+
 ## 9. Execution Timeline (Target)
 
 1. Week 1
 - Rights matrix finalization and policy gate implementation.
-- SCC/FC/FCA connector hardening, adapter implementation, and throttling configuration.
+- SCC/FC/FCA connector hardening: Day 3-4 adapters/validation/throttling implementation.
 - Start provider diligence.
 
 2. Week 2
-- SCC/FC/FCA connector hardening and safeguard integration.
+- SCC/FC/FCA connector hardening: Day 5-6 conformance tests and safeguard integration.
 - Conformance tests added in CI.
 
 3. Week 3

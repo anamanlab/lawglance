@@ -47,8 +47,8 @@ Known risk:
 
 Core requirements:
 
-- bearer-token protection for `/api/*` and `/ops/*` in hardened environments,
-- explicit trusted citation domain configuration in hardened environments,
+- bearer-token protection for `/api/*` and `/ops/*`,
+- explicit trusted citation domain configuration,
 - refusal policy for disallowed legal-advice/representation prompts,
 - source-policy gating for ingestion and export controls.
 
@@ -56,6 +56,8 @@ Controls:
 
 - schema validation + typed models,
 - rate limiting and abuse controls,
+- enforce TLS for all client/server and internal service communications, with explicit TLS version/cipher policy,
+- security-relevant audit logging for auth events, access denials/refusals, policy decisions, and relevant model outputs with tamper-evident storage and retention/access controls,
 - secrets in environment variables (not source),
 - policy and registry validation in CI.
 

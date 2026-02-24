@@ -1,4 +1,4 @@
-# Arc42 Overview (Project-Specific)
+# arc42 Overview (Project-Specific)
 
 ## Table of Contents
 
@@ -70,11 +70,11 @@ Latency, reliability, security, and telemetry expectations are defined in `06-qu
 
 ## 11. Risks and Technical Debt
 
-See `08-architecture-debt-and-improvement-plan.md` and `codebase-audit-plan-2026-02-24.md`.
+See `08-architecture-debt-and-improvement-plan.md` and `codebase-audit-plan.md`.
 
 ## 12. Glossary
 
 - ADR: Architecture Decision Record.
 - C4: Context/Container/Component/Code modeling framework.
-- Arc42: architecture documentation template and structure.
+- arc42: architecture documentation template and structure.
 - RAG: Retrieval-Augmented Generation.

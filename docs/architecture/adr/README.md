@@ -36,4 +36,4 @@ ADRs capture architecture decisions with context, alternatives, and trade-offs s
 
 - Review accepted ADRs when a core subsystem changes materially.
 - During release readiness, verify ADR set still reflects runtime reality.
-- Avoid editing history silently; prefer superseding ADRs for major changes.
+- Avoid editing history silently; if an ADR is changed or replaced, create a new ADR and mark the old ADR as `Superseded`.

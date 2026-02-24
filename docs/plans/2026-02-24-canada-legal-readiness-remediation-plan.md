@@ -1,7 +1,5 @@
 # Canada Legal Readiness Remediation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Close production-readiness gaps for SCC/FC/FCA ingestion and policy enforcement with release-blocking verification gates.
 
 **Architecture:** Keep the existing ingestion + policy architecture, but add a conformance layer that probes real endpoints and validates payload quality before release. Move court validation from brittle all-or-nothing rules to configurable acceptance thresholds backed by metrics and CI gates.
@@ -79,7 +77,8 @@
 **Step 3: Implement conformance script**
 - Probe SCC/FC/FCA endpoints.
 - Validate parseability and quality thresholds.
-- Emit JSON artifact with per-source status, HTTP response, parse stats, and timestamp.
+- CI secrets: explicitly inject credentials only when needed (`${{ secrets.DECISIA_API_KEY }}`, `${{ secrets.SCC_API_KEY }}`, `${{ secrets.FC_API_KEY }}`, `${{ secrets.FCA_API_KEY }}`).
+- Emit JSON artifact with per-source status and metadata only (HTTP status code, safe header subset, parse stats, timestamp); never include raw response body/tokens/session data.
 
 **Step 4: Wire CI gates**
 - Add workflow steps that run conformance in strict mode and fail pipeline on red status.
@@ -96,7 +95,7 @@
 **Files:**
 - Create: `src/immcad_api/ingestion/source_fetch_policy.py`
 - Modify: `src/immcad_api/ingestion/jobs.py`
-- Modify: `config/fetch_policy.yaml` (canonical fetch-policy config path; load via shared `CONFIG_FETCH_POLICY_PATH` constant/env override so runtime/tests use the same file)
+- Create: `config/fetch_policy.yaml` (canonical fetch-policy config path; load via shared `CONFIG_FETCH_POLICY_PATH` constant/env override so runtime/tests use the same file)
 - Test: `tests/test_ingestion_jobs.py`
 
 **Step 1: Write failing tests**
@@ -132,8 +131,11 @@
 - Expected: FAIL for new export-gate expectations.
 
 **Step 3: Implement gate wiring**
+- Add `EXPORT_POLICY_GATE_ENABLED` feature flag in `main.py` (default `false`).
 - Call `is_source_export_allowed` in export/download path.
-- Return policy-aware error envelope for blocked exports.
+- When flag is `false`, preserve legacy export behavior.
+- When flag is `true`, return policy-aware error envelope for blocked exports (`403` with `policy_reason`) so clients can distinguish policy blocks.
+- Rollout/deprecation: announce change, run 30-day opt-in testing window with flag default `false`, then 60-day gradual enforcement before considering a default flip.
 
 **Step 4: Re-run tests**
 - Run: `scripts/venv_exec.sh pytest -q tests/test_export_policy_gate.py`
@@ -184,6 +186,7 @@ scripts/venv_exec.sh pytest -q \
   tests/test_ingestion_jobs.py \
   tests/test_ingestion_smoke_script.py \
   tests/test_export_policy_gate.py \
+  tests/test_build_case_law_scorecard.py \
   tests/test_ops_alert_evaluator.py \
   tests/test_ops_alerts_workflow.py \
   tests/test_jurisdiction_suite.py

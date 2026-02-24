@@ -22,17 +22,19 @@ Single-provider dependency creates availability and resilience risks. The runtim
 
 ## Options Considered
 
+Options 1-3 are mutually exclusive base strategies:
+
 1. Single provider only.
 2. Provider abstraction with OpenAI primary and Gemini fallback.
 3. Equal-weight multi-provider routing always-on.
-4. Provider abstraction with dev-only scaffold fallback in addition to primary/fallback providers.
+4. Optional augmentation to Option 2: dev-only scaffold fallback in addition to primary/fallback providers.
 
 ## Decision
 
 Use provider abstraction with ordered fallback:
 
-- Primary provider: OpenAI (when enabled and selected as primary).
-- First fallback: Gemini.
+- Primary provider: OpenAI (when enabled and selected as primary). If the configured primary is unavailable/disabled, `ProviderRouter` deterministically promotes the next configured provider as the effective primary.
+- First fallback: Gemini (or next configured provider in deterministic order).
 - Optional non-production safety fallback: Scaffold provider.
 
 Provider order and failover are managed by `ProviderRouter` with circuit-breaker telemetry.
@@ -51,7 +53,7 @@ This improves runtime resilience while keeping behavior predictable and implemen
 
 - Positive: reduced dependency on a single upstream provider.
 - Negative: fallback behavior must be continuously observed and tuned.
-- Mitigation: standardized response schema, policy gate enforcement, provider telemetry, and release-gate checks.
+- Mitigation: standardized response schema, policy gate enforcement, circuit-breaker telemetry (ProviderRouter), and release-gate checks.
 
 ## Revisit Trigger
 

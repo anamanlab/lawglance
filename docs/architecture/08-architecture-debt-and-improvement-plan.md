@@ -8,11 +8,6 @@
 - [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
 - [Success Criteria](#success-criteria)
 
-- [Current Debt](#current-debt)
-- [Risk Assessment](#risk-assessment)
-- [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
-- [Success Criteria](#success-criteria)
-
 ## Current Debt
 
 1. Legacy Streamlit `app.py` is still present for local/dev workflows and requires continued deprecation controls to avoid production usage.
@@ -34,6 +29,16 @@
 3. **[MEDIUM] Legacy Decommissioning**: Keep Streamlit `app.py` marked dev-only in docs/tooling and route production traffic exclusively through `frontend-web` + `immcad_api`.
 4. **[MEDIUM] Observability Rollout**: Finalize the telemetry implementation in `src/immcad_api/telemetry` to capture all provider latency/error metrics.
 5. **[LOW] Quality Evaluation**: Implement the benchmark-based evaluation harness to score groundedness on 50 sample Canadian immigration queries.
+6. **[HIGH] Debt Item 4 - Automated Grounding Layer**
+   - Owner: backend-platform
+   - Priority: HIGH
+   - Scope: implement an MVP runtime grounding verification layer aligned with citation/refusal success criteria.
+   - Acceptance criteria: (a) every factual response is citation-validated or refused, (b) citation mismatch risk is tracked via release-gate metric, (c) staged rollout with rollback switch documented.
+7. **[LOW] Debt Item 5 - Notebook-Era Ingestion Artifacts**
+   - Owner: ingestion-platform
+   - Priority: LOW
+   - Scope: replace notebook-era ingestion paths with script-driven ETL and policy-gated execution.
+   - Acceptance criteria: (a) migration steps documented, (b) parity validation report produced, (c) rollback plan available and tested in staging.
 
 ## Success Criteria
 

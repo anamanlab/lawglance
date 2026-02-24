@@ -35,10 +35,10 @@
 2. Bearer auth and API rate-limiting gates are evaluated.
 3. Router dispatches to chat or case-search service.
 4. Chat path:
-- grounding candidates assembled,
-- provider routing executed with fallback policy,
-- citation/refusal policy enforcement applied,
-- structured telemetry emitted.
+  - grounding candidates assembled,
+  - provider routing executed with fallback policy,
+  - citation/refusal policy enforcement applied,
+  - structured telemetry emitted.
 5. Response returns with `x-trace-id`.
 
 ## Component Diagram
@@ -78,7 +78,7 @@ graph TD
 ## Architectural Constraints
 
 - Route layer must not call provider SDKs directly.
-- Hardened environments (`production/prod/ci`) require explicit bearer token and trusted citation domains.
+- Hardened environments (`production/prod`) require explicit bearer token and trusted citation domains.
 - Chat responses are policy-constrained and citation-validated before delivery.
 - Source ingestion is policy-gated by environment and source ID.
 - Architecture-affecting changes require matching updates to docs and ADRs.

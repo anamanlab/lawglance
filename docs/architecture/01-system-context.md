@@ -52,18 +52,19 @@ Out of scope:
 
 ```mermaid
 graph TD
-    USER[User] --> FE[Next.js Chat UI\nfrontend-web]
-    FE --> API[IMMCAD API\nFastAPI in src/immcad_api]
+    USER[User] --> FE[Next.js Chat UI<br>frontend-web]
+    FE --> API[IMMCAD API<br>FastAPI in src/immcad_api]
 
     API --> OAI[OpenAI Provider]
     API --> GEM[Gemini Provider]
-    API --> SCAF[Scaffold Provider\nnon-prod fallback]
+    API --> SCAF[Scaffold Provider<br>non-prod fallback]
 
     API --> CANLII[CanLII API]
     API --> VEC[Chroma Vector Store]
     API --> REDIS[Redis]
 
-    ING[Ingestion Jobs\nscripts/run_ingestion_jobs.py] --> SRC[Justice Laws / IRCC / Court Feeds]
+    ENGINEERING[Engineering Maintainers] --> ING[Ingestion Jobs<br>scripts/run_ingestion_jobs.py]
+    ING --> SRC[Justice Laws / IRCC / Court Feeds]
     ING --> VEC
 ```
 

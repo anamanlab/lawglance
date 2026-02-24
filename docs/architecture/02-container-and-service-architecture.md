@@ -53,7 +53,8 @@ This boundary remains extraction-ready if ingestion later becomes an independent
 ```mermaid
 graph LR
     U[User Browser] --> FE[frontend-web\nNext.js]
-    FE --> API[backend-api\nFastAPI]
+    FE --> BV[backend-vercel\nVercel wrapper]
+    BV --> API[backend-api\nFastAPI]
 
     API --> VEC[Chroma]
     API --> REDIS[Redis]
@@ -76,13 +77,16 @@ Detailed payload/response contracts are documented in `api-contracts.md`.
 
 ## Communication Patterns
 
-- Browser -> frontend/backend: HTTPS JSON.
+- Browser -> frontend-web -> backend-api: HTTPS JSON.
 - Backend -> external providers/sources: HTTPS with timeout/retry controls.
 - Backend -> Redis/Chroma: internal network connectivity.
 - Ingestion jobs -> registry/policy/source endpoints: scheduled/triggered script execution.
 
+Server-side proxy contract to backend API:
+- The browser communicates with `frontend-web`, and `frontend-web` proxies server-side requests to `backend-api`; browser clients do not call `backend-api` directly.
+
 ## Deployment Notes
 
 - Vercel wrapper (`backend-vercel`) boots the same FastAPI app code from `src/immcad_api`.
-- API bearer token and hardened runtime flags are mandatory in `production/prod/ci`.
+- API bearer token and hardened runtime flags are mandatory in `production/prod`.
 - CI quality and release gates validate architecture docs, ingestion smoke, and legal/policy artifacts.

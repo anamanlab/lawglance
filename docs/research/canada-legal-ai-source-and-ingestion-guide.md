@@ -64,7 +64,7 @@ Production execution details are in:
 
 ## 5. Detailed Findings by Source
 
-## 5.1 CanLII
+### 5.1 CanLII
 
 - API use remains valuable for:
   - Citation-level discovery
@@ -73,7 +73,7 @@ Production execution details are in:
 - Do not design architecture that depends on CanLII full-text API expansion.
 - Public statements and terms indicate strong restrictions against bulk/systematic extraction without permission.
 
-## 5.2 Supreme Court of Canada (SCC)
+### 5.2 Supreme Court of Canada (SCC)
 
 Verified endpoints:
 
@@ -89,7 +89,7 @@ Operational value:
 - Includes citation and metadata fields in JSON feed.
 - Direct document retrieval available.
 
-## 5.3 Federal Court (FC)
+### 5.3 Federal Court (FC)
 
 Verified endpoints:
 
@@ -109,11 +109,12 @@ Document retrieval:
 
 - Decision pages expose direct PDF download links using `document.do`.
 
-## 5.4 Federal Court of Appeal (FCA)
+### 5.4 Federal Court of Appeal (FCA)
 
 Verified:
 
 - Search endpoint works and supports `col=53`.
+- Operational note: `col=53` is a platform-managed Decisia collection identifier and may change; re-verify before connector implementation and keep an integration assertion that FCA collection metadata still resolves as expected.
 - Date navigation endpoint works:
   - `https://decisions.fca-caf.gc.ca/fca-caf/decisions/en/nav_date.do`
 - Decision rows include direct PDF `document.do` links.
@@ -122,7 +123,7 @@ Note:
 
 - A stable public RSS/JSON feed equivalent to SCC/FC was not conclusively verified for FCA during this audit.
 
-## 5.5 Immigration and Refugee Board (IRB)
+### 5.5 Immigration and Refugee Board (IRB)
 
 Findings:
 
@@ -134,7 +135,7 @@ Implication:
 
 - IRB ingestion should be modeled as selective and policy-driven, not assumed to be exhaustive.
 
-## 5.6 Open Government / CKAN
+### 5.6 Open Government / CKAN
 
 Verified:
 
@@ -143,7 +144,7 @@ Verified:
 - Useful for automated dataset discovery, update polling, and metadata synchronization.
 - IRB RPD open dataset is aggregate-oriented (for example: country/year/outcome/total), not full-text decisions.
 
-## 5.7 A2AJ and Refugee Law Lab (open/freemium accelerators)
+### 5.7 A2AJ and Refugee Law Lab (open/freemium accelerators)
 
 Verified:
 
@@ -165,7 +166,7 @@ Implication:
   - **Refugee Law Lab:** `internal-only` approved; `production` blocked pending legal sign-off.
   - Constraint tag for deployment decision table / policy metadata: `search-indexing-prohibited`.
 
-## 5.8 Crawler and feed reliability caveats
+### 5.8 Crawler and feed reliability caveats
 
 - SCC JSON feeds are suitable for incremental updates but do not replace historical backfill; use year/date navigation for full corpus synchronization.
 - FC RSS stream may contain cross-court citations in practice; enforce collection/citation validation in connector logic.
@@ -183,7 +184,7 @@ Minimum metadata fields to store per document:
 - `retrieved_at`
 - `license_type`
 - `rights_notes`
-- `commercial_redistribution_allowed` (boolean)
+- `commercial_redistribution_allowed` (`allowed` | `denied` | `pending_review`)
 - `internal_research_allowed` (boolean)
 - `citation_required_text`
 - `provenance_hash`
@@ -194,13 +195,13 @@ Enforcement controls:
 2. Allow answer-time citation snippets even when full export is blocked.
 3. Apply per-source robots/terms policy profile in connector config.
 4. Keep legal approval records per source in `artifacts/compliance/`.
-5. Require source-level license assertions (`official`, `unofficial`, `upstream-restricted`) before promoting documents to production retrieval.
+5. Treat `commercial_redistribution_allowed: pending_review` as blocked for production retrieval until compliance artifacts and source-level license assertions (`official`, `unofficial`, `upstream-restricted`) are present.
 6. For `Refugee Law Lab` (and any derivative serving path), enforce `search-indexing-prohibited` controls: authentication required, no anonymous/public storage access, and `noindex`/crawler-deny headers for any HTTP-exposed endpoints.
 7. Add automated checks/alerts for public hosting or crawler-accessible endpoints tied to `A2AJ`/`Refugee Law Lab` datasets before deployment promotion.
 
 ## 7. Target Architecture
 
-## 7.1 Ingestion lanes
+### 7.1 Ingestion lanes
 
 1. **Case-law lane**
    - SCC/FC/FCA connectors
@@ -212,7 +213,7 @@ Enforcement controls:
    - Curated domains only
    - Conditional requests (`ETag`, `Last-Modified`)
 
-## 7.2 Processing pipeline
+### 7.2 Processing pipeline
 
 1. Fetch
 2. Parse
@@ -223,7 +224,7 @@ Enforcement controls:
 7. Persist with provenance
 8. Evaluate quality gates
 
-## 7.3 Retrieval strategy
+### 7.3 Retrieval strategy
 
 - Hybrid retrieval:
   - Dense vector retrieval
@@ -235,7 +236,7 @@ Enforcement controls:
 
 ## 8. PDF and Website Ingestion Best Practices
 
-## 8.1 PDFs
+### 8.1 PDFs
 
 1. Detect text PDF vs scanned PDF.
 2. OCR only when required.
@@ -243,7 +244,7 @@ Enforcement controls:
 4. Keep original file hash and parser version.
 5. Store language tag and extraction confidence.
 
-## 8.2 Websites
+### 8.2 Websites
 
 1. Use source-specific selectors (avoid full-page noise).
 2. Use conditional GET (`ETag`/`Last-Modified`) to reduce re-fetch cost.
@@ -269,25 +270,25 @@ Implementation implication for IMMCAD:
 
 ## 10. Phased Delivery Plan
 
-## Phase 0: Compliance and source contracts (1 week)
+### Phase 0: Compliance and source contracts (1 week)
 
 - Finalize source rights matrix.
 - Define allowed uses per source.
 - Publish connector policy config template.
 
-## Phase 1: Public-source ingestion baseline (2-3 weeks)
+### Phase 1: Public-source ingestion baseline (2-3 weeks)
 
 - Ship SCC + FC + FCA connectors.
 - Add incremental sync and checkpointing.
 - Add source-level throttling and resilience.
 - Add optional A2AJ/RLL acceleration connectors behind feature flags and license-policy checks.
 
-## Phase 2: IRB and curated web sources (1-2 weeks)
+### Phase 2: IRB and curated web sources (1-2 weeks)
 
 - Add selective IRB ingestion policy.
 - Add curated website ingestion with change detection.
 
-## Phase 3: Commercial expansion (parallel procurement)
+### Phase 3: Commercial expansion (parallel procurement)
 
 - Evaluate vLex/Lexum and other licensed feeds.
 - Integrate licensed connector behind feature flag.

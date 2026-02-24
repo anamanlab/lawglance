@@ -31,6 +31,7 @@ class Settings:
     provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
     allow_scaffold_synthetic_citations: bool
+    export_policy_gate_enabled: bool
     citation_trusted_domains: tuple[str, ...]
     api_rate_limit_per_minute: int
     cors_allowed_origins: tuple[str, ...]
@@ -95,7 +96,11 @@ def load_settings() -> Settings:
     )
     raw_citation_trusted_domains = os.getenv("CITATION_TRUSTED_DOMAINS")
     parsed_citation_trusted_domains = (
-        tuple(item.strip() for item in raw_citation_trusted_domains.split(",") if item.strip())
+        tuple(
+            item.strip()
+            for item in raw_citation_trusted_domains.split(",")
+            if item.strip()
+        )
         if raw_citation_trusted_domains is not None
         else None
     )
@@ -161,6 +166,7 @@ def load_settings() -> Settings:
         ),
         enable_scaffold_provider=enable_scaffold_provider,
         allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
+        export_policy_gate_enabled=parse_bool_env("EXPORT_POLICY_GATE_ENABLED", False),
         citation_trusted_domains=citation_trusted_domains,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
         cors_allowed_origins=parse_csv_env(

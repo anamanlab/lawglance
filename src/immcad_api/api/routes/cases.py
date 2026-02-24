@@ -18,6 +18,7 @@ def build_case_router(
     case_search_service: CaseSearchService,
     *,
     source_policy: SourcePolicy,
+    export_policy_gate_enabled: bool = False,
 ) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["cases"])
 
@@ -34,6 +35,16 @@ def build_case_router(
         response: Response,
     ) -> CaseExportResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
+        if not export_policy_gate_enabled:
+            response.headers["x-trace-id"] = trace_id
+            return CaseExportResponse(
+                source_id=payload.source_id,
+                case_id=payload.case_id,
+                format=payload.format,
+                export_allowed=True,
+                policy_reason=None,
+            )
+
         export_allowed, policy_reason = is_source_export_allowed(
             payload.source_id,
             source_policy=source_policy,
@@ -48,8 +59,8 @@ def build_case_router(
                 }
             )
             return JSONResponse(
-                status_code=422,
-                content=error.model_dump(),
+                status_code=403,
+                content=error.model_dump(mode="json"),
                 headers={"x-trace-id": trace_id},
             )
 

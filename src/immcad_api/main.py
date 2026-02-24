@@ -278,7 +278,13 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    app.include_router(build_case_router(case_search_service, source_policy=source_policy))
+    app.include_router(
+        build_case_router(
+            case_search_service,
+            source_policy=source_policy,
+            export_policy_gate_enabled=settings.export_policy_gate_enabled,
+        )
+    )
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:

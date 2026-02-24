@@ -12,11 +12,25 @@ from immcad_api.policy.compliance import (
 )
 from immcad_api.errors import ProviderApiError
 from immcad_api.providers import ProviderError, ProviderRouter
-from immcad_api.schemas import ChatRequest, ChatResponse, FallbackUsed
+from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
 from immcad_api.services.grounding import GroundingAdapter, StaticGroundingAdapter
 
 
 AUDIT_LOGGER = logging.getLogger("immcad_api.audit")
+
+
+def _extract_rejected_citation_urls(citations: list[object]) -> tuple[str, ...]:
+    urls: list[str] = []
+    for citation in citations:
+        if isinstance(citation, Citation):
+            raw_url = citation.url
+        elif isinstance(citation, dict):
+            raw_url = citation.get("url")
+        else:
+            raw_url = None
+        if isinstance(raw_url, str) and raw_url.strip():
+            urls.append(raw_url.strip())
+    return tuple(urls)
 
 
 class ChatService:
@@ -93,7 +107,8 @@ class ChatService:
                 message_length=len(request.message),
                 provider=routed.result.provider,
                 provider_citation_count=len(routed.result.citations),
-                grounded_citation_count=len(citations),
+                candidate_citation_count=len(citations),
+                rejected_citation_urls=_extract_rejected_citation_urls(routed.result.citations),
             )
 
         fallback_provider = routed.result.provider if routed.fallback_used else None
@@ -122,7 +137,8 @@ class ChatService:
         provider: str | None = None,
         provider_error_code: str | None = None,
         provider_citation_count: int | None = None,
-        grounded_citation_count: int | None = None,
+        candidate_citation_count: int | None = None,
+        rejected_citation_urls: tuple[str, ...] | None = None,
     ) -> None:
         event: dict[str, object] = {
             "trace_id": trace_id or "",
@@ -137,6 +153,8 @@ class ChatService:
             event["provider_error_code"] = provider_error_code
         if provider_citation_count is not None:
             event["provider_citation_count"] = provider_citation_count
-        if grounded_citation_count is not None:
-            event["grounded_citation_count"] = grounded_citation_count
+        if candidate_citation_count is not None:
+            event["candidate_citation_count"] = candidate_citation_count
+        if rejected_citation_urls:
+            event["rejected_citation_urls"] = list(rejected_citation_urls)
         AUDIT_LOGGER.info("chat_audit_event", extra={"audit_event": event})

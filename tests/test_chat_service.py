@@ -239,7 +239,7 @@ def test_chat_service_logs_grounding_validation_failure_event(
     assert event["trace_id"] == "trace-grounding-event-001"
     assert event["provider"] == "scaffold"
     assert event["provider_citation_count"] == 1
-    assert event["grounded_citation_count"] == 1
+    assert event["candidate_citation_count"] == 1
     _assert_non_pii_audit_event(
         event=event,
         raw_message=payload.message,
@@ -249,7 +249,9 @@ def test_chat_service_logs_grounding_validation_failure_event(
         assert payload.message not in record.getMessage()
 
 
-def test_chat_service_rejects_citations_from_untrusted_domains() -> None:
+def test_chat_service_rejects_citations_from_untrusted_domains(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     untrusted_citation = Citation(
         source_id="CUSTOM",
         title="Custom Source",
@@ -269,7 +271,8 @@ def test_chat_service_rejects_citations_from_untrusted_domains() -> None:
         mode="standard",
     )
 
-    response = service.handle_chat(payload, trace_id="trace-untrusted-domain-001")
+    with caplog.at_level(logging.INFO, logger="immcad_api.audit"):
+        response = service.handle_chat(payload, trace_id="trace-untrusted-domain-001")
 
     assert response.citations == []
     assert response.confidence == "low"
@@ -277,6 +280,15 @@ def test_chat_service_rejects_citations_from_untrusted_domains() -> None:
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
     assert payload.message not in response.model_dump_json()
+    events = _audit_events(caplog)
+    assert events
+    event = events[-1]
+    assert event["event_type"] == "grounding_validation_failed"
+    assert event["trace_id"] == "trace-untrusted-domain-001"
+    assert event["provider"] == "scaffold"
+    assert event["candidate_citation_count"] == 1
+    assert event["provider_citation_count"] == 1
+    assert event["rejected_citation_urls"] == ["https://evil.example/legal"]
 
 
 def test_chat_service_accepts_citations_from_configured_trusted_domains() -> None:
@@ -305,4 +317,5 @@ def test_chat_service_accepts_citations_from_configured_trusted_domains() -> Non
     assert len(response.citations) == 1
     assert response.citations[0].url == "https://trusted.example/legal"
     assert response.confidence == "medium"
+    assert response.disclaimer == DISCLAIMER_TEXT
     assert payload.message not in response.model_dump_json()

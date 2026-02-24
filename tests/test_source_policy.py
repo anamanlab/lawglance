@@ -113,7 +113,7 @@ def test_source_export_policy_blocks_when_disabled() -> None:
     [
         ("production", "production"),
         ("prod", "production"),
-        ("ci", "production"),
+        ("ci", "internal"),
         ("staging", "internal"),
         ("development", "internal"),
         (None, "internal"),
@@ -121,4 +121,3 @@ def test_source_export_policy_blocks_when_disabled() -> None:
 )
 def test_normalize_runtime_environment(value: str | None, expected: str) -> None:
     assert normalize_runtime_environment(value) == expected
-

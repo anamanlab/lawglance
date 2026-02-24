@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from immcad_api.schemas import Citation
 
@@ -68,9 +68,20 @@ def _coerce_citation(value: Citation | dict[str, object] | object) -> Citation |
 
 
 def _citation_lookup_key(citation: Citation) -> tuple[str, str, str]:
+    parsed = urlparse(citation.url.strip())
+    normalized_url = urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
     return (
         citation.source_id.strip().lower(),
-        citation.url.strip().lower(),
+        normalized_url,
         citation.pin.strip().lower(),
     )
 
@@ -159,9 +170,13 @@ def enforce_citation_requirement(
     grounded_citations: list[Citation],
     trusted_domains: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[str, list[Citation], str]:
-    normalized_trusted_domains = normalize_trusted_domains(
-        trusted_domains if trusted_domains is not None else DEFAULT_TRUSTED_CITATION_DOMAINS
-    )
+    if not trusted_domains:
+        effective_trusted_domains: tuple[str, ...] | list[str] | None = (
+            DEFAULT_TRUSTED_CITATION_DOMAINS
+        )
+    else:
+        effective_trusted_domains = trusted_domains
+    normalized_trusted_domains = normalize_trusted_domains(effective_trusted_domains)
     validated_citations = verify_grounded_citations(
         citations,
         grounded_citations=grounded_citations,

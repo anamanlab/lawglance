@@ -71,7 +71,7 @@ class CaseExportResponse(BaseModel):
     case_id: str
     format: Literal["pdf"]
     export_allowed: bool
-    policy_reason: str
+    policy_reason: str | None = None
 
 
 class ErrorBody(BaseModel):

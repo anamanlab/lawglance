@@ -327,6 +327,30 @@ def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_ground
     assert body["answer"].startswith("I do not have enough grounded legal context")
 
 
+def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_grounding_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "canlii.org")
+    allowlist_client = TestClient(create_app())
+
+    response = allowlist_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What are the basic PR eligibility pathways?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["disclaimer"] == DISCLAIMER_TEXT
+
+
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
     throttled_client = TestClient(create_app())

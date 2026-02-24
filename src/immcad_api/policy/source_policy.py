@@ -86,7 +86,7 @@ def load_source_policy(path: str | Path | None = None) -> SourcePolicy:
 
 def normalize_runtime_environment(environment: str | None) -> RuntimeEnvironment:
     normalized = (environment or "development").strip().lower()
-    if normalized in {"production", "prod", "ci"}:
+    if normalized in {"production", "prod"}:
         return "production"
     return "internal"
 

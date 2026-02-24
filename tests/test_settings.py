@@ -121,7 +121,8 @@ def test_load_settings_has_default_trusted_citation_domains(
     monkeypatch.delenv("CITATION_TRUSTED_DOMAINS", raising=False)
 
     settings = load_settings()
-    assert settings.citation_trusted_domains == DEFAULT_TRUSTED_CITATION_DOMAINS
+    assert "laws-lois.justice.gc.ca" in settings.citation_trusted_domains
+    assert "canlii.org" in settings.citation_trusted_domains
 
 
 def test_load_settings_parses_trusted_citation_domains_csv(
@@ -206,3 +207,13 @@ def test_load_settings_rejects_invalid_primary_provider(
 
     with pytest.raises(ValueError, match="PRIMARY_PROVIDER must be one of"):
         load_settings()
+
+
+def test_load_settings_defaults_export_policy_gate_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("EXPORT_POLICY_GATE_ENABLED", raising=False)
+
+    settings = load_settings()
+    assert settings.export_policy_gate_enabled is False

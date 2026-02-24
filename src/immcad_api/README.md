@@ -35,7 +35,8 @@ Endpoints:
 - `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
 - `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
-- `CITATION_TRUSTED_DOMAINS` (CSV; default applies in development, but this must be explicitly set in `production`/`prod`/`ci`)
+- `EXPORT_POLICY_GATE_ENABLED` (optional, default `false`; when `true`, export endpoints enforce source-policy gate checks)
+- `CITATION_TRUSTED_DOMAINS` (CSV; default in development: `laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org`; must be explicitly set in `production`/`prod`/`ci`)
 - `SOURCE_POLICY_PATH` (optional; path override for ingestion source policy, defaults to `config/source_policy.yaml`)
 
 ## Notes

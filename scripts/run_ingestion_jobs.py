@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source-policy",
-        default=os.getenv("SOURCE_POLICY_PATH"),
+        default=os.getenv("SOURCE_POLICY_PATH") or "config/source_policy.yaml",
         help="Optional path to source policy JSON/YAML (defaults to config/source_policy.yaml).",
     )
     parser.add_argument(

@@ -12,6 +12,7 @@ required_files=(
   "docs/architecture/07-deployment-and-operations.md"
   "docs/architecture/08-architecture-debt-and-improvement-plan.md"
   "docs/architecture/09-documentation-automation.md"
+  "docs/architecture/10-architecture-analysis-and-governance.md"
   "docs/architecture/arc42-overview.md"
   "docs/architecture/api-contracts.md"
   "docs/architecture/adr/ADR-000-template.md"

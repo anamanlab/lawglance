@@ -11,14 +11,6 @@
 - [Consequences](#consequences)
 - [Revisit Trigger](#revisit-trigger)
 
-- [Context](#context)
-- [Options Considered](#options-considered)
-- [Decision](#decision)
-- [Rationale](#rationale)
-- [Trade-offs](#trade-offs)
-- [Consequences](#consequences)
-- [Revisit Trigger](#revisit-trigger)
-
 - Status: Proposed
 - Date: YYYY-MM-DD
 - Deciders: Team/Owner
@@ -57,3 +49,9 @@ Explain why this option best fits constraints and goals.
 ## Revisit Trigger
 
 Define measurable conditions that should trigger revisiting this ADR.
+
+## Implementation Checklist (Optional)
+
+- Related code/doc files updated in same PR
+- Relevant architecture doc links updated
+- Validation commands run (`scripts/validate_architecture_docs.sh`)

@@ -39,6 +39,45 @@ def _write_registry(path: Path) -> Path:
     return path
 
 
+def _write_court_registry(path: Path) -> Path:
+    payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "FC_DECISIONS",
+                "source_type": "case_law",
+                "instrument": "Federal Court Decisions Feed",
+                "url": "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do?req=3",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _mixed_fc_rss_payload() -> bytes:
+    return b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Doe v Canada, 2024 FC 10</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/987/index.do</link>
+      <pubDate>Mon, 19 Feb 2024 09:00:00 GMT</pubDate>
+      <description>Sample case description</description>
+    </item>
+    <item>
+      <title>Example without expected citation format</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/111/index.do</link>
+      <pubDate>Thu, 22 Feb 2024 12:00:00 GMT</pubDate>
+      <description>Missing citation text</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
 def test_run_ingestion_jobs_filters_by_cadence(tmp_path: Path) -> None:
     registry_path = _write_registry(tmp_path / "registry.json")
 
@@ -126,3 +165,47 @@ def test_run_ingestion_jobs_uses_checkpoint_conditional_context(tmp_path: Path) 
     assert second_report.failed == 0
     assert second_report.results[0].status == "not_modified"
     assert second_report.results[0].bytes_fetched == 0
+
+
+def test_run_ingestion_jobs_tolerates_small_court_invalid_ratio(tmp_path: Path) -> None:
+    registry_path = _write_court_registry(tmp_path / "court-registry.json")
+
+    def fetcher(source: SourceRegistryEntry, _: FetchContext) -> FetchResult:
+        assert source.source_id == "FC_DECISIONS"
+        return FetchResult(payload=_mixed_fc_rss_payload(), http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        fetcher=fetcher,
+        court_validation_max_invalid_ratio=0.50,
+        court_validation_min_valid_records=1,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.failed == 0
+    assert report.results[0].status == "success"
+    assert report.results[0].records_total == 2
+    assert report.results[0].records_valid == 1
+    assert report.results[0].records_invalid == 1
+
+
+def test_run_ingestion_jobs_fails_when_court_invalid_ratio_exceeds_threshold(tmp_path: Path) -> None:
+    registry_path = _write_court_registry(tmp_path / "court-registry.json")
+
+    def fetcher(source: SourceRegistryEntry, _: FetchContext) -> FetchResult:
+        assert source.source_id == "FC_DECISIONS"
+        return FetchResult(payload=_mixed_fc_rss_payload(), http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        fetcher=fetcher,
+        court_validation_max_invalid_ratio=0.25,
+        court_validation_min_valid_records=1,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 0
+    assert report.failed == 1
+    assert report.results[0].status == "error"
+    assert "invalid ratio" in (report.results[0].error or "")

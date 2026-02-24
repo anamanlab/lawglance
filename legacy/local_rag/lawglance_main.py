@@ -1,15 +1,18 @@
-import threading
-import logging
-from cache import RedisCache
-from langchain.schema import HumanMessage, AIMessage
-from chains import get_rag_chain
-from prompts import SYSTEM_PROMPT, QA_PROMPT
+"""Legacy local RAG orchestrator (deprecated).
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s %(levelname)s %(message)s',
-    handlers=[logging.StreamHandler()]
-)
+This module is retained for historical reference only.
+`app.py` now uses a backend thin-client flow against `immcad_api`.
+"""
+
+import logging
+import threading
+
+from .cache import RedisCache
+from .chains import get_rag_chain
+from .prompts import SYSTEM_PROMPT, QA_PROMPT
+
+logger = logging.getLogger(__name__)
+ANSWER_CACHE_TTL_SECONDS = 24 * 3600
 
 class Lawglance:
     """
@@ -50,9 +53,9 @@ class Lawglance:
         with Lawglance.store_lock:
             if session_id not in Lawglance.store:
                 Lawglance.store[session_id] = self.cache.get_chat_history(session_id)
-                logging.info(f"Created new chat history for session_id: {session_id}")
+                logger.info("Created new chat history for session_id: %s", session_id)
             else:
-                logging.debug(f"Using existing chat history for session_id: {session_id}")
+                logger.debug("Using existing chat history for session_id: %s", session_id)
         return Lawglance.store[session_id]
 
     def conversational(self, query, session_id):
@@ -68,11 +71,11 @@ class Lawglance:
         cache_key = self.cache.make_cache_key(query, session_id)
         cached_answer = self.cache.get(cache_key)
         if cached_answer:
-            logging.info(f"Cache hit for key: {cache_key}")
+            logger.info("Cache hit for key: %s", cache_key)
             chat_history = self.get_session_history(session_id).messages
             return cached_answer, chat_history
 
-        logging.info(f"Cache miss for key: {cache_key}. Generating new answer.")
+        logger.info("Cache miss for key: %s. Generating new answer.", cache_key)
 
         rag_chain = get_rag_chain(self.llm, self.vector_store, SYSTEM_PROMPT, QA_PROMPT)
 
@@ -91,6 +94,6 @@ class Lawglance:
         chat_history_obj.add_ai_message(answer)
 
         # Cache the answer
-        self.cache.set(cache_key, answer)
+        self.cache.set(cache_key, answer, ttl=ANSWER_CACHE_TTL_SECONDS)
 
         return answer, chat_history_obj.messages

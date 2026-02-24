@@ -11,10 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_SCAN_PATHS: tuple[str, ...] = (
     "app.py",
-    "cache.py",
-    "chains.py",
-    "lawglance_main.py",
-    "prompts.py",
+    "legacy/local_rag",
     "src/immcad_api",
     "docs",
 )
@@ -58,6 +55,14 @@ TERM_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (term, re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE))
     for term in DISALLOWED_TERMS
 )
+LEGACY_LOCAL_RAG_DIR = "legacy/local_rag"
+LEGACY_LOCAL_RAG_EXPECTED_FILES: tuple[str, ...] = (
+    "cache.py",
+    "chains.py",
+    "lawglance_main.py",
+    "prompts.py",
+)
+LEGACY_LOCAL_RAG_ROOT_FALLBACK_PATHS: tuple[str, ...] = LEGACY_LOCAL_RAG_EXPECTED_FILES
 
 
 @dataclass(frozen=True)
@@ -76,9 +81,36 @@ def _is_scannable_file(path: Path) -> bool:
     return path.is_file() and path.suffix.lower() in SCANNABLE_SUFFIXES
 
 
+def _expand_scan_paths_with_legacy_fallback(
+    *, repo_root: Path, scan_paths: Sequence[str]
+) -> tuple[str, ...]:
+    expanded: list[str] = []
+    for raw_path in scan_paths:
+        if raw_path != LEGACY_LOCAL_RAG_DIR:
+            expanded.append(raw_path)
+            continue
+
+        legacy_dir = (repo_root / LEGACY_LOCAL_RAG_DIR).resolve()
+        has_all_expected = legacy_dir.is_dir() and all(
+            (legacy_dir / filename).is_file() for filename in LEGACY_LOCAL_RAG_EXPECTED_FILES
+        )
+        if has_all_expected:
+            expanded.append(raw_path)
+            continue
+
+        if legacy_dir.exists():
+            expanded.append(raw_path)
+        expanded.extend(LEGACY_LOCAL_RAG_ROOT_FALLBACK_PATHS)
+    return tuple(expanded)
+
+
 def iter_candidate_files(*, repo_root: Path, scan_paths: Sequence[str]) -> Iterable[Path]:
     seen: set[Path] = set()
-    for raw_path in scan_paths:
+    expanded_scan_paths = _expand_scan_paths_with_legacy_fallback(
+        repo_root=repo_root,
+        scan_paths=scan_paths,
+    )
+    for raw_path in expanded_scan_paths:
         candidate = (repo_root / raw_path).resolve()
         if not candidate.exists():
             continue

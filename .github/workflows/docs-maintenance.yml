@@ -32,6 +32,7 @@ jobs:
 
       - name: Run docs audit
         env:
+          PYTHONPATH: src
           CHECK_EXTERNAL_LINKS: ${{ github.event.inputs.check_external_links || 'false' }}
         run: |
           set -euo pipefail

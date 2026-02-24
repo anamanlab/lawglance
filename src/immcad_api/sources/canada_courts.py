@@ -265,9 +265,9 @@ def validate_court_source_payload(
         LOGGER.warning("Court payload parse failed for %s", source_id, exc_info=exc)
         return CourtPayloadValidation(
             source_id=source_id,
-            records_total=1,
+            records_total=0,
             records_valid=0,
-            records_invalid=1,
+            records_invalid=0,
             errors=[f"payload_parse_error: {exc}"],
         )
 

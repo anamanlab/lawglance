@@ -142,8 +142,13 @@ def run_main(
     toc_min_headings = int(toc_cfg.get("min_headings", 4))
 
     for doc_path in files:
-        content = doc_path.read_text(encoding="utf-8")
         audit = analyze_markdown_file(doc_path, root_dir, config)
+        try:
+            content = doc_path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, PermissionError, OSError) as exc:
+            LOGGER.warning("Skipping unreadable file %s: %s", doc_path, exc)
+            audits.append(audit)
+            continue
 
         markdown_links, urls = extract_links(content)
         external_urls.update(urls)

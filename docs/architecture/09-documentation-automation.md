@@ -2,54 +2,76 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
 - [Automation Goals](#automation-goals)
-- [Tooling](#tooling)
+- [Maintenance Architecture](#maintenance-architecture)
+- [Validation Coverage](#validation-coverage)
+- [Operational Commands](#operational-commands)
+- [CI Integration](#ci-integration)
 - [Team Process](#team-process)
-- [Review Checklist](#review-checklist)
-- [Versioning and Change Management](#versioning-and-change-management)
-
-- [Automation Goals](#automation-goals)
-- [Tooling](#tooling)
-- [Team Process](#team-process)
-- [Review Checklist](#review-checklist)
-- [Versioning and Change Management](#versioning-and-change-management)
 
 ## Automation Goals
 
-- Keep architecture docs complete and synchronized with code evolution.
-- Validate required architecture sections and ADR presence in CI.
-- Generate a module dependency diagram from Python imports.
+- Keep architecture and product docs accurate, verifiable, and CI-enforced.
+- Detect stale architecture narratives when code changes.
+- Generate and validate diagram artifacts consistently.
+- Keep ADR and architecture-index navigation healthy.
 
-## Tooling
+## Maintenance Architecture
 
-- Diagram-as-code: Mermaid in markdown.
-- Validation script: `scripts/validate_architecture_docs.sh`.
-- Diagram generation script: `scripts/generate_module_dependency_diagram.py`.
-- CI workflow: `.github/workflows/architecture-docs.yml`.
+Documentation maintenance is implemented by `scripts/doc_maintenance/`:
+
+- `main.py`: orchestrates discovery, checks, optional fixes, and reports.
+- `audit.py`: freshness/content checks.
+- `validator.py`: internal/external link and asset checks.
+- `styler.py`: markdown style and heading structure checks.
+- `optimizer.py`: table-of-contents refresh.
+- `config.yaml`: rule thresholds and report paths.
+
+Architecture-specific helpers:
+
+- `scripts/generate_module_dependency_diagram.py` -> `docs/architecture/diagrams/generated-module-dependencies.mmd`
+- `scripts/validate_architecture_docs.sh` for required architecture files/ADRs/diagram presence.
+
+## Validation Coverage
+
+Current coverage includes:
+
+- required architecture file existence,
+- minimum ADR count,
+- minimum Mermaid diagram count,
+- generated dependency diagram presence,
+- markdown freshness/style/link checks,
+- artifact generation and upload in CI.
+
+## Operational Commands
+
+```bash
+make arch-generate
+make arch-validate
+make docs-audit
+make docs-fix
+```
+
+Advanced maintenance runs:
+
+```bash
+./scripts/venv_exec.sh python scripts/doc_maintenance/main.py --dry-run --check-external
+./scripts/venv_exec.sh python scripts/doc_maintenance/main.py --fix --fail-on medium
+```
+
+## CI Integration
+
+- `.github/workflows/architecture-docs.yml`
+  - regenerates module dependency diagram,
+  - validates architecture documentation bundle.
+- `.github/workflows/quality-gates.yml`
+  - runs docs maintenance audit,
+  - uploads maintenance artifacts.
 
 ## Team Process
 
-1. For architecture-impacting changes, update impacted docs under `docs/architecture/`.
-2. For major decisions, add a new ADR in `docs/architecture/adr/`.
-3. Run validation locally before PR:
-
-```bash
-./scripts/generate_module_dependency_diagram.py
-./scripts/validate_architecture_docs.sh
-```
-
-4. CI enforces this on pull requests.
-
-## Review Checklist
-
-- Context/container/component/data/security docs updated.
-- API contracts updated when interfaces change.
-- New decision captured in ADR with alternatives and trade-offs.
-- Generated module dependency diagram refreshed.
-
-## Versioning and Change Management
-
-- Architecture docs live with code and follow git history.
-- ADR status must be maintained (`Proposed`, `Accepted`, `Superseded`).
-- Superseded decisions should link forward to replacement ADR.
+1. Update architecture docs in the same PR as architecture-impacting code.
+2. Add or update ADRs for significant architecture decisions.
+3. Run `make arch-validate` and `make docs-audit` before opening PRs; use `make docs-fix` only to refresh generated TOCs (it does not fix broken links, stale content, missing alt text, or other audit findings).
+4. Review generated artifacts in CI for drift and unresolved issues; manually resolve non-TOC items listed in `artifacts/docs/doc-maintenance-report.md` (broken links, stale content, alt text, and similar audit findings) before merge.
+5. Keep `docs/architecture/README.md` and table of contents synchronized after major additions.

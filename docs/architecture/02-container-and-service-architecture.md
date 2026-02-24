@@ -2,78 +2,87 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Legacy and Development Container View](#legacy-and-development-container-view)
+- [Execution Topologies](#execution-topologies)
 - [Production Container View](#production-container-view)
+- [Local Development View](#local-development-view)
+- [Ingestion and Background Jobs](#ingestion-and-background-jobs)
 - [C4 Container Diagram](#c4-container-diagram)
 - [Service Boundaries and API Contracts](#service-boundaries-and-api-contracts)
 - [Communication Patterns](#communication-patterns)
 - [Deployment Notes](#deployment-notes)
 
-- [Legacy and Development Container View](#legacy-and-development-container-view)
-- [Production Container View](#production-container-view)
-- [C4 Container Diagram](#c4-container-diagram)
-- [Service Boundaries and API Contracts](#service-boundaries-and-api-contracts)
-- [Communication Patterns](#communication-patterns)
-- [Deployment Notes](#deployment-notes)
+## Execution Topologies
 
-## Legacy and Development Container View
+IMMCAD currently supports two practical execution modes:
 
-- `app.py`: Streamlit UI + orchestration bootstrap (legacy/dev-only).
-- `lawglance_main.py`: conversation flow, retrieval invocation, cache usage.
-- `chains.py`: history-aware retriever and RAG chain construction.
-- `cache.py`: Redis cache and chat history adapter.
-- Chroma local persistence in `chroma_db_legal_bot_part1/`.
+1. Production-oriented runtime: Next.js frontend + Python API service.
+2. Local developer runtime: same API + frontend, with optional legacy Streamlit thin client for troubleshooting.
 
 ## Production Container View
 
-1. `frontend-web` (Next.js + Tailwind)
-- Minimal chat UI.
-- Source chips/citation panel.
-- Session lifecycle and UX-only concerns.
+1. `frontend-web` (Next.js)
+- User-facing chat UI and case-search UX.
+- Server-side proxy contract to backend API.
 
-2. `backend-api` (Python)
-- Chat API and orchestration.
-- Retrieval, policy gates, provider routing, citation packaging.
+2. `backend-api` (FastAPI, `src/immcad_api`)
+- `/api/chat`, `/api/search/cases`, `/ops/metrics`, `/healthz`.
+- Request auth/rate limiting, policy checks, provider routing, telemetry.
 
-3. `ingestion-worker` (Python jobs)
-- Source ingestion and normalization.
-- Incremental refresh and re-index scheduling.
+3. Data dependencies
+- `chroma` for vector storage.
+- `redis` for rate-limiting/cache-related controls.
 
-4. Data services
-- `vector-store` (Chroma for MVP, swappable later).
-- `redis` for session and response cache.
-- Optional SQL metadata store (future milestone).
+## Local Development View
+
+- API: `make api-dev` (`uvicorn immcad_api.main:app`).
+- Frontend: `make frontend-dev`.
+- Legacy UI (`app.py`) is dev-only and forwards to backend API.
+
+## Ingestion and Background Jobs
+
+Ingestion is script-driven today, not a standalone deployed container:
+
+- `scripts/run_ingestion_jobs.py` executes cadence-based source ingestion.
+- `scripts/run_ingestion_smoke.py` provides deterministic smoke validation.
+- Checkpoint/state artifacts are persisted under `artifacts/ingestion/`.
+
+This boundary remains extraction-ready if ingestion later becomes an independent worker service.
 
 ## C4 Container Diagram
 
 ```mermaid
 graph LR
     U[User Browser] --> FE[frontend-web\nNext.js]
-    FE --> API[backend-api\nFastAPI service]
+    FE --> API[backend-api\nFastAPI]
+
     API --> VEC[Chroma]
     API --> REDIS[Redis]
-    API --> OAI[Primary Provider]
-    API --> GEM[Gemini Fallback]
-    API --> GX[Optional Grok]
+    API --> OAI[OpenAI]
+    API --> GEM[Gemini]
     API --> CANLII[CanLII API]
-    ING[ingestion-worker] --> SRC[Justice Laws + IRCC]
+
+    ING[Ingestion Jobs\nrun_ingestion_jobs.py] --> SRC[Justice/IRCC/Court Sources]
     ING --> VEC
 ```
 
 ## Service Boundaries and API Contracts
 
-- Public application API is documented in `api-contracts.md`.
-- CanLII access is encapsulated behind backend adapter, never directly from browser.
-- Provider SDK-specific logic stays inside `providers/` module.
+- Chat API: `POST /api/chat`
+- Case search API: `POST /api/search/cases`
+- Operations metrics: `GET /ops/metrics`
+- Health check: `GET /healthz`
+
+Detailed payload/response contracts are documented in `api-contracts.md`.
 
 ## Communication Patterns
 
-- UI to backend: HTTPS JSON.
-- Backend to providers and CanLII: HTTPS with retries and timeouts.
-- Backend to Redis/Chroma: local network connection.
+- Browser -> frontend/backend: HTTPS JSON.
+- Backend -> external providers/sources: HTTPS with timeout/retry controls.
+- Backend -> Redis/Chroma: internal network connectivity.
+- Ingestion jobs -> registry/policy/source endpoints: scheduled/triggered script execution.
 
 ## Deployment Notes
 
-- MVP can run as one backend process + one frontend process + Redis.
-- Migration-friendly boundaries allow extraction of ingestion worker and API service later.
+- Vercel wrapper (`backend-vercel`) boots the same FastAPI app code from `src/immcad_api`.
+- API bearer token and hardened runtime flags are mandatory in `production/prod/ci`.
+- CI quality and release gates validate architecture docs, ingestion smoke, and legal/policy artifacts.

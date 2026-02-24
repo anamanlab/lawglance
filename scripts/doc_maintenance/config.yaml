@@ -1,18 +1,54 @@
-root_docs: "docs"
-exclude_dirs:
-  - "node_modules"
-  - ".venv"
-  - ".git"
-  - ".pytest_cache"
+root_dir: "."
+
+include_paths:
+  - "README.md"
+  - "docs"
+  - "tasks"
+  - "src/immcad_api/README.md"
+  - "backend-vercel/src/immcad_api/README.md"
+
+exclude_globs:
+  - ".git/**"
+  - ".venv/**"
+  - ".pytest_cache/**"
+  - ".ruff_cache/**"
+  - ".tmp/**"
+  - "artifacts/**"
+  - "frontend-web/node_modules/**"
+  - "**/__pycache__/**"
+
 quality_thresholds:
-  min_word_count: 50
-  max_freshness_days: 90
+  min_word_count: 40
+  max_freshness_days: 180
+  stale_exceptions:
+    - "docs/architecture/adr/**"
+    - "tasks/**"
+
 style_rules:
   require_h1: true
   no_h1_skipping: true
   require_code_lang: true
+  require_descriptive_links: true
+  max_line_length: 160
+
+accessibility:
   require_alt_text: true
-validation:
-  retry_count: 3
-  timeout: 5
-report_file: "DOCS_AUDIT_REPORT.md"
+
+toc:
+  enabled: true
+  min_headings: 4
+
+external_link_validation:
+  enabled: false
+  timeout_seconds: 6
+  retry_count: 2
+  ignore_domains:
+    - "localhost"
+    - "127.0.0.1"
+
+gates:
+  fail_on: "high"
+
+reports:
+  markdown: "artifacts/docs/doc-maintenance-report.md"
+  json: "artifacts/docs/doc-maintenance-report.json"

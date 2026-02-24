@@ -13,6 +13,7 @@
 - [Daily workflow](#daily-workflow)
 - [Environment variables](#environment-variables)
 - [Redis (optional but recommended)](#redis-(optional-but-recommended))
+- [Vercel Environment Sync](#vercel-environment-sync)
 - [Troubleshooting](#troubleshooting)
 
 - [Supported baseline](#supported-baseline)
@@ -25,6 +26,7 @@
 - [Daily workflow](#daily-workflow)
 - [Environment variables](#environment-variables)
 - [Redis (optional but recommended)](#redis-(optional-but-recommended))
+- [Vercel Environment Sync](#vercel-environment-sync)
 - [Troubleshooting](#troubleshooting)
 
 This guide standardizes local development for IMMCAD.
@@ -57,7 +59,7 @@ make frontend-install
 make frontend-dev
 ```
 
-Legacy note: `app.py` (Streamlit) is dev-only and no longer the production path.
+Legacy note: `app.py` (Streamlit) is dev-only and no longer the production path. It now acts as a thin client to backend `/api/chat`.
 
 ## Manual install prerequisites
 
@@ -115,6 +117,9 @@ The setup script performs:
 
 # Lint and test
 make quality
+
+# Documentation quality checks
+make docs-audit
 ```
 
 Run services in separate terminals when actively developing:
@@ -134,12 +139,16 @@ Use `.env.example` as baseline:
 ```dotenv
 OPENAI_API_KEY=your-openai-api-key
 REDIS_URL=redis://localhost:6379/0
+IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
+CITATION_TRUSTED_DOMAINS=laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
 ```
 
 Production/CI policy:
 
 - Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
 - `API_BEARER_TOKEN` is mandatory in `production`/`prod`/`ci`.
+- `CITATION_TRUSTED_DOMAINS` must be explicitly set in `production`/`prod`/`ci`.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
 
 ## Redis (optional but recommended)
@@ -155,6 +164,50 @@ Stop and remove:
 ```bash
 docker stop immcad-redis && docker rm immcad-redis
 ```
+
+## Vercel Environment Sync
+
+Use `scripts/vercel_env_sync.py` to analyze, pull, diff, validate, push, and backup Vercel variables for linked projects.
+
+Typical project directories in this repo:
+
+- `frontend-web` (linked Vercel frontend project)
+- `backend-vercel` (linked Vercel backend project)
+
+Project-scoped templates:
+
+- `frontend-web/.env.example`
+- `backend-vercel/.env.example`
+
+Run directly:
+
+```bash
+python scripts/vercel_env_sync.py analyze --project-dir frontend-web
+python scripts/vercel_env_sync.py pull --project-dir frontend-web --environment production
+python scripts/vercel_env_sync.py diff --project-dir backend-vercel --environment production
+python scripts/vercel_env_sync.py validate --project-dir backend-vercel --environment production
+python scripts/vercel_env_sync.py push --project-dir backend-vercel --file .env.production --environment production
+python scripts/vercel_env_sync.py backup --project-dir backend-vercel
+```
+
+Or use Make targets:
+
+```bash
+make vercel-env-analyze PROJECT_DIR=frontend-web
+make vercel-env-pull PROJECT_DIR=frontend-web ENV=production
+make vercel-env-diff PROJECT_DIR=backend-vercel ENV=production
+make vercel-env-validate PROJECT_DIR=backend-vercel ENV=production
+make vercel-env-push-dry-run PROJECT_DIR=backend-vercel ENV=production
+make vercel-env-backup PROJECT_DIR=backend-vercel
+make vercel-env-restore PROJECT_DIR=backend-vercel TS=YYYYMMDD_HHMMSS
+```
+
+Notes:
+
+- `push` writes to Vercel; use `--dry-run` first. Without `--file`, `push` uses the script's default per-project file map (it can push multiple environments).
+- `pull` creates a local backup unless `--no-backup` is provided.
+- `validate` loads required keys from `<project-dir>/.env.example` and falls back to repo-root `.env.example`, plus explicit `--required` keys.
+- backup files are namespaced by project directory in `.env-backups/` to avoid collisions.
 
 ## Troubleshooting
 

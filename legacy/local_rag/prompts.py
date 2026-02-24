@@ -1,3 +1,8 @@
+"""Legacy prompt definitions (deprecated) for compatibility and evaluation.
+
+Production prompt/policy enforcement is centralized in `src/immcad_api/policy`.
+"""
+
 SYSTEM_PROMPT = """
 You are IMMCAD, an informational assistant for Canadian immigration and citizenship topics.
 
@@ -39,6 +44,8 @@ Guardrails:
   - If no reliable grounding exists in context, return a safe refusal.
   - Do not invent citations.
   - Do not output legal representation advice.
+
+Question: {input}
 
 Relevant Context:
 {context}

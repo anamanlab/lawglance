@@ -5,7 +5,7 @@ from datetime import date
 
 import httpx
 
-from immcad_api.errors import ProviderApiError
+from immcad_api.errors import SourceUnavailableError
 from immcad_api.schemas import CaseSearchRequest, CaseSearchResponse, CaseSearchResult
 
 
@@ -82,7 +82,7 @@ class CanLIIClient:
     def _fallback_or_error(self, request: CaseSearchRequest) -> CaseSearchResponse:
         if self.allow_scaffold_fallback:
             return self._fallback(request)
-        raise ProviderApiError("Case-law search is currently unavailable. Please retry later.")
+        raise SourceUnavailableError("Case-law source is currently unavailable. Please retry later.")
 
     def _extract_cases(self, payload) -> list[dict] | None:
         if not isinstance(payload, dict):

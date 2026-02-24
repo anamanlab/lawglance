@@ -308,3 +308,24 @@ Started: 2026-02-23
   - Useful context
   - `make` is unavailable in this environment; run the exact `quality` Makefile command sequence manually and in order.
 ---
+## 2026-02-23 21:10:08 -0300 - US-002
+- What was implemented
+- Added a dedicated hardened-mode source-unavailable contract for CanLII by introducing `SOURCE_UNAVAILABLE` errors (HTTP 503) when scaffold fallback is disabled, and updated API exception handling to preserve structured error codes from provider exceptions.
+- Added/updated tests to enforce hardened behavior across `production`/`prod`/`ci` and verify CanLII does not emit synthetic scaffold cases when unavailable in those modes.
+- Files changed
+- `src/immcad_api/errors.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/schemas.py`
+- `src/immcad_api/sources/canlii_client.py`
+- `tests/test_api_scaffold.py`
+- `tests/test_canlii_client.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Let provider-domain exceptions carry explicit `code`/`status` metadata and have a single global exception handler emit those values unchanged to keep API contracts precise.
+  - Gotcha
+  - Hardcoding provider error codes in shared handlers silently flattens distinct failure contracts (for example source unavailability vs generic provider failure).
+  - Useful context
+  - Hardened modes (`production`/`prod`/`ci`) now return `error.code = SOURCE_UNAVAILABLE` with HTTP 503 for unavailable CanLII source paths, while development keeps scaffold fallback behavior.
+---

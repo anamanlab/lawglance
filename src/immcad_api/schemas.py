@@ -62,6 +62,7 @@ class ErrorBody(BaseModel):
     code: Literal[
         "VALIDATION_ERROR",
         "PROVIDER_ERROR",
+        "SOURCE_UNAVAILABLE",
         "POLICY_BLOCKED",
         "RATE_LIMITED",
         "UNAUTHORIZED",

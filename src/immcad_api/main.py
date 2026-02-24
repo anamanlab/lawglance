@@ -217,9 +217,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(ProviderApiError)
     async def provider_exception_handler(request: Request, exc: ProviderApiError):
         trace_id = getattr(request.state, "trace_id", generate_trace_id())
-        payload = ErrorEnvelope(
-            error={"code": "PROVIDER_ERROR", "message": exc.message, "trace_id": trace_id}
-        )
+        payload = ErrorEnvelope(error={"code": exc.code, "message": exc.message, "trace_id": trace_id})
         return JSONResponse(
             status_code=exc.status_code,
             content=payload.model_dump(),

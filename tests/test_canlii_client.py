@@ -144,8 +144,11 @@ def test_canlii_raises_without_api_key_when_scaffold_fallback_disabled(monkeypat
     client = CanLIIClient(api_key=None, allow_scaffold_fallback=False)
     request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=2)
 
-    with pytest.raises(ProviderApiError, match="Case-law search is currently unavailable"):
+    with pytest.raises(ProviderApiError, match="Case-law source is currently unavailable") as exc_info:
         client.search_cases(request)
+
+    assert exc_info.value.code == "SOURCE_UNAVAILABLE"
+    assert exc_info.value.status_code == 503
 
 
 def test_canlii_raises_on_http_error_when_scaffold_fallback_disabled(monkeypatch) -> None:
@@ -157,5 +160,8 @@ def test_canlii_raises_on_http_error_when_scaffold_fallback_disabled(monkeypatch
     client = CanLIIClient(api_key="test-key", allow_scaffold_fallback=False)
     request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=2)
 
-    with pytest.raises(ProviderApiError, match="Case-law search is currently unavailable"):
+    with pytest.raises(ProviderApiError, match="Case-law source is currently unavailable") as exc_info:
         client.search_cases(request)
+
+    assert exc_info.value.code == "SOURCE_UNAVAILABLE"
+    assert exc_info.value.status_code == 503

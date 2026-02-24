@@ -342,16 +342,18 @@ def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
-def test_case_search_returns_provider_error_envelope_in_production_when_canlii_unavailable(
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_canlii_unavailable(
     monkeypatch: pytest.MonkeyPatch,
+    environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.delenv("CANLII_API_KEY", raising=False)
-    production_client = TestClient(create_app())
+    hardened_client = TestClient(create_app())
 
-    response = production_client.post(
+    response = hardened_client.post(
         "/api/search/cases",
         headers={"Authorization": "Bearer secret-token"},
         json={
@@ -362,9 +364,9 @@ def test_case_search_returns_provider_error_envelope_in_production_when_canlii_u
         },
     )
 
-    assert response.status_code == 502
+    assert response.status_code == 503
     body = response.json()
-    assert body["error"]["code"] == "PROVIDER_ERROR"
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 

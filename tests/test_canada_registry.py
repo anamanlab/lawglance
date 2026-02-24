@@ -39,3 +39,25 @@ def test_registry_source_shape_and_values() -> None:
         assert entry.get("instrument")
         assert entry.get("url", "").startswith("https://")
         assert entry.get("update_cadence") in allowed_cadence
+
+
+def test_registry_uses_canonical_tribunal_and_compliance_urls() -> None:
+    payload = _load_registry()
+    source_urls = {
+        entry["source_id"]: entry["url"]
+        for entry in payload.get("sources", [])
+        if entry.get("source_id") and entry.get("url")
+    }
+
+    expected = {
+        "IRB_ID_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-229/index.html",
+        "IRB_IAD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2002-230/index.html",
+        "IRB_RPD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-256/index.html",
+        "IRB_RAD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-257/index.html",
+        "PIPEDA": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
+        "CASL": "https://laws-lois.justice.gc.ca/eng/acts/E-1.6/",
+        "CANLII_TERMS": "https://www.canlii.org/info/terms.html",
+    }
+
+    for source_id, expected_url in expected.items():
+        assert source_urls[source_id] == expected_url

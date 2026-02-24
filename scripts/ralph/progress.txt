@@ -291,3 +291,20 @@ Started: 2026-02-23
   - Useful context
   - Refusal responses are `200` chat payloads with `fallback_used.reason = "policy_block"`; only transport failures use `ErrorEnvelope` with `error.trace_id`.
 ---
+## 2026-02-23 21:06:53 -0300 - US-001
+- What was implemented
+- Corrected authoritative compliance source links in the Canada source registry by replacing the stale CASL URL with the canonical Justice Laws Act reference and updating CanLII Terms to its canonical terms page.
+- Added targeted registry tests to assert canonical tribunal/compliance URLs for IRB rules plus PIPEDA/CASL/CanLII Terms.
+- Files changed
+- `data/sources/canada-immigration/registry.json`
+- `tests/test_canada_registry.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Add explicit canonical URL assertions for compliance-critical source IDs so link regressions are caught by unit tests instead of downstream runtime checks.
+  - Gotcha
+  - A source URL can satisfy trusted-domain checks but still be stale (CASL returned HTTP 404), so validate endpoint health before treating it as canonical.
+  - Useful context
+  - `make` is unavailable in this environment; run the exact `quality` Makefile command sequence manually and in order.
+---

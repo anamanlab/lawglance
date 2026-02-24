@@ -76,7 +76,7 @@
       "source_id": "CASL",
       "source_type": "statute",
       "instrument": "Canada's Anti-Spam Legislation",
-      "url": "https://www.canada.ca/en/services/business/regulations/federallyregulatedindustrysectors/anti-spam-legislation.html",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/E-1.6/",
       "update_cadence": "weekly"
     },
     {
@@ -118,7 +118,7 @@
       "source_id": "CANLII_TERMS",
       "source_type": "policy",
       "instrument": "CanLII Terms of Use",
-      "url": "https://www.canlii.org/en/info/terms-of-use.html",
+      "url": "https://www.canlii.org/info/terms.html",
       "update_cadence": "weekly"
     }
   ]

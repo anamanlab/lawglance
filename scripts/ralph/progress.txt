@@ -368,3 +368,21 @@ Started: 2026-02-23
   - Useful context
   - In this environment `make` is unavailable; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
 ---
+## 2026-02-23 21:20:01 -0300 - US-005
+- What was implemented
+- Expanded policy refusal matching to cover additional representation, filing-on-behalf, and guarantee phrasing variants while keeping neutral informational prompts allowed.
+- Added broader blocked/allowed unit test coverage and extended chat service refusal-contract coverage so newly blocked guarantee phrasing still returns the standard refusal/disclaimer contract.
+- Files changed
+- `src/immcad_api/policy/compliance.py`
+- `tests/test_policy_compliance.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Expand refusal regexes together with paired blocked+allowed prompt tests to increase safety coverage without introducing false positives.
+  - Gotcha
+  - Guarantee-related wording appears in neutral informational questions too, so refusal patterns should target representation/personal-outcome intent rather than generic legal discussion terms.
+  - Useful context
+  - `make` is unavailable in this environment; execute the exact Makefile `quality` command chain in-order as the required equivalent gate.
+---

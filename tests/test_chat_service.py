@@ -61,11 +61,21 @@ def _assert_non_pii_audit_event(
     assert raw_message not in serialized
 
 
-def test_chat_service_emits_policy_block_audit_event(caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Please represent me and file my application",
+        "Can you promise my citizenship approval?",
+    ],
+)
+def test_chat_service_emits_policy_block_audit_event(
+    caplog: pytest.LogCaptureFixture,
+    message: str,
+) -> None:
     service = ChatService(_StaticRouter(citations=[]))
     payload = ChatRequest(
         session_id="session-123456",
-        message="Please represent me and file my application",
+        message=message,
         locale="en-CA",
         mode="standard",
     )

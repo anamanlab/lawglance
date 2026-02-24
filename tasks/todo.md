@@ -629,11 +629,17 @@
 - [x] Create redundant filesystem and git-diff safety snapshots before any reconciliation.
 - [x] Audit local worktrees, local branches, remote branches, and divergence from `origin/main`.
 - [x] Move dirty state off `main` into a dedicated reconciliation branch.
-- [ ] Group changes into reviewable commits by domain (runtime/policy, CI/ops, docs maintenance, legacy migration, architecture/research docs).
-- [ ] Run lint + targeted/full tests and capture evidence.
-- [ ] Perform self-review on each commit (diff sanity + regression scan).
-- [ ] Update local `main` to `origin/main`, merge reconciliation branch, and verify clean state.
-- [ ] Push branch and/or merged `main` to remote; report any push blockers.
+- [x] Group changes into reviewable commits by domain (runtime/policy, CI/ops, docs maintenance, legacy migration, architecture/research docs).
+- [x] Run lint + targeted/full tests and capture evidence.
+- [x] Perform self-review on each commit (diff sanity + regression scan).
+- [x] Update local `main` to `origin/main`, merge reconciliation branch, and verify clean state.
+- [x] Push branch and/or merged `main` to remote; report any push blockers.
 
 ## Review
-- [pending]
+- Created and validated a 7-commit stack on top of `origin/main` covering runtime policy gates, CI/ops hardening, docs tooling resilience, legacy runtime convergence, architecture/readiness docs, repo/env hygiene, and post-integration test deduplication.
+- Validation evidence:
+  - `PYTHONPATH=.:src uv run pytest -q` -> `202 passed`
+  - `PYTHONPATH=.:src uv run ruff check <python files changed vs merge-base>` -> pass
+  - `PYTHONPATH=.:src uv run python scripts/doc_maintenance/main.py --config scripts/doc_maintenance/config.yaml --dry-run` -> pass
+- Merged into local `main` and pushed to `origin/main` (`5847ff1..4a7aedd`).
+- Residual local-only artifacts intentionally retained: `.ai/` snapshot backups (untracked).

@@ -37,41 +37,59 @@ type SupportContext = {
 type ErrorCopy = {
   title: string;
   detail: string;
+  action: string;
+  retryable: boolean;
 };
 
 const ERROR_COPY: Record<ApiErrorCode, ErrorCopy> = {
   UNAUTHORIZED: {
     title: "Authentication required",
     detail: "Confirm the frontend bearer token matches the API configuration.",
+    action: "Update credentials and submit the question again.",
+    retryable: true,
   },
   VALIDATION_ERROR: {
     title: "Request validation failed",
     detail: "The request payload did not pass API validation checks.",
+    action: "Use a shorter, plain-language question and retry.",
+    retryable: true,
   },
   PROVIDER_ERROR: {
     title: "Provider unavailable",
     detail: "The upstream provider is temporarily unavailable. Please retry.",
+    action: "Retry shortly. If this repeats, share the trace ID with support.",
+    retryable: true,
   },
   SOURCE_UNAVAILABLE: {
     title: "Source unavailable",
     detail: "Authoritative case-law source is unavailable in hardened mode.",
+    action: "Retry later when the source is back online.",
+    retryable: true,
   },
   POLICY_BLOCKED: {
     title: "Policy-blocked request",
     detail: "The request violates policy constraints and cannot be completed.",
+    action: "Ask for general information instead of personalized strategy or representation.",
+    retryable: false,
   },
   RATE_LIMITED: {
     title: "Rate limited",
     detail: "Request quota exceeded. Wait briefly before submitting again.",
+    action: "Wait a moment, then retry the same question.",
+    retryable: true,
   },
   UNKNOWN_ERROR: {
     title: "Unexpected error",
     detail: "The API returned an unknown error state. Please retry.",
+    action: "Retry once. If it fails again, share the trace ID with support.",
+    retryable: true,
   },
 };
 
 const ASSISTANT_BOOTSTRAP_TEXT =
   "Welcome to IMMCAD. Ask a Canada immigration question to begin.";
+
+type SubmissionPhase = "idle" | "chat" | "cases";
 
 function buildSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -125,11 +143,15 @@ export function ChatShell({
   const [chatError, setChatError] = useState<{
     title: string;
     detail: string;
+    action: string;
+    retryable: boolean;
     traceId: string | null;
   } | null>(null);
+  const [retryPrompt, setRetryPrompt] = useState<string | null>(null);
   const [supportContext, setSupportContext] = useState<SupportContext | null>(null);
   const [relatedCases, setRelatedCases] = useState<CaseSearchResult[]>([]);
   const [relatedCasesStatus, setRelatedCasesStatus] = useState<string>("");
+  const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
 
   const apiClient = useMemo(
     () => createApiClient({ apiBaseUrl, bearerToken: apiBearerToken }),
@@ -149,29 +171,34 @@ export function ChatShell({
 
   const endpointLabel = useMemo(() => apiBaseUrl.replace(/\/+$/, ""), [apiBaseUrl]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-
+  const submitPrompt = async (
+    prompt: string,
+    options?: { isRetry?: boolean }
+  ): Promise<void> => {
     if (isSubmitting) {
       return;
     }
 
-    const trimmedDraft = draft.trim();
+    const trimmedDraft = prompt.trim();
     if (!trimmedDraft) {
       return;
     }
 
-    const userMessageId = nextMessageId("user", messageCounterRef);
+    if (!options?.isRetry) {
+      const userMessageId = nextMessageId("user", messageCounterRef);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        buildMessage(userMessageId, "user", trimmedDraft)
+      ]);
+      setDraft("");
+    }
 
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      buildMessage(userMessageId, "user", trimmedDraft)
-    ]);
-    setDraft("");
     setChatError(null);
+    setRetryPrompt(null);
     setRelatedCases([]);
     setRelatedCasesStatus("");
     setIsSubmitting(true);
+    setSubmissionPhase("chat");
 
     try {
       const chatResult = await apiClient.sendChatMessage({
@@ -186,8 +213,11 @@ export function ChatShell({
         setChatError({
           title: errorCopy.title,
           detail: chatResult.error.message || errorCopy.detail,
+          action: errorCopy.action,
+          retryable: errorCopy.retryable,
           traceId: chatResult.traceId,
         });
+        setRetryPrompt(errorCopy.retryable ? trimmedDraft : null);
         setSupportContext({
           endpoint: "/api/chat",
           status: "error",
@@ -219,10 +249,14 @@ export function ChatShell({
       });
 
       if (isPolicyRefusal) {
-        setRelatedCasesStatus("Policy refusal response returned. Case search skipped.");
+        setRelatedCasesStatus(
+          "Policy refusal response returned. Ask a general informational question to continue."
+        );
         return;
       }
 
+      setSubmissionPhase("cases");
+      setRelatedCasesStatus("Loading related case results...");
       const caseSearchResult = await apiClient.searchCases({
         query: trimmedDraft,
         jurisdiction: "ca",
@@ -232,7 +266,7 @@ export function ChatShell({
       if (!caseSearchResult.ok) {
         const errorCopy = ERROR_COPY[caseSearchResult.error.code];
         setRelatedCasesStatus(
-          `${errorCopy.title}: ${caseSearchResult.error.message || errorCopy.detail}`
+          `${errorCopy.title}: ${caseSearchResult.error.message || errorCopy.detail} (Trace ID: ${caseSearchResult.traceId ?? "Unavailable"})`
         );
         setSupportContext({
           endpoint: "/api/search/cases",
@@ -258,7 +292,20 @@ export function ChatShell({
       });
     } finally {
       setIsSubmitting(false);
+      setSubmissionPhase("idle");
     }
+  };
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    await submitPrompt(draft);
+  };
+
+  const onRetryLastRequest = (): void => {
+    if (!retryPrompt || isSubmitting) {
+      return;
+    }
+    void submitPrompt(retryPrompt, { isRetry: true });
   };
 
   return (
@@ -275,7 +322,18 @@ export function ChatShell({
         >
           <p className="font-semibold">{chatError.title}</p>
           <p className="mt-1">{chatError.detail}</p>
-          <p className="mt-2 text-xs">Trace ID: {chatError.traceId ?? "Unavailable"}</p>
+          <p className="mt-2 text-xs">{chatError.action}</p>
+          <p className="mt-1 text-xs">Trace ID: {chatError.traceId ?? "Unavailable"}</p>
+          {chatError.retryable && retryPrompt ? (
+            <button
+              className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:bg-red-500"
+              disabled={isSubmitting}
+              onClick={onRetryLastRequest}
+              type="button"
+            >
+              Retry last request
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -300,27 +358,48 @@ export function ChatShell({
               >
                 <p>{message.content}</p>
                 {message.author === "assistant" && message.isPolicyRefusal ? (
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                    Policy refusal response
-                  </p>
+                  <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                    <p className="font-semibold uppercase tracking-wide">
+                      Policy refusal response
+                    </p>
+                    <p className="mt-1">
+                      Rephrase the request as general immigration information (eligibility
+                      criteria, official process steps, or document requirements).
+                    </p>
+                    {message.traceId ? (
+                      <p className="mt-1 text-[11px] text-amber-800">
+                        Trace ID: {message.traceId}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {message.author === "assistant" && message.citations?.length ? (
                   <div className="mt-3 border-t border-slate-200 pt-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                       Sources
                     </p>
-                    <ul className="mt-2 space-y-2 text-xs">
+                    <ul className="mt-2 flex flex-wrap gap-2 text-xs">
                       {message.citations.map((citation) => (
-                        <li className="rounded-md bg-slate-50 p-2" key={`${message.id}-${citation.url}`}>
+                        <li key={`${message.id}-${citation.url}`}>
                           <a
-                            className="font-medium text-slate-900 underline underline-offset-2"
+                            aria-label={`Open citation: ${citation.title}${citation.pin ? ` (${citation.pin})` : ""}`}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-3 py-1.5 font-medium text-slate-900 underline-offset-2 transition hover:bg-slate-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             href={citation.url}
                             rel="noreferrer"
                             target="_blank"
                           >
-                            {citation.title}
+                            <span>{citation.title}</span>
+                            {citation.pin ? (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] text-slate-700">
+                                {citation.pin}
+                              </span>
+                            ) : null}
                           </a>
-                          <p className="mt-1 text-slate-600">{citation.pin}</p>
+                          {citation.snippet ? (
+                            <p className="mt-1 max-w-sm text-[11px] text-slate-600">
+                              {citation.snippet}
+                            </p>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -331,12 +410,23 @@ export function ChatShell({
                     {message.disclaimer}
                   </p>
                 ) : null}
-                {message.author === "assistant" && message.traceId ? (
+                {message.author === "assistant" && message.traceId && !message.isPolicyRefusal ? (
                   <p className="mt-2 text-[11px] text-slate-500">Trace ID: {message.traceId}</p>
                 ) : null}
               </article>
             </li>
           ))}
+          {isSubmitting ? (
+            <li className="flex justify-start">
+              <article className="max-w-[86%] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-ink md:max-w-[74%]">
+                <p className="animate-pulse text-slate-600">
+                  {submissionPhase === "cases"
+                    ? "Loading related case references..."
+                    : "Submitting your question..."}
+                </p>
+              </article>
+            </li>
+          ) : null}
         </ol>
       </div>
 
@@ -376,13 +466,26 @@ export function ChatShell({
           value={draft}
         />
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted">API target: {endpointLabel}</p>
+          <div>
+            <p className="text-xs text-muted">API target: {endpointLabel}</p>
+            {isSubmitting ? (
+              <p aria-live="polite" className="text-[11px] text-slate-500">
+                {submissionPhase === "cases"
+                  ? "Searching related cases..."
+                  : "Sending request..."}
+              </p>
+            ) : null}
+          </div>
           <button
             className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-500"
             disabled={isSubmitting}
             type="submit"
           >
-            {isSubmitting ? "Sending..." : "Send"}
+            {isSubmitting
+              ? submissionPhase === "cases"
+                ? "Loading..."
+                : "Sending..."
+              : "Send"}
           </button>
         </div>
       </form>

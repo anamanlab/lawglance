@@ -444,3 +444,21 @@ Started: 2026-02-23
   - Useful context
   - For strict trace-correlation requirements, treat `x-trace-id` as canonical and surface header/body mismatches explicitly in support context to flag integration defects early.
 ---
+## 2026-02-23 21:52:19 -0300 - US-008
+- What was implemented
+- Added accessible citation-chip rendering in `ChatShell` using interactive link pills with title/url/pin metadata and optional snippet text.
+- Added clear policy-refusal UX with actionable guidance plus trace-reference visibility in the assistant message flow.
+- Added recoverable error retry for chat submissions (`Retry last request`) and explicit loading states for submission and related-case fetch phases.
+- Verified UI behavior in browser using Playwright fallback screenshots for citation, refusal, error+retry, and mobile layouts.
+- Files changed
+- `frontend-web/components/chat-shell.tsx`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize chat send + retry through a single `submitPrompt()` path with an `isRetry` flag so state transitions stay consistent.
+  - Gotcha
+  - Browser verification against a local stub API needs CORS headers enabled or client-side fetch calls fail before UI states can render.
+  - Useful context
+  - UI verification artifacts were captured at `/tmp/immcad-us008-desktop-citations.png`, `/tmp/immcad-us008-desktop-refusal.png`, `/tmp/immcad-us008-desktop-error-retry.png`, and `/tmp/immcad-us008-mobile-home.png`.
+---

@@ -44,3 +44,30 @@
 - Updated `scripts/validate_architecture_docs.sh` to require the new architecture synthesis doc.
 - Verification:
   - `bash scripts/validate_architecture_docs.sh` -> PASS (`ADR count: 6`, `Mermaid diagrams: 8`)
+
+---
+
+# Task Plan - 2026-02-24 - Case-Law Conformance Runner (Feature 1)
+
+## Current Focus
+- Add a CI-facing SCC/FC/FCA conformance runner with warning-only `quality-gates` behavior and strict `release-gates` enforcement.
+
+## Plan
+- [x] Approve feature design and gating split.
+- [x] Create isolated worktree and rebase onto the correct court-validation baseline (`0642013`).
+- [x] Write feature design + implementation plan docs in `docs/plans/`.
+- [x] Add failing tests for conformance script/module behavior.
+- [x] Implement conformance evaluator module + CLI wrapper.
+- [x] Wire GitHub Actions workflows and workflow tests.
+- [x] Run targeted lint/tests and script smoke verification.
+
+## Review
+- Added `src/immcad_api/ops/case_law_conformance.py` and `scripts/run_case_law_conformance.py` for SCC/FC/FCA endpoint probing + parser conformance reporting with strict/warning modes.
+- Added `tests/test_case_law_conformance_script.py` (TDD) covering report classification and CLI exit-code behavior.
+- Updated `.github/workflows/quality-gates.yml` to run case-law conformance in warning-only mode and upload `artifacts/ingestion/case-law-conformance-report.json`.
+- Updated `.github/workflows/release-gates.yml` to run case-law conformance in strict mode and include the conformance report in release artifacts.
+- Updated workflow assertion tests to lock in the warning/strict split and artifact presence.
+- Verification:
+  - `./scripts/venv_exec.sh pytest -q tests/test_case_law_conformance_script.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> PASS (`13 passed`)
+  - `./scripts/venv_exec.sh ruff check src/immcad_api/ops/case_law_conformance.py scripts/run_case_law_conformance.py tests/test_case_law_conformance_script.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> PASS
+  - `./scripts/venv_exec.sh python scripts/run_case_law_conformance.py --output /tmp/case-law-conformance-report.json` -> PASS (non-strict exit `0`, live report `overall_status=fail` due current endpoint/data issues)

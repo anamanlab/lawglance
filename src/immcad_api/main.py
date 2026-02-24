@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from immcad_api.errors import AuthError, ProviderApiError
 from immcad_api.api.routes import build_case_router, build_chat_router
 from immcad_api.middleware.rate_limit import build_rate_limiter
+from immcad_api.policy.source_policy import load_source_policy
 from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
 from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import (
@@ -21,7 +22,7 @@ from immcad_api.services import (
     scaffold_grounded_citations,
 )
 from immcad_api.settings import load_settings
-from immcad_api.sources import CanLIIClient
+from immcad_api.sources import CanLIIClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
 
@@ -78,6 +79,8 @@ def _resolve_rate_limit_client_id(request: Request) -> str | None:
 
 def create_app() -> FastAPI:
     settings = load_settings()
+    source_policy = load_source_policy()
+    source_registry = load_source_registry()
 
     provider_registry = {
         "openai": OpenAIProvider(
@@ -270,7 +273,13 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    app.include_router(build_case_router(case_search_service))
+    app.include_router(
+        build_case_router(
+            case_search_service,
+            source_policy=source_policy,
+            source_registry=source_registry,
+        )
+    )
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:

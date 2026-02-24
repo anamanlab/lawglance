@@ -18,9 +18,7 @@ The goal is to help users quickly understand:
 
 The current codebase already provides a strong foundation:
 - Streamlit chat UI in `app.py`
-- RAG pipeline with LangChain + Chroma in `chains.py`
-- Session history + caching with Redis in `cache.py` and `lawglance_main.py` (legacy filename retained for compatibility during IMMCAD migration)
-- Prompt templates in `prompts.py`
+- Archived legacy local-RAG stack in `legacy/local_rag/` (for compatibility/evaluation only)
 
 ### Gaps to adapt for Canada
 
@@ -96,7 +94,7 @@ The repository is still jurisdiction-specific to Indian legal context and needs 
 
 ## Immediate next steps (recommended order)
 
-1. Replace domain prompts in `prompts.py` with Canadian immigration scope and strict disclaimer behavior.
+1. Keep canonical prompt ownership in `src/immcad_api/policy/prompts.py`.
 2. Create `data/sources/canada-immigration/` and ingest official IRPA/IRPR + IRCC sources.
 3. Rebuild vector store and validate retrieval quality on 30-50 benchmark questions.
 4. Add citation-required response template and fail-safe refusal when context is missing.

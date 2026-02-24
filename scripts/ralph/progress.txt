@@ -462,3 +462,27 @@ Started: 2026-02-23
   - Useful context
   - UI verification artifacts were captured at `/tmp/immcad-us008-desktop-citations.png`, `/tmp/immcad-us008-desktop-refusal.png`, `/tmp/immcad-us008-desktop-error-retry.png`, and `/tmp/immcad-us008-mobile-home.png`.
 ---
+## 2026-02-23 21:57:52 -0300 - US-009
+- What was implemented
+- Added a frontend contract-test harness with Vitest + Testing Library and deterministic fixtures for chat/case success, policy-refusal, and structured error envelopes.
+- Added API-client contract coverage for success responses, policy-refusal passthrough, and trace-id mismatch detection between `x-trace-id` and error body trace IDs.
+- Added ChatShell UI contract tests for citation chip rendering, refusal UX, retryable error state, and trace-id surfacing in both message/support contexts.
+- Wired frontend typecheck and contract tests into CI quality gates (`quality-gates.yml`) with Node setup and cached npm dependencies.
+- Files changed
+- `.github/workflows/quality-gates.yml`
+- `frontend-web/package.json`
+- `frontend-web/package-lock.json`
+- `frontend-web/vitest.config.ts`
+- `frontend-web/tests/api-client.contract.test.ts`
+- `frontend-web/tests/chat-shell.contract.test.tsx`
+- `frontend-web/tests/fixtures/chat-contract-fixtures.ts`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend contract fixtures in a dedicated `tests/fixtures` module so both API-client and UI tests assert the same deterministic payloads.
+  - Gotcha
+  - Vitest + jsdom test runs require explicit DOM cleanup between tests to avoid duplicated rendered roots and ambiguous element queries.
+  - Useful context
+  - `make` is unavailable in this environment; run the exact Makefile `quality` command chain in-order as the required equivalent gate before committing.
+---

@@ -142,9 +142,16 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
 }
 
 function buildApiUrl(apiBaseUrl: string, path: string): string {
-  const normalizedBaseUrl = apiBaseUrl.replace(/\/+$/, "");
+  const normalizedBaseUrl = apiBaseUrl.trim().replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${normalizedBaseUrl}${normalizedPath}`;
+
+  if (!normalizedBaseUrl || normalizedBaseUrl === "/") {
+    return `/api${normalizedPath}`;
+  }
+  if (normalizedBaseUrl.endsWith("/api")) {
+    return `${normalizedBaseUrl}${normalizedPath}`;
+  }
+  return `${normalizedBaseUrl}/api${normalizedPath}`;
 }
 
 function buildRequestHeaders(bearerToken?: string | null): Record<string, string> {
@@ -250,12 +257,12 @@ export function createApiClient(options: ApiClientOptions) {
     sendChatMessage(
       payload: ChatRequestPayload
     ): Promise<ApiResult<ChatResponsePayload>> {
-      return postJson<ChatResponsePayload>(options, "/api/chat", payload);
+      return postJson<ChatResponsePayload>(options, "/chat", payload);
     },
     searchCases(
       payload: CaseSearchRequestPayload
     ): Promise<ApiResult<CaseSearchResponsePayload>> {
-      return postJson<CaseSearchResponsePayload>(options, "/api/search/cases", payload);
+      return postJson<CaseSearchResponsePayload>(options, "/search/cases", payload);
     },
   };
 }

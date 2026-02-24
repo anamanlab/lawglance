@@ -74,6 +74,29 @@ describe("api client chat contract", () => {
     );
   });
 
+  it("uses proxy-safe path joining without double /api prefixes", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      );
+
+    const client = createApiClient({
+      apiBaseUrl: "/api",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/chat",
+      expect.objectContaining({
+        method: "POST",
+      })
+    );
+  });
+
   it("preserves policy refusal success envelope", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(CHAT_POLICY_REFUSAL_RESPONSE, {

@@ -1,8 +1,7 @@
-const DEV_DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const DEV_DEFAULT_API_BASE_URL = "/api";
 
 export type RuntimeConfig = {
   apiBaseUrl: string;
-  apiBearerToken: string | null;
 };
 
 function normalizeValue(value: string | undefined): string | undefined {
@@ -15,9 +14,9 @@ function ensureProductionSafeApiUrl(apiBaseUrl: string, nodeEnv: string): void {
     return;
   }
 
-  if (!apiBaseUrl.startsWith("https://")) {
+  if (!apiBaseUrl.startsWith("https://") && !apiBaseUrl.startsWith("/")) {
     throw new Error(
-      "NEXT_PUBLIC_IMMCAD_API_BASE_URL must start with https:// in production mode."
+      "NEXT_PUBLIC_IMMCAD_API_BASE_URL must start with https:// or / in production mode."
     );
   }
 }
@@ -25,13 +24,11 @@ function ensureProductionSafeApiUrl(apiBaseUrl: string, nodeEnv: string): void {
 export function getRuntimeConfig(): RuntimeConfig {
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const configuredBaseUrl = normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL);
-  const configuredBearerToken = normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN);
   const apiBaseUrl = configuredBaseUrl ?? DEV_DEFAULT_API_BASE_URL;
 
   ensureProductionSafeApiUrl(apiBaseUrl, nodeEnv);
 
   return {
     apiBaseUrl,
-    apiBearerToken: configuredBearerToken ?? null,
   };
 }

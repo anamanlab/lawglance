@@ -6,6 +6,7 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from immcad_api.errors import AuthError, ProviderApiError
@@ -119,6 +120,15 @@ def create_app() -> FastAPI:
     )
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_allowed_origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
+        expose_headers=["x-trace-id"],
+        max_age=600,
+    )
     request_metrics = RequestMetrics()
     rate_limiter = build_rate_limiter(
         limit_per_minute=settings.api_rate_limit_per_minute,

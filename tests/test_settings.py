@@ -59,3 +59,25 @@ def test_load_settings_allows_disabled_synthetic_citations_in_production(
 
     settings = load_settings()
     assert settings.allow_scaffold_synthetic_citations is False
+
+
+def test_load_settings_has_default_cors_origins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("CORS_ALLOWED_ORIGINS", raising=False)
+
+    settings = load_settings()
+    assert settings.cors_allowed_origins == ("http://127.0.0.1:3000", "http://localhost:3000")
+
+
+def test_load_settings_parses_cors_origins_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv(
+        "CORS_ALLOWED_ORIGINS",
+        "https://immcad.example, https://admin.immcad.example ,, ",
+    )
+
+    settings = load_settings()
+    assert settings.cors_allowed_origins == (
+        "https://immcad.example",
+        "https://admin.immcad.example",
+    )

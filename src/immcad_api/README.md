@@ -21,6 +21,7 @@ Endpoints:
 - `ENVIRONMENT` (optional, default `development`; use `production`/`prod`/`ci` for hardened mode)
 - `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
+- `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
 - `REDIS_URL` (optional, default `redis://localhost:6379/0`; used for distributed rate limiting when reachable)
 - `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
 - `GEMINI_MODEL` (optional, default `gemini-2.5-flash`)

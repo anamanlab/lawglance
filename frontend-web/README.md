@@ -12,12 +12,15 @@ Minimal Next.js App Router + Tailwind chat shell for IMMCAD (`US-006`).
 Create `frontend-web/.env.local`:
 
 ```bash
-NEXT_PUBLIC_IMMCAD_API_BASE_URL=http://127.0.0.1:8000
-NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
+NEXT_PUBLIC_IMMCAD_API_BASE_URL=/api
+IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
 ```
 
-For production, `NEXT_PUBLIC_IMMCAD_API_BASE_URL` must use `https://`.
-Set `NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN` when backend bearer auth is enabled.
+`NEXT_PUBLIC_IMMCAD_API_BASE_URL` should point to the local proxy route (`/api`) for browser calls.
+Set `IMMCAD_API_BEARER_TOKEN` on the server when backend bearer auth is enabled.
+Do not expose bearer tokens through `NEXT_PUBLIC_*` variables.
+For production, `IMMCAD_API_BASE_URL` must use `https://`.
 
 ## Run
 

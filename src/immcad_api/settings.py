@@ -24,6 +24,7 @@ class Settings:
     enable_scaffold_provider: bool
     allow_scaffold_synthetic_citations: bool
     api_rate_limit_per_minute: int
+    cors_allowed_origins: tuple[str, ...]
 
 
 def parse_float_env(name: str, default: float) -> float:
@@ -51,6 +52,16 @@ def parse_bool_env(name: str, default: bool) -> bool:
     if raw is None or not raw.strip():
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def parse_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    values = tuple(item.strip() for item in raw.split(",") if item.strip())
+    if not values:
+        return default
+    return values
 
 
 def load_settings() -> Settings:
@@ -95,4 +106,8 @@ def load_settings() -> Settings:
         enable_scaffold_provider=enable_scaffold_provider,
         allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
+        cors_allowed_origins=parse_csv_env(
+            "CORS_ALLOWED_ORIGINS",
+            ("http://127.0.0.1:3000", "http://localhost:3000"),
+        ),
     )

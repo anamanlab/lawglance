@@ -22,7 +22,6 @@ type ChatMessage = {
 
 type ChatShellProps = {
   apiBaseUrl: string;
-  apiBearerToken: string | null;
   legalDisclaimer: string;
 };
 
@@ -44,7 +43,7 @@ type ErrorCopy = {
 const ERROR_COPY: Record<ApiErrorCode, ErrorCopy> = {
   UNAUTHORIZED: {
     title: "Authentication required",
-    detail: "Confirm the frontend bearer token matches the API configuration.",
+    detail: "Confirm the backend authentication configuration is valid for this environment.",
     action: "Update credentials and submit the question again.",
     retryable: true,
   },
@@ -133,7 +132,6 @@ function buildMessage(
 
 export function ChatShell({
   apiBaseUrl,
-  apiBearerToken,
   legalDisclaimer
 }: ChatShellProps): JSX.Element {
   const sessionIdRef = useRef(buildSessionId());
@@ -153,10 +151,7 @@ export function ChatShell({
   const [relatedCasesStatus, setRelatedCasesStatus] = useState<string>("");
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
 
-  const apiClient = useMemo(
-    () => createApiClient({ apiBaseUrl, bearerToken: apiBearerToken }),
-    [apiBaseUrl, apiBearerToken]
-  );
+  const apiClient = useMemo(() => createApiClient({ apiBaseUrl }), [apiBaseUrl]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     buildMessage(

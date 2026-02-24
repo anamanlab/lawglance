@@ -56,7 +56,6 @@ describe("chat shell contract behavior", () => {
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
-        apiBearerToken={null}
         legalDisclaimer={LEGAL_DISCLAIMER}
       />
     );
@@ -92,7 +91,6 @@ describe("chat shell contract behavior", () => {
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
-        apiBearerToken={null}
         legalDisclaimer={LEGAL_DISCLAIMER}
       />
     );
@@ -128,7 +126,6 @@ describe("chat shell contract behavior", () => {
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
-        apiBearerToken={null}
         legalDisclaimer={LEGAL_DISCLAIMER}
       />
     );

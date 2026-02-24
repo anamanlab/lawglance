@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from immcad_api.policy.compliance import DEFAULT_TRUSTED_CITATION_DOMAINS
 from immcad_api.settings import load_settings
 
 
@@ -120,8 +121,7 @@ def test_load_settings_has_default_trusted_citation_domains(
     monkeypatch.delenv("CITATION_TRUSTED_DOMAINS", raising=False)
 
     settings = load_settings()
-    assert "laws-lois.justice.gc.ca" in settings.citation_trusted_domains
-    assert "canlii.org" in settings.citation_trusted_domains
+    assert settings.citation_trusted_domains == DEFAULT_TRUSTED_CITATION_DOMAINS
 
 
 def test_load_settings_parses_trusted_citation_domains_csv(

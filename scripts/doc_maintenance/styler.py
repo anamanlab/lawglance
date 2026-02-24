@@ -145,7 +145,7 @@ def validate_style(content: str, config: dict[str, Any]) -> list[AuditIssue]:
     max_line_length: int | None
     if max_line_length_raw is None:
         max_line_length = None
-    elif isinstance(max_line_length_raw, int):
+    elif isinstance(max_line_length_raw, int) and not isinstance(max_line_length_raw, bool):
         max_line_length = max_line_length_raw
     elif isinstance(max_line_length_raw, str):
         try:

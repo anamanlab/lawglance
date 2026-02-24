@@ -7,7 +7,7 @@ TOC_HEADER = "## Table of Contents"
 HEADING_PATTERN = re.compile(r"^(#{2,6})\s+(.*?)\s*$", re.MULTILINE)
 H1_PATTERN = re.compile(r"^#\s+.*?$", re.MULTILINE)
 TOC_SECTION_PATTERN = re.compile(
-    r"^## Table of Contents\s*\n(?P<body>(?:[-*]\s+\[[^\]]+\]\(#[^)]+\)\s*\n|(?:\s{2,}[-*].*\n))*)",
+    r"^## Table of Contents\s*\n(?:\n)?(?P<body>(?:[-*]\s+\[[^\]]+\]\(#[^)]+\)\s*\n|(?:\s{2,}[-*].*\n))*)",
     re.MULTILINE,
 )
 TOC_GENERATION_STRIP_PATTERN = re.compile(
@@ -60,8 +60,8 @@ def _replace_existing_toc(content: str, toc: str) -> str:
     if not match:
         return content
     start, end = match.span()
-    replacement = toc.rstrip("\n") + "\n"
-    tail = content[end:].lstrip("\n")
+    replacement = toc
+    tail = content[end:]
     return content[:start] + replacement + tail
 
 
@@ -70,11 +70,11 @@ def _strip_existing_toc_for_generation(content: str) -> str:
 
 
 def inject_toc(content: str, min_headings: int = 4) -> TocResult:
-    headings = HEADING_PATTERN.findall(content)
+    toc_source = _strip_existing_toc_for_generation(content)
+    headings = HEADING_PATTERN.findall(toc_source)
     if len(headings) < min_headings:
         return TocResult(updated_content=content, changed=False)
 
-    toc_source = _strip_existing_toc_for_generation(content)
     toc = generate_toc(toc_source)
     if not toc:
         return TocResult(updated_content=content, changed=False)

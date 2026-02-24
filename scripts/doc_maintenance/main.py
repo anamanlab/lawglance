@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,7 @@ from styler import validate_style
 from validator import check_images, extract_links, validate_external_links, validate_relative_link
 
 SEVERITY_ORDER = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+LOGGER = logging.getLogger(__name__)
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
@@ -28,9 +30,14 @@ def _ensure_parent(path: Path) -> None:
 
 
 def _counts_by_severity(issues: list[AuditIssue]) -> dict[str, int]:
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
     for issue in issues:
-        counts[issue.severity] = counts.get(issue.severity, 0) + 1
+        severity = issue.severity.lower()
+        if severity in counts:
+            counts[severity] += 1
+        else:
+            counts["unknown"] += 1
+            LOGGER.warning("Unexpected audit severity '%s' in category '%s'", issue.severity, issue.category)
     return counts
 
 
@@ -77,6 +84,7 @@ def _render_markdown_report(
         f"- High: `{counts.get('high', 0)}`",
         f"- Medium: `{counts.get('medium', 0)}`",
         f"- Low: `{counts.get('low', 0)}`",
+        f"- Unknown: `{counts.get('unknown', 0)}`",
         "",
         "## File Findings",
         "",
@@ -157,20 +165,18 @@ def run_main(
     if check_external:
         external_issues = validate_external_links(sorted(external_urls), config)
         if external_issues:
-            # Attach global external link findings to the first file bucket for report visibility.
-            if audits:
-                audits[0].issues.extend(external_issues)
-            else:
-                audits.append(
-                    FileAudit(
-                        path="<global>",
-                        word_count=0,
-                        last_commit_iso=None,
-                        age_days=None,
-                        issues=external_issues,
-                        todos=[],
-                    )
+            global_audit = next((audit for audit in audits if audit.path == "<global>"), None)
+            if global_audit is None:
+                global_audit = FileAudit(
+                    path="<global>",
+                    word_count=0,
+                    last_commit_iso=None,
+                    age_days=None,
+                    issues=[],
+                    todos=[],
                 )
+                audits.append(global_audit)
+            global_audit.issues.extend(external_issues)
 
     now_utc = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     _ensure_parent(report_md_path)
@@ -191,7 +197,7 @@ def run_main(
         "fix_mode": bool(fix and not dry_run),
         "audits": _serialize_audits(audits),
     }
-    report_json_path.write_text(json.dumps(report_json, indent=2), encoding="utf-8")
+    report_json_path.write_text(json.dumps(report_json, indent=2) + "\n", encoding="utf-8")
 
     effective_fail_on = (fail_on or config.get("gates", {}).get("fail_on", "high")).lower()
     should_fail = _should_fail(audits, effective_fail_on) if effective_fail_on != "none" else False

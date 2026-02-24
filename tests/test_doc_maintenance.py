@@ -155,10 +155,12 @@ def test_validate_style_skips_line_length_for_code_blocks_and_invalid_config() -
 
     issues_none = validate_style(content, {"style_rules": {"max_line_length": None}})
     issues_invalid = validate_style(content, {"style_rules": {"max_line_length": "abc"}})
+    issues_bool = validate_style(content, {"style_rules": {"max_line_length": True}})
     issues_short = validate_style(content, {"style_rules": {"max_line_length": 20}})
 
     assert all(issue.category != "style" or "Line " not in issue.message for issue in issues_none)
     assert all(issue.category != "style" or "Line " not in issue.message for issue in issues_invalid)
+    assert all(issue.category != "style" or "Line " not in issue.message for issue in issues_bool)
     assert all(issue.category != "style" or "Line " not in issue.message for issue in issues_short)
 
 

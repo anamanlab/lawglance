@@ -10,7 +10,7 @@ from audit import AuditIssue
 
 IMAGE_LINK_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 MARKDOWN_LINK_PATTERN = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
-RAW_URL_PATTERN = re.compile(r"https?://[^\s<>)\]]+")
+RAW_URL_PATTERN = re.compile(r"https?://[^\s<>)\]]*[^\s<>)\].,;:!?\"'`]")
 HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
 CODE_FENCE_PATTERN = re.compile(r"^\s*```")
 

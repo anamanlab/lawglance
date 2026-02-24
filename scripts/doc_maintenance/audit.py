@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fnmatch
 import glob
+import logging
 import pathlib
 import re
 import subprocess
@@ -13,9 +14,10 @@ from typing import Any
 WORD_PATTERN = re.compile(r"\w+")
 TODO_PATTERN = re.compile(r"(TODO|FIXME)\s*:?\s*(.*)", re.IGNORECASE)
 _FRONTMATTER_PATTERN = re.compile(r"\A---\s*\n.*?\n---\s*(?:\n|$)", re.DOTALL)
-_CODE_BLOCK_PATTERN = re.compile(r"^```.*?^```\s*$", re.MULTILINE | re.DOTALL)
+_CODE_BLOCK_PATTERN = re.compile(r"^(?:```|~~~).*?^(?:```|~~~)\s*$", re.MULTILINE | re.DOTALL)
 _INLINE_CODE_PATTERN = re.compile(r"`[^`\n]+`")
 _URL_PATTERN = re.compile(r"https?://[^\s<>)\]]+")
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,6 +128,7 @@ def get_git_last_commit_date(file_path: Path) -> datetime | None:
             text=True,
             check=False,
             timeout=10,
+            cwd=str(file_path.parent),
         )
     except Exception:
         return None
@@ -146,9 +149,42 @@ def _is_freshness_exempt(relative_path: str, config: dict[str, Any]) -> bool:
     return _matches_any(relative_path, stale_exceptions)
 
 
+def _parse_threshold_int(thresholds: dict[str, Any], key: str, default: int) -> int:
+    raw_value = thresholds.get(key, default)
+    try:
+        if isinstance(raw_value, bool):
+            raise TypeError("boolean is not a valid integer threshold")
+        return int(raw_value)
+    except (TypeError, ValueError):
+        LOGGER.warning(
+            "Invalid quality threshold for %s=%r; using default=%s",
+            key,
+            raw_value,
+            default,
+        )
+        return default
+
+
 def analyze_markdown_file(file_path: Path, root_dir: Path, config: dict[str, Any]) -> FileAudit:
-    content = file_path.read_text(encoding="utf-8")
     relative_path = _relative_posix(file_path, root_dir)
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, PermissionError, OSError) as exc:
+        return FileAudit(
+            path=relative_path,
+            word_count=0,
+            last_commit_iso=None,
+            age_days=None,
+            issues=[
+                AuditIssue(
+                    severity="high",
+                    category="read",
+                    message=f"Failed to read markdown file: {exc}",
+                    hint="Ensure file encoding and permissions are valid for UTF-8 reads.",
+                )
+            ],
+            todos=[],
+        )
     prose = _FRONTMATTER_PATTERN.sub("", content)
     prose = _CODE_BLOCK_PATTERN.sub("", prose)
     prose = _INLINE_CODE_PATTERN.sub("", prose)
@@ -159,8 +195,8 @@ def analyze_markdown_file(file_path: Path, root_dir: Path, config: dict[str, Any
     issues: list[AuditIssue] = []
 
     thresholds = config.get("quality_thresholds", {})
-    min_word_count = int(thresholds.get("min_word_count", 50))
-    max_freshness_days = int(thresholds.get("max_freshness_days", 90))
+    min_word_count = _parse_threshold_int(thresholds, "min_word_count", 50)
+    max_freshness_days = _parse_threshold_int(thresholds, "max_freshness_days", 90)
 
     if word_count < min_word_count:
         issues.append(

@@ -27,3 +27,10 @@ def test_ops_alerts_workflow_runs_alert_evaluator_with_threshold_config(workflow
 def test_ops_alerts_workflow_references_incident_runbook_on_failure(workflow_text: str) -> None:
     assert "Incident runbook guidance" in workflow_text
     assert "docs/release/incident-observability-runbook.md" in workflow_text
+
+
+def test_ops_alerts_workflow_only_flags_breach_on_fail_and_tolerates_issue_creation_errors(
+    workflow_text: str,
+) -> None:
+    assert 'if [ "$status" = "fail" ]; then' in workflow_text
+    assert "continue-on-error: true" in workflow_text

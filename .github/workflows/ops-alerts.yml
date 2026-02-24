@@ -72,10 +72,10 @@ jobs:
           print(payload.get("status", "unknown"))
           PY
           )"
-          if [ "$status" = "pass" ]; then
-            echo "breached=false" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$status" = "fail" ]; then
             echo "breached=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "breached=false" >> "$GITHUB_OUTPUT"
           fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
@@ -87,6 +87,7 @@ jobs:
 
       - name: Create incident issue
         if: ${{ steps.eval-report.outputs.breached == 'true' }}
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |

@@ -35,10 +35,11 @@ class GeminiProvider:
         except Exception as exc:  # pragma: no cover
             raise ProviderError(self.name, "provider_error", f"Gemini SDK unavailable: {exc}") from exc
 
-        timeout_seconds = max(1, int(self.timeout_seconds))
+        # google-genai HttpOptions.timeout is interpreted in milliseconds.
+        timeout_millis = max(1000, int(self.timeout_seconds * 1000))
         client = genai.Client(
             api_key=self.api_key,
-            http_options=types.HttpOptions(timeout=timeout_seconds),
+            http_options=types.HttpOptions(timeout=timeout_millis),
         )
         prompt = (
             "You are an informational assistant for Canadian immigration law. "

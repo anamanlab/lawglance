@@ -17,11 +17,13 @@ describe("runtime config", () => {
   it("uses safe defaults when variables are not set", () => {
     delete process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL;
     delete process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED;
+    delete process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS;
 
     const config = getRuntimeConfig();
 
     expect(config.apiBaseUrl).toBe("/api");
     expect(config.enableRedesignedShell).toBe(true);
+    expect(config.showOperationalPanels).toBe(true);
   });
 
   it("parses redesign feature flag values", () => {
@@ -37,10 +39,12 @@ describe("runtime config", () => {
 
   it("falls back to default flag value for invalid input", () => {
     process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED = "invalid-value";
+    process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS = "invalid-value";
 
     const config = getRuntimeConfig();
 
     expect(config.enableRedesignedShell).toBe(true);
+    expect(config.showOperationalPanels).toBe(true);
   });
 
   it("enforces production-safe API URL", () => {
@@ -50,5 +54,14 @@ describe("runtime config", () => {
     expect(() => getRuntimeConfig()).toThrow(
       "NEXT_PUBLIC_IMMCAD_API_BASE_URL must start with https:// or / in production mode."
     );
+  });
+
+  it("hides operational panels by default in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    delete process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS;
+
+    const config = getRuntimeConfig();
+
+    expect(config.showOperationalPanels).toBe(false);
   });
 });

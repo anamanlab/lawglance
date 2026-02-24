@@ -27,6 +27,7 @@ describe("home page rollout", () => {
       getRuntimeConfig: () => ({
         apiBaseUrl: "/api",
         enableRedesignedShell: true,
+        showOperationalPanels: false,
       }),
     }));
 
@@ -34,8 +35,12 @@ describe("home page rollout", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByText("IMMCAD workspace")).toBeTruthy();
-    expect(screen.getByText("Canada immigration research assistant")).toBeTruthy();
+    expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Canada-focused immigration information to help you understand your options."
+      )
+    ).toBeTruthy();
     expect(screen.getByTestId("chat-shell-stub")).toBeTruthy();
   });
 
@@ -46,6 +51,7 @@ describe("home page rollout", () => {
       getRuntimeConfig: () => ({
         apiBaseUrl: "/api",
         enableRedesignedShell: false,
+        showOperationalPanels: true,
       }),
     }));
 
@@ -53,7 +59,7 @@ describe("home page rollout", () => {
 
     render(<HomePage />);
 
-    expect(screen.queryByText("IMMCAD workspace")).toBeNull();
+    expect(screen.queryByText("IMMCAD Assistant")).toBeNull();
     expect(screen.getByTestId("chat-shell-stub")).toBeTruthy();
   });
 });

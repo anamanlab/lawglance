@@ -9,7 +9,6 @@ type MessageComposerProps = {
   draft: string;
   isSubmitting: boolean;
   sendDisabled: boolean;
-  endpointLabel: string;
   remainingCharacters: number;
   submissionPhase: SubmissionPhase;
   textareaRef: RefObject<HTMLTextAreaElement>;
@@ -22,7 +21,6 @@ export function MessageComposer({
   draft,
   isSubmitting,
   sendDisabled,
-  endpointLabel,
   remainingCharacters,
   submissionPhase,
   textareaRef,
@@ -76,7 +74,6 @@ export function MessageComposer({
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-muted">API target: {endpointLabel}</p>
             <p
               aria-live="polite"
               className={`text-[11px] ${countToneClass}`}

@@ -36,7 +36,11 @@ import {
   nextMessageId,
 } from "@/components/chat/utils";
 
-export function ChatShell({ apiBaseUrl, legalDisclaimer }: ChatShellProps): JSX.Element {
+export function ChatShell({
+  apiBaseUrl,
+  legalDisclaimer,
+  showOperationalPanels = true,
+}: ChatShellProps): JSX.Element {
   const sessionIdRef = useRef(buildSessionId());
   const messageCounterRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -149,28 +153,32 @@ export function ChatShell({ apiBaseUrl, legalDisclaimer }: ChatShellProps): JSX.
         });
 
         if (isPolicyRefusal) {
-          setPendingCaseQuery(null);
-          setRelatedCasesStatus(
-            "Policy refusal response returned. Ask a general informational question to continue."
-          );
+          if (showOperationalPanels) {
+            setPendingCaseQuery(null);
+            setRelatedCasesStatus(
+              "Policy refusal response returned. Ask a general informational question to continue."
+            );
+          }
           return;
         }
 
-        setPendingCaseQuery(promptToSubmit);
-        setRelatedCasesStatus(
-          "Related case search is ready. Click Search related cases to fetch authoritative metadata."
-        );
+        if (showOperationalPanels) {
+          setPendingCaseQuery(promptToSubmit);
+          setRelatedCasesStatus(
+            "Related case search is ready. Click Search related cases to fetch authoritative metadata."
+          );
+        }
       } finally {
         setIsSubmitting(false);
         setSubmissionPhase("idle");
         textareaRef.current?.focus();
       }
     },
-    [apiClient, isSubmitting, legalDisclaimer]
+    [apiClient, isSubmitting, legalDisclaimer, showOperationalPanels]
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
-    if (isSubmitting || !pendingCaseQuery) {
+    if (!showOperationalPanels || isSubmitting || !pendingCaseQuery) {
       return;
     }
 
@@ -218,7 +226,7 @@ export function ChatShell({ apiBaseUrl, legalDisclaimer }: ChatShellProps): JSX.
       setIsSubmitting(false);
       setSubmissionPhase("idle");
     }
-  }, [apiClient, isSubmitting, pendingCaseQuery]);
+  }, [apiClient, isSubmitting, pendingCaseQuery, showOperationalPanels]);
 
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>): void => {
@@ -273,7 +281,6 @@ export function ChatShell({ apiBaseUrl, legalDisclaimer }: ChatShellProps): JSX.
 
           <MessageComposer
             draft={draft}
-            endpointLabel={endpointLabel}
             isSubmitting={isSubmitting}
             onDraftChange={setDraft}
             onQuickPromptClick={onQuickPromptClick}
@@ -285,22 +292,24 @@ export function ChatShell({ apiBaseUrl, legalDisclaimer }: ChatShellProps): JSX.
           />
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-          <RelatedCasePanel
-            isSubmitting={isSubmitting}
-            onSearch={() => {
-              void runRelatedCaseSearch();
-            }}
-            pendingCaseQuery={pendingCaseQuery}
-            relatedCases={relatedCases}
-            relatedCasesStatus={relatedCasesStatus}
-            statusToneClass={statusToneClass}
-            submissionPhase={submissionPhase}
-            supportStatus={supportContext?.status ?? null}
-          />
+        {showOperationalPanels ? (
+          <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+            <RelatedCasePanel
+              isSubmitting={isSubmitting}
+              onSearch={() => {
+                void runRelatedCaseSearch();
+              }}
+              pendingCaseQuery={pendingCaseQuery}
+              relatedCases={relatedCases}
+              relatedCasesStatus={relatedCasesStatus}
+              statusToneClass={statusToneClass}
+              submissionPhase={submissionPhase}
+              supportStatus={supportContext?.status ?? null}
+            />
 
-          <SupportContextPanel endpointLabel={endpointLabel} supportContext={supportContext} />
-        </aside>
+            <SupportContextPanel endpointLabel={endpointLabel} supportContext={supportContext} />
+          </aside>
+        ) : null}
       </div>
     </section>
   );

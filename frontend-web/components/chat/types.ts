@@ -19,6 +19,7 @@ export type ChatMessage = {
 export type ChatShellProps = {
   apiBaseUrl: string;
   legalDisclaimer: string;
+  showOperationalPanels?: boolean;
 };
 
 export type SubmissionPhase = "idle" | "chat" | "cases";

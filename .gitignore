@@ -21,3 +21,4 @@ frontend-web/.next/
 frontend-web/out/
 frontend-web/coverage/
 .worktrees/
+.ai/

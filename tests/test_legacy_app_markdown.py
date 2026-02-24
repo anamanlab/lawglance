@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from app import build_assistant_markdown  # noqa: E402
+from app import build_assistant_markdown
 
 
 def test_build_assistant_markdown_escapes_citation_text_and_rejects_unsafe_urls() -> None:
@@ -43,4 +36,4 @@ def test_build_assistant_markdown_preserves_http_https_links_and_encodes_spaces(
         trace_id=None,
     )
 
-    assert "(https://example.com/path%20with%20space?q=a%20b)" in markdown
+    assert "[Source](https://example.com/path%20with%20space?q=a%20b)" in markdown

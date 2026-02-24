@@ -17,6 +17,12 @@ warnings.warn(
 
 
 def get_rag_chain(llm, vector_store, system_prompt, qa_prompt):
+    """Build legacy RAG chain.
+
+    `qa_prompt` must include `{context}` so retrieved documents are injected correctly.
+    """
+    if "{context}" not in qa_prompt:
+        raise ValueError("qa_prompt must include '{context}' for retrieved documents.")
     try:
         from langchain.chains import create_history_aware_retriever, create_retrieval_chain
         from langchain.chains.combine_documents import create_stuff_documents_chain

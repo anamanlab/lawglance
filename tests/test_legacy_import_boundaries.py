@@ -9,6 +9,7 @@ SCAN_ROOTS = (
     REPO_ROOT / "scripts",
     REPO_ROOT / "tests",
     REPO_ROOT / "app.py",
+    # Active thin-client surface; keep scanned to ensure no root-level legacy imports regress.
     REPO_ROOT / "legacy_api_client.py",
 )
 LEGACY_MODULES = ("cache", "chains", "lawglance_main", "prompts")

@@ -1,14 +1,10 @@
 from __future__ import annotations
 
+from typing import NoReturn
+
 import httpx
-from pathlib import Path
-import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from legacy_api_client import LegacyApiClient, build_backend_api_url  # noqa: E402
+from legacy_api_client import LegacyApiClient, build_backend_api_url
 
 
 def _build_response(
@@ -92,7 +88,7 @@ def test_send_chat_returns_error_envelope_details() -> None:
 
 
 def test_send_chat_handles_network_failure() -> None:
-    def fake_post(*_args, **_kwargs) -> httpx.Response:
+    def fake_post(*_args, **_kwargs) -> NoReturn:
         raise httpx.ConnectError("network unreachable")
 
     client = LegacyApiClient(api_base_url="https://immcad.example", post_func=fake_post)
@@ -100,4 +96,4 @@ def test_send_chat_handles_network_failure() -> None:
 
     assert result.ok is False
     assert result.error_code == "PROVIDER_ERROR"
-    assert "Unable to reach" in (result.error_message or "")
+    assert "Unable to connect" in (result.error_message or "")

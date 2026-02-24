@@ -85,8 +85,10 @@ def _expand_scan_paths_with_legacy_fallback(
     *, repo_root: Path, scan_paths: Sequence[str]
 ) -> tuple[str, ...]:
     expanded: list[str] = []
+    legacy_scan_path = Path(LEGACY_LOCAL_RAG_DIR).as_posix().rstrip("/")
     for raw_path in scan_paths:
-        if raw_path != LEGACY_LOCAL_RAG_DIR:
+        normalized_raw_path = Path(raw_path).as_posix().rstrip("/")
+        if normalized_raw_path != legacy_scan_path:
             expanded.append(raw_path)
             continue
 

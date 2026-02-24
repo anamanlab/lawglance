@@ -27,8 +27,6 @@ Rules:
   3. Prefer plain-language explanations, then cite the controlling source.
   4. Avoid speculation and avoid non-Canadian legal framing.
   5. Include escalation guidance to licensed counsel/RCIC for high-stakes decisions.
-
-Question : {input}
 """
 
 QA_PROMPT = """

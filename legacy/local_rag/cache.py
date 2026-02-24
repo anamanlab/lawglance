@@ -79,7 +79,7 @@ class RedisCache:
         return value.decode("utf-8") if value else None
 
     def set(self, key, value, ttl=None):
-        if ttl:
+        if ttl is not None:
             self.redis_client.setex(key, ttl, value)
         else:
             self.redis_client.set(key, value)

@@ -110,10 +110,18 @@ class LegacyApiClient:
                 exc,
                 exc_info=True,
             )
+            if isinstance(exc, httpx.TimeoutException):
+                error_message = "Request to the IMMCAD API timed out."
+            elif isinstance(exc, httpx.ConnectError):
+                error_message = "Unable to connect to the IMMCAD API endpoint."
+            elif isinstance(exc, httpx.ProtocolError):
+                error_message = "Received an invalid transport response from the IMMCAD API."
+            else:
+                error_message = "Transport error while contacting the IMMCAD API endpoint."
             return LegacyChatResult(
                 ok=False,
                 error_code="PROVIDER_ERROR",
-                error_message="Unable to reach the IMMCAD API endpoint.",
+                error_message=error_message,
             )
 
         trace_id = _normalize_trace_id(response.headers.get("x-trace-id"))

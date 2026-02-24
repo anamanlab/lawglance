@@ -37,6 +37,7 @@ LEGACY_DEPRECATION_FILES = (
 
 
 def test_streamlit_app_is_thin_api_client() -> None:
+    assert APP_PATH.exists(), f"expected streamlit app at {APP_PATH}"
     app_source = APP_PATH.read_text(encoding="utf-8")
     assert "LegacyApiClient" in app_source
     assert "client.send_chat(" in app_source
@@ -44,6 +45,7 @@ def test_streamlit_app_is_thin_api_client() -> None:
 
 
 def test_streamlit_app_does_not_embed_local_rag_runtime() -> None:
+    assert APP_PATH.exists(), f"expected streamlit app at {APP_PATH}"
     app_source = APP_PATH.read_text(encoding="utf-8")
     for pattern in FORBIDDEN_APP_PATTERNS:
         assert re.search(pattern, app_source) is None
@@ -57,6 +59,7 @@ def test_root_legacy_modules_are_removed() -> None:
 
 
 def test_root_legacy_module_imports_are_absent_from_root_notebook() -> None:
+    assert LEGACY_NOTEBOOK_PATH.exists(), f"expected notebook at {LEGACY_NOTEBOOK_PATH}"
     notebook_source = LEGACY_NOTEBOOK_PATH.read_text(encoding="utf-8")
     for pattern in FORBIDDEN_APP_PATTERNS[:8]:
         assert re.search(pattern, notebook_source) is None
@@ -68,7 +71,9 @@ def test_legacy_archive_is_explicit_python_package() -> None:
 
 
 def test_legacy_archive_orchestrator_uses_package_relative_imports() -> None:
-    source = (LEGACY_ARCHIVE_ROOT / "lawglance_main.py").read_text(encoding="utf-8")
+    legacy_orchestrator = LEGACY_ARCHIVE_ROOT / "lawglance_main.py"
+    assert legacy_orchestrator.exists(), f"expected legacy orchestrator at {legacy_orchestrator}"
+    source = legacy_orchestrator.read_text(encoding="utf-8")
     assert "from .cache import RedisCache" in source
     assert "from .chains import get_rag_chain" in source
     assert "from .prompts import SYSTEM_PROMPT, QA_PROMPT" in source
@@ -81,7 +86,9 @@ def test_legacy_archive_orchestrator_module_imports_via_package_path() -> None:
     spec = importlib.util.find_spec("legacy.local_rag.lawglance_main")
     assert spec is not None
 
-    source = (LEGACY_ARCHIVE_ROOT / "lawglance_main.py").read_text(encoding="utf-8")
+    legacy_orchestrator = LEGACY_ARCHIVE_ROOT / "lawglance_main.py"
+    assert legacy_orchestrator.exists(), f"expected legacy orchestrator at {legacy_orchestrator}"
+    source = legacy_orchestrator.read_text(encoding="utf-8")
     tree = ast.parse(source)
     assert any(
         isinstance(node, ast.ClassDef) and node.name == "Lawglance" for node in tree.body
@@ -90,5 +97,6 @@ def test_legacy_archive_orchestrator_module_imports_via_package_path() -> None:
 
 def test_legacy_modules_are_explicitly_marked_deprecated() -> None:
     for path in LEGACY_DEPRECATION_FILES:
+        assert path.exists(), f"expected legacy deprecation file at {path}"
         source = path.read_text(encoding="utf-8")
         assert "deprecated" in source.lower()

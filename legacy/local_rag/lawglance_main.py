@@ -87,7 +87,11 @@ class Lawglance:
             config={"configurable": {"session_id": session_id}},
         )
 
-        answer = response['answer']
+        answer = response.get("answer")
+        if not isinstance(answer, str) or not answer.strip():
+            raise RuntimeError(
+                "Legacy RAG response missing 'answer' field; cannot continue conversation flow."
+            )
 
         # Update chat history
         chat_history_obj.add_user_message(query)

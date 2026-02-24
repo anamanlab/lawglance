@@ -14,14 +14,14 @@ Production runtime uses:
 - `frontend-web/` (UI)
 - `src/immcad_api/` (API, policy, providers, grounding)
 
-Do not import modules from this archive into active codepaths.
+Do not import modules from this archive into production/runtime service codepaths.
 
-## Supported Legacy Usage
+## Supported Legacy Usage (Notebooks/Tools/Dev-Only)
 
 - Import archived modules via package path, not root-level module names.
 - Example:
   - `from legacy.local_rag.lawglance_main import Lawglance`
-- Avoid direct script execution of archived modules; use package imports from notebooks/tools.
+- Avoid direct script execution of archived modules; use package imports from notebooks/tools/development tests only.
 
 ## Dependency Notes
 

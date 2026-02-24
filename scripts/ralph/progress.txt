@@ -418,6 +418,29 @@ Started: 2026-02-23
   - Keep frontend runtime config validation centralized in a small server-side helper so production safety checks stay consistent and easy to test.
   - Gotcha
   - `make` is unavailable in this environment; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
-  - Useful context
+- Useful context
   - `dev-browser` skill is not present in this runtime, so UI verification used Playwright CLI screenshots (`/tmp/immcad-us006-home.png` and `/tmp/immcad-us006-mobile.png`) against the local Next.js dev server.
+---
+## 2026-02-23 21:37:46 -0300 - US-007
+- What was implemented
+- Added a typed frontend API client for `POST /api/chat` and `POST /api/search/cases` with unified error-envelope parsing, `x-trace-id` capture, and header/body trace mismatch detection.
+- Replaced scaffolded chat behavior with live API integration in `ChatShell`, including policy-refusal handling (`fallback_used.reason = "policy_block"`), user-safe auth/validation/provider error messaging, and support-context trace display.
+- Added optional frontend bearer-token runtime wiring and documentation updates so protected API deployments can be exercised from the Next.js client.
+- Verified UI rendering in browser at desktop and mobile viewport sizes using Playwright screenshots (`/tmp/immcad-us007-home.png`, `/tmp/immcad-us007-mobile.png`).
+- Files changed
+- `.env.example`
+- `frontend-web/README.md`
+- `frontend-web/app/page.tsx`
+- `frontend-web/components/chat-shell.tsx`
+- `frontend-web/lib/api-client.ts`
+- `frontend-web/lib/runtime-config.ts`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Centralize API envelope parsing and trace capture in one client module so UI components can map outcomes by error code without duplicating transport logic.
+  - Gotcha
+  - `make` and the `dev-browser` skill are unavailable in this environment; run the exact Makefile quality command chain manually and use Playwright CLI screenshot fallback for browser verification.
+  - Useful context
+  - For strict trace-correlation requirements, treat `x-trace-id` as canonical and surface header/body mismatches explicitly in support context to flag integration defects early.
 ---

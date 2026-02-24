@@ -13,9 +13,11 @@ Create `frontend-web/.env.local`:
 
 ```bash
 NEXT_PUBLIC_IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
 ```
 
 For production, `NEXT_PUBLIC_IMMCAD_API_BASE_URL` must use `https://`.
+Set `NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN` when backend bearer auth is enabled.
 
 ## Run
 

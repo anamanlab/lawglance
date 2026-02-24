@@ -2,6 +2,7 @@ const DEV_DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
 export type RuntimeConfig = {
   apiBaseUrl: string;
+  apiBearerToken: string | null;
 };
 
 function normalizeValue(value: string | undefined): string | undefined {
@@ -24,9 +25,13 @@ function ensureProductionSafeApiUrl(apiBaseUrl: string, nodeEnv: string): void {
 export function getRuntimeConfig(): RuntimeConfig {
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const configuredBaseUrl = normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL);
+  const configuredBearerToken = normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BEARER_TOKEN);
   const apiBaseUrl = configuredBaseUrl ?? DEV_DEFAULT_API_BASE_URL;
 
   ensureProductionSafeApiUrl(apiBaseUrl, nodeEnv);
 
-  return { apiBaseUrl };
+  return {
+    apiBaseUrl,
+    apiBearerToken: configuredBearerToken ?? null,
+  };
 }

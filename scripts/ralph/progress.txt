@@ -513,6 +513,7 @@ Started: 2026-02-23
 - What was implemented
 - Updated developer-facing docs to make Next.js (`frontend-web`) + `immcad_api` the production runtime path, moved Streamlit to explicit legacy/dev-only guidance, and aligned onboarding/run commands accordingly.
 - Added explicit legacy notice in `app.py` (module docstring + runtime warning banner) so Streamlit sessions signal non-production status.
+- Verified the legacy Streamlit UI in browser using Playwright screenshot fallback (`/tmp/immcad-us011-streamlit.png`) against a local Streamlit run.
 - Files changed
 - `README.md`
 - `docs/development-environment.md`
@@ -528,7 +529,7 @@ Started: 2026-02-23
   - Reusable pattern
   - When migrating runtime ownership, update both onboarding docs and architecture narratives in the same commit to avoid conflicting "current vs target" instructions.
   - Gotcha
-  - `make` is unavailable in this execution environment; run `make quality` first for compliance, then execute the exact `quality` target command chain manually when `make` is missing.
+  - `make` and `dev-browser` are unavailable in this execution environment; run `make quality` first for compliance, then use exact `quality` target commands plus Playwright CLI screenshots when those tools are missing.
   - Useful context
   - `./scripts/validate_architecture_docs.sh` catches stale architecture references quickly and should remain in the quality sequence for doc-heavy stories.
 ---

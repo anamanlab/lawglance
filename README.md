@@ -14,35 +14,28 @@ The goal is to help users quickly understand:
 - Required documents and timelines
 - Common policy constraints and risks
 
-## Current baseline analysis
+## Current runtime status
 
-The current codebase already provides a strong foundation:
+The current implementation is converging on a single production runtime:
 - Next.js chat UI in `frontend-web` (production path)
 - Python API backend in `src/immcad_api` (production path)
-- Streamlit chat UI in `app.py` (legacy/dev-only)
-- RAG pipeline with LangChain + Chroma in `chains.py`
-- Session history + caching with Redis in `cache.py` and `lawglance_main.py` (legacy filename retained for compatibility during IMMCAD migration)
-- Prompt templates in `prompts.py`
+- Streamlit UI in `app.py` is now a legacy dev-only **thin API client** to `/api/chat`
+- Legacy local-RAG modules are archived under `legacy/local_rag/` for compatibility and historical evaluation workflows
+- CI quality gates include ingestion smoke, dependency review, jurisdiction suite, and repository hygiene
 
-### Gaps to adapt for Canada
+### Remaining Canada-readiness gaps
 
-The repository is still jurisdiction-specific to Indian legal context and needs Canadian adaptation in 4 main areas:
+1. Legal corpus completeness
+- Complete IRPA/IRPR/IRCC source coverage and enforce freshness cadence.
 
-1. Legal corpus
-- Current vectors/prompt references are not Canada-focused.
-- Need a curated Canadian immigration corpus.
+2. Grounding enforcement
+- Add runtime citation-grounding verification beyond template-level constraints.
 
-2. Prompting and safety policy
-- System prompt must be rewritten for Canadian immigration law.
-- Must enforce legal disclaimers, scope boundaries, and escalation guidance.
+3. Product localization
+- Deliver bilingual-ready user journeys (English now, French next).
 
-3. Retrieval quality and citations
-- Must add source metadata and citation quality controls.
-- Need grounding checks to reduce hallucinations.
-
-4. Product localization
-- Canada requires clear English-first support and planned French support.
-- UX should reflect IRCC terminology and user journeys.
+4. Legacy retirement
+- Fully decommission legacy local-RAG modules once all evaluation dependencies are migrated.
 
 ## Canadian legal scope (V1)
 
@@ -98,11 +91,11 @@ The repository is still jurisdiction-specific to Indian legal context and needs 
 
 ## Immediate next steps (recommended order)
 
-1. Replace domain prompts in `prompts.py` with Canadian immigration scope and strict disclaimer behavior.
-2. Create `data/sources/canada-immigration/` and ingest official IRPA/IRPR + IRCC sources.
-3. Rebuild vector store and validate retrieval quality on 30-50 benchmark questions.
-4. Add citation-required response template and fail-safe refusal when context is missing.
-5. Build a small evaluation harness for repeatable quality checks before UI launch.
+1. Keep `src/immcad_api/policy/prompts.py` as the single canonical prompt source.
+2. Finalize Canadian source coverage and run ingestion refresh + smoke validation in CI on schedule.
+3. Implement grounding-verification checks in response assembly before delivery.
+4. Add bilingual-ready locale handling to production UI/API contracts (`en-CA`, `fr-CA`) with coverage tests.
+5. Remove archive references once `legacy/local_rag/` is fully retired.
 
 ## Suggested task breakdown
 
@@ -253,6 +246,27 @@ make jurisdiction-suite
 ```
 
 Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
+
+### Documentation maintenance
+
+Run documentation quality audit (link/style/content/freshness checks):
+
+```bash
+make docs-audit
+```
+
+Apply safe documentation auto-fixes (TOC refresh):
+
+```bash
+make docs-fix
+```
+
+Reports are generated to:
+
+```bash
+artifacts/docs/doc-maintenance-report.md
+artifacts/docs/doc-maintenance-report.json
+```
 
 ### Ralph autonomous loop
 

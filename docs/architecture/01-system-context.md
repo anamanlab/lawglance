@@ -2,69 +2,75 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
 - [Purpose](#purpose)
 - [Stakeholders and Personas](#stakeholders-and-personas)
 - [System Boundary](#system-boundary)
-- [External Systems](#external-systems)
-- [C4 Context Diagram](#c4-context-diagram)
-- [Architectural Pattern](#architectural-pattern)
-
-- [Purpose](#purpose)
-- [Stakeholders and Personas](#stakeholders-and-personas)
-- [System Boundary](#system-boundary)
-- [External Systems](#external-systems)
+- [External Systems and Dependencies](#external-systems-and-dependencies)
 - [C4 Context Diagram](#c4-context-diagram)
 - [Architectural Pattern](#architectural-pattern)
 
 ## Purpose
 
-IMMCAD is an AI-powered legal information assistant being adapted to Canadian immigration law. It provides contextual answers with citations and legal disclaimers.
+IMMCAD is an AI-powered legal information assistant for Canadian immigration topics. The system returns informational answers with policy-constrained behavior and citation grounding.
 
 ## Stakeholders and Personas
 
-- End users: newcomers, students, workers, families seeking immigration guidance.
-- Legal professionals: RCIC/lawyers reviewing informational outputs.
-- Maintainers: engineers operating ingestion, retrieval, and model orchestration.
-- Compliance owners: privacy and legal reviewers.
+- End users: newcomers, students, workers, families.
+- Legal professionals: RCICs/lawyers validating informational outputs.
+- Engineering maintainers: backend, frontend, ingestion, and platform maintainers.
+- Compliance and legal reviewers: policy, privacy, and release-approval owners.
 
 ## System Boundary
 
 In scope:
 
-- User chat experience.
-- Legal source ingestion, indexing, retrieval, and answer generation.
-- Citation rendering and policy-safe refusal behavior.
+- Chat experience and case search APIs.
+- Policy-gated retrieval/response orchestration.
+- Source registry validation, ingestion jobs, and legal corpus refresh.
+- Operational telemetry and release evidence artifacts.
 
 Out of scope:
 
-- Legal representation, legal advice, or case filing workflows.
-- Government record systems integration requiring privileged access.
+- Legal representation or legal advice.
+- Filing workflows and direct integration with privileged government systems.
 
-## External Systems
+## External Systems and Dependencies
 
-- OpenAI-compatible model APIs (primary agent runtime pattern).
-- Gemini API (fallback provider).
-- Optional Grok provider for future fallback.
-- CanLII API for case-law metadata and citator relationships.
-- Justice Laws Website and IRCC public resources for source ingestion.
+- LLM providers:
+  - OpenAI (primary when enabled).
+  - Gemini (ordered fallback).
+  - Scaffold provider (non-production/dev safety fallback).
+- Legal/corpus sources:
+  - CanLII API (case search metadata + citator).
+  - Justice Laws and IRCC public sources.
+  - SCC/FC/FCA court feeds.
+- Data/runtime infrastructure:
+  - Chroma vector store.
+  - Redis cache/rate-limiting backend.
 
 ## C4 Context Diagram
 
 ```mermaid
 graph TD
-    U[User] --> FE[Chat UI\nProduction: Next.js\nLegacy dev-only: Streamlit app.py]
-    FE --> BE[IMMCAD Backend\nRAG + Policy + Provider Router]
-    BE --> VS[Vector Store\nChroma]
-    BE --> RS[Redis\nSession and Cache]
-    BE --> OAI[Primary LLM Provider]
-    BE --> GEM[Gemini Fallback]
-    BE --> GROK[Optional Grok Fallback]
-    BE --> CANLII[CanLII API]
-    BE --> SOURCES[Justice Laws + IRCC Sources]
+    USER[User] --> FE[Next.js Chat UI<br>frontend-web]
+    FE --> API[IMMCAD API<br>FastAPI in src/immcad_api]
+
+    API --> OAI[OpenAI Provider]
+    API --> GEM[Gemini Provider]
+    API --> SCAF[Scaffold Provider<br>non-prod fallback]
+
+    API --> CANLII[CanLII API]
+    API --> VEC[Chroma Vector Store]
+    API --> REDIS[Redis]
+
+    ENGINEERING[Engineering Maintainers] --> ING[Ingestion Jobs<br>scripts/run_ingestion_jobs.py]
+    ING --> SRC[Justice Laws / IRCC / Court Feeds]
+    ING --> VEC
 ```
 
 ## Architectural Pattern
 
-- Production: Next.js frontend plus modular monolith backend with clean module boundaries and provider abstraction.
-- Legacy dev-only: single-process Streamlit script architecture retained in `app.py`.
+- Production path: Next.js frontend + modular FastAPI backend.
+- Runtime strategy: provider abstraction with ordered fallback and circuit-breaker telemetry.
+- Governance strategy: policy-as-code gates for ingestion, response safety, and source governance.
+- Legacy path: `app.py` Streamlit thin client retained for dev troubleshooting only.

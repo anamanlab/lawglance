@@ -33,7 +33,7 @@ Define and execute a best-practice audit program for IMMCAD across architecture,
 2. Dual runtime architecture with divergence risk.
    - Legacy Streamlit stack owns retrieval/vector/cache logic independently of FastAPI runtime.
    - Risk: policy, prompt, and behavior drift between runtime paths.
-   - Evidence: `app.py:121`, `lawglance_main.py:77`, `src/immcad_api/main.py:149`.
+   - Evidence: `app.py:121`, `legacy/local_rag/lawglance_main.py:77`, `src/immcad_api/main.py:149`.
    - Recommendation: formally deprecate legacy runtime or convert it to thin API client mode.
 
 ### Medium

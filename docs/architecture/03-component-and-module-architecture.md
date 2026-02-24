@@ -2,64 +2,83 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
-- [Backend Module Map (Target)](#backend-module-map-(target))
-- [Current-to-Target Mapping](#current-to-target-mapping)
+- [Backend Module Map (Current)](#backend-module-map-current)
+- [Primary Request Flow](#primary-request-flow)
 - [Component Diagram](#component-diagram)
 - [Design Patterns](#design-patterns)
 - [Architectural Constraints](#architectural-constraints)
 
-- [Backend Module Map (Target)](#backend-module-map-(target))
-- [Current-to-Target Mapping](#current-to-target-mapping)
-- [Component Diagram](#component-diagram)
-- [Design Patterns](#design-patterns)
-- [Architectural Constraints](#architectural-constraints)
+## Backend Module Map (Current)
 
-## Backend Module Map (Target)
+- `api/`
+  - Route builders and HTTP boundary (`routes/chat.py`, `routes/cases.py`).
+- `services/`
+  - Application services (`ChatService`, `CaseSearchService`, grounding adapters).
+- `providers/`
+  - Provider adapters and `ProviderRouter` with circuit breaker + telemetry.
+- `policy/`
+  - Compliance logic, citation/refusal controls, source policy decisions.
+- `sources/`
+  - CanLII client, source registry model, court feed parsers/validation.
+- `ingestion/`
+  - Cadence planner, ingestion job orchestration, checkpoint/state handling.
+- `middleware/`
+  - Runtime rate-limit backend selection and enforcement.
+- `telemetry/`
+  - Request/provider metrics and trace-id utilities.
+- `ops/`
+  - Ops alert evaluation logic and thresholds integration.
 
-- `api/`: HTTP endpoints, request/response schemas, auth middleware.
-- `orchestration/`: chat flow, session handling, retry/fallback policies.
-- `retrieval/`: query rewrite, source filtering, vector retrieval.
-- `providers/`: OpenAI-compatible, Gemini, optional Grok adapters.
-- `policy/`: compliance checks, refusal logic, citation-required rules.
-- `sources/`: CanLII and official source connectors.
-- `telemetry/`: tracing, metrics, structured logs.
+## Primary Request Flow
 
-## Current-to-Target Mapping
-
-- `lawglance_main.py` maps to `orchestration/`.
-- `chains.py` maps to `retrieval/`.
-- `cache.py` maps to `orchestration/session_store.py`.
-- `prompts.py` maps to `policy/prompts/` with domain/version tagging.
+1. Request enters FastAPI app and trace middleware.
+2. Bearer auth and API rate-limiting gates are evaluated.
+3. Router dispatches to chat or case-search service.
+4. Chat path:
+  - grounding candidates assembled,
+  - provider routing executed with fallback policy,
+  - citation/refusal policy enforcement applied,
+  - structured telemetry emitted.
+5. Response returns with `x-trace-id`.
 
 ## Component Diagram
 
 ```mermaid
 graph TD
-    API[Chat API Controller] --> SVC[Chat Service]
-    SVC --> SESS[Session Store]
-    SVC --> RET[Retrieval Engine]
-    SVC --> POL[Policy Engine]
-    SVC --> ROUTE[Provider Router]
-    RET --> INDEX[Vector Index Adapter]
-    RET --> SRCMETA[Source Metadata Resolver]
-    ROUTE --> OAI[OpenAI-compatible Adapter]
-    ROUTE --> GEM[Gemini Adapter]
-    ROUTE --> GROK[Grok Adapter Optional]
-    POL --> REFUSE[Refusal Rules]
-    POL --> CITE[Citation Validator]
-    SVC --> TRACE[Telemetry]
+    ROUTER[FastAPI Routes] --> CHAT[ChatService]
+    ROUTER --> CASES[CaseSearchService]
+
+    CHAT --> GROUND[Grounding Adapter]
+    CHAT --> POLICY[Policy Compliance]
+    CHAT --> PROUTER[ProviderRouter]
+
+    PROUTER --> OPENAI[OpenAIProvider]
+    PROUTER --> GEMINI[GeminiProvider]
+    PROUTER --> SCAFFOLD[ScaffoldProvider]
+
+    CASES --> CANLII[CanLIIClient]
+
+    ROUTER --> METRICS[RequestMetrics]
+    PROUTER --> PMETRICS[ProviderMetrics]
+
+    INGEST[run_ingestion_jobs] --> REGISTRY[Source Registry]
+    INGEST --> SPOLICY[Source Policy]
+    INGEST --> COURTS[Court Payload Validators]
+    INGEST --> CHECKPOINTS[Checkpoint State]
 ```
 
 ## Design Patterns
 
-- Modular monolith with explicit module interfaces.
-- Strategy pattern for provider selection and fallback.
-- Policy-as-code for compliance enforcement.
-- Adapter pattern for external APIs and storage backends.
+- Modular monolith with explicit package boundaries.
+- Adapter pattern for external providers and source systems.
+- Policy-as-code for runtime safety and legal/compliance controls.
+- Strategy pattern for provider ordering/fallback.
+- Scriptable operational workflows for ingestion and release validation.
 
 ## Architectural Constraints
 
-- No provider SDK calls from controller layer.
-- No response returned unless citation validator passes.
-- Fallback events must emit structured telemetry.
+- Route layer must not call provider SDKs directly.
+- Hardened environments (`production/prod`) require explicit bearer token and trusted citation domains.
+- Chat responses are policy-constrained and citation-validated before delivery.
+- Source ingestion is policy-gated by environment and source ID.
+- Architecture-affecting changes require matching updates to docs and ADRs.

@@ -8,18 +8,13 @@
 - [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
 - [Success Criteria](#success-criteria)
 
-- [Current Debt](#current-debt)
-- [Risk Assessment](#risk-assessment)
-- [Improvement Backlog (Prioritized)](#improvement-backlog-(prioritized))
-- [Success Criteria](#success-criteria)
-
 ## Current Debt
 
 1. Legacy Streamlit `app.py` is still present for local/dev workflows and requires continued deprecation controls to avoid production usage.
 2. Production vector database is still using legacy Indian legal data (requires full purge/rebuild).
-3. System prompts in `prompts.py` are jurisdictionally ambiguous.
-4. No automated "Grounding" layer to verify citations before user delivery.
-5. Ingestion pipeline in `src/Constituion_Pdf_Injestion...` is a notebook and needs migration to a production script.
+3. Prompt ownership convergence must remain enforced so archive modules cannot diverge from backend policy prompts.
+4. No automated runtime "Grounding" layer verifies citations before user delivery.
+5. Notebook-era ingestion artifacts still exist and should be fully replaced by script-driven jobs.
 
 ## Risk Assessment
 
@@ -30,10 +25,20 @@
 ## Improvement Backlog (Prioritized)
 
 1. **[HIGH] Data Migration**: Purge legacy vectors; ingest IRPA/IRPR and IRCC sources into a new "Canada" collection.
-2. **[HIGH] Prompt Engineering**: Rewrite `prompts.py` for strict Canadian legal disclaimer and citation-only behavior.
+2. **[HIGH] Prompt Convergence**: Keep `src/immcad_api/policy/prompts.py` as canonical prompt source and prevent legacy archive imports into active codepaths.
 3. **[MEDIUM] Legacy Decommissioning**: Keep Streamlit `app.py` marked dev-only in docs/tooling and route production traffic exclusively through `frontend-web` + `immcad_api`.
 4. **[MEDIUM] Observability Rollout**: Finalize the telemetry implementation in `src/immcad_api/telemetry` to capture all provider latency/error metrics.
 5. **[LOW] Quality Evaluation**: Implement the benchmark-based evaluation harness to score groundedness on 50 sample Canadian immigration queries.
+6. **[HIGH] Debt Item 4 - Automated Grounding Layer**
+   - Owner: backend-platform
+   - Priority: HIGH
+   - Scope: implement an MVP runtime grounding verification layer aligned with citation/refusal success criteria.
+   - Acceptance criteria: (a) every factual response is citation-validated or refused, (b) citation mismatch risk is tracked via release-gate metric, (c) staged rollout with rollback switch documented.
+7. **[LOW] Debt Item 5 - Notebook-Era Ingestion Artifacts**
+   - Owner: ingestion-platform
+   - Priority: LOW
+   - Scope: replace notebook-era ingestion paths with script-driven ETL and policy-gated execution.
+   - Acceptance criteria: (a) migration steps documented, (b) parity validation report produced, (c) rollback plan available and tested in staging.
 
 ## Success Criteria
 

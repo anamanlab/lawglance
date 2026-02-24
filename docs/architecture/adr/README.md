@@ -2,20 +2,15 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
 - [Purpose](#purpose)
 - [Naming](#naming)
 - [Status Values](#status-values)
 - [Workflow](#workflow)
-
-- [Purpose](#purpose)
-- [Naming](#naming)
-- [Status Values](#status-values)
-- [Workflow](#workflow)
+- [Review Cadence](#review-cadence)
 
 ## Purpose
 
-ADRs document significant architecture decisions with context, alternatives, and trade-offs.
+ADRs capture architecture decisions with context, alternatives, and trade-offs so future changes can be reasoned from evidence rather than memory.
 
 ## Naming
 
@@ -31,7 +26,14 @@ ADRs document significant architecture decisions with context, alternatives, and
 
 ## Workflow
 
-1. Create ADR using `ADR-000-template.md`.
-2. Link related issues/design discussions.
-3. Review in PR with architecture-impacting changes.
-4. If replaced, mark old ADR as `Superseded` and reference replacement.
+1. Create ADR from `ADR-000-template.md`.
+2. Link relevant issue/task/design references.
+3. Include options, trade-offs, and explicit decision statement.
+4. Merge ADR in the same PR as architecture-impacting code.
+5. If replaced later, mark old ADR as `Superseded` and reference the replacement.
+
+## Review Cadence
+
+- Review accepted ADRs when a core subsystem changes materially.
+- During release readiness, verify ADR set still reflects runtime reality.
+- Avoid editing history silently; if an ADR is changed or replaced, create a new ADR and mark the old ADR as `Superseded`.

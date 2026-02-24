@@ -169,6 +169,34 @@ Health check:
 http://127.0.0.1:8000/healthz
 ```
 
+### Next.js frontend scaffold (`frontend-web`)
+
+Install frontend dependencies:
+
+```bash
+make frontend-install
+```
+
+Run frontend (chat shell scaffold):
+
+```bash
+make frontend-dev
+```
+
+Frontend URL:
+
+```bash
+http://127.0.0.1:3000
+```
+
+Create `frontend-web/.env.local` with:
+
+```bash
+NEXT_PUBLIC_IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Production safety note: `NEXT_PUBLIC_IMMCAD_API_BASE_URL` must use `https://` in `NODE_ENV=production`.
+
 ### Ingestion + jurisdiction evaluation workflows
 
 Generate ingestion execution report from the Canada source registry:

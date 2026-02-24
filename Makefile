@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck lint lint-api format test arch-generate arch-validate source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run staging-smoke hygiene quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -11,6 +11,18 @@ dev:
 
 api-dev:
 	uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
+
+frontend-install:
+	cd frontend-web && npm install
+
+frontend-dev:
+	cd frontend-web && npm run dev
+
+frontend-build:
+	cd frontend-web && npm run build
+
+frontend-typecheck:
+	cd frontend-web && npm run typecheck
 
 lint:
 	uv run ruff check .

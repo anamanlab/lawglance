@@ -386,3 +386,38 @@ Started: 2026-02-23
   - Useful context
   - `make` is unavailable in this environment; execute the exact Makefile `quality` command chain in-order as the required equivalent gate.
 ---
+## 2026-02-23 21:30:06 -0300 - US-006
+- What was implemented
+- Scaffolded `frontend-web` as a Next.js App Router + Tailwind TypeScript app with production-safe runtime env handling for `NEXT_PUBLIC_IMMCAD_API_BASE_URL`.
+- Implemented a minimal chat-first shell with a Canada legal scope disclaimer banner, message area, and composer placeholder flow (no backend API integration yet).
+- Added frontend run/build/typecheck scripts (package + Makefile), README run instructions, and executed browser verification screenshots for desktop and mobile viewports.
+- Files changed
+- `.env.example`
+- `.gitignore`
+- `Makefile`
+- `README.md`
+- `frontend-web/.eslintrc.json`
+- `frontend-web/.gitignore`
+- `frontend-web/README.md`
+- `frontend-web/app/globals.css`
+- `frontend-web/app/layout.tsx`
+- `frontend-web/app/page.tsx`
+- `frontend-web/components/chat-shell.tsx`
+- `frontend-web/lib/runtime-config.ts`
+- `frontend-web/next-env.d.ts`
+- `frontend-web/next.config.mjs`
+- `frontend-web/package-lock.json`
+- `frontend-web/package.json`
+- `frontend-web/postcss.config.js`
+- `frontend-web/tailwind.config.ts`
+- `frontend-web/tsconfig.json`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep frontend runtime config validation centralized in a small server-side helper so production safety checks stay consistent and easy to test.
+  - Gotcha
+  - `make` is unavailable in this environment; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
+  - Useful context
+  - `dev-browser` skill is not present in this runtime, so UI verification used Playwright CLI screenshots (`/tmp/immcad-us006-home.png` and `/tmp/immcad-us006-mobile.png`) against the local Next.js dev server.
+---

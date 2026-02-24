@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from immcad_api.errors import AuthError, ProviderApiError
 from immcad_api.api.routes import build_case_router, build_chat_router
 from immcad_api.middleware.rate_limit import build_rate_limiter
+from immcad_api.policy import load_source_policy
 from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
 from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import (
@@ -21,7 +22,7 @@ from immcad_api.services import (
     scaffold_grounded_citations,
 )
 from immcad_api.settings import load_settings
-from immcad_api.sources import CanLIIClient
+from immcad_api.sources import CanLIIClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
 
@@ -131,9 +132,12 @@ def create_app() -> FastAPI:
     chat_service = ChatService(
         provider_router,
         grounding_adapter=StaticGroundingAdapter(grounded_citations),
+        trusted_citation_domains=settings.citation_trusted_domains,
     )
     case_search_service: CaseSearchService | None = None
     canlii_usage_limiter = None
+    source_policy = None
+    source_registry = None
     if settings.enable_case_search:
         allow_canlii_scaffold_fallback = settings.environment.lower() not in {
             "production",
@@ -152,6 +156,10 @@ def create_app() -> FastAPI:
                 usage_limiter=canlii_usage_limiter,
             )
         )
+        source_policy = load_source_policy()
+        source_registry = load_source_registry()
+
+    has_api_bearer_token = bool(settings.api_bearer_token)
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.add_middleware(
@@ -174,9 +182,26 @@ def create_app() -> FastAPI:
         request.state.trace_id = generate_trace_id()
         start_time = time.perf_counter()
         status_code = 500
-        is_api_request = request.url.path.startswith("/api")
+        request_path = request.url.path
+        is_api_request = request_path.startswith("/api")
+        is_ops_request = request_path.startswith("/ops")
+        requires_bearer_auth = is_ops_request or (is_api_request and has_api_bearer_token)
         try:
-            if is_api_request and settings.api_bearer_token:
+            if requires_bearer_auth:
+                if is_ops_request and not has_api_bearer_token:
+                    error = ErrorEnvelope(
+                        error={
+                            "code": "UNAUTHORIZED",
+                            "message": "API_BEARER_TOKEN must be configured to access ops endpoints",
+                            "trace_id": request.state.trace_id,
+                        }
+                    )
+                    status_code = 401
+                    return JSONResponse(
+                        status_code=status_code,
+                        content=error.model_dump(),
+                        headers={"x-trace-id": request.state.trace_id},
+                    )
                 auth_header = request.headers.get("authorization", "")
                 expected = f"Bearer {settings.api_bearer_token}"
                 if not secrets.compare_digest(auth_header, expected):
@@ -277,8 +302,17 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    if case_search_service:
-        app.include_router(build_case_router(case_search_service))
+    if case_search_service and source_policy and source_registry:
+        app.include_router(
+            build_case_router(
+                case_search_service,
+                source_policy=source_policy,
+                source_registry=source_registry,
+                request_metrics=request_metrics,
+                export_policy_gate_enabled=settings.export_policy_gate_enabled,
+                export_max_download_bytes=settings.export_max_download_bytes,
+            )
+        )
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:

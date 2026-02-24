@@ -5,12 +5,27 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import time
 from typing import Callable
 
 import httpx
 
 from immcad_api.ingestion.planner import build_ingestion_plan_from_registry
-from immcad_api.sources import SourceRegistryEntry, load_source_registry
+from immcad_api.ingestion.source_fetch_policy import (
+    FetchPolicyRule,
+    SourceFetchPolicy,
+    load_fetch_policy,
+)
+from immcad_api.policy.source_policy import (
+    SourcePolicy,
+    is_source_ingest_allowed,
+    load_source_policy,
+)
+from immcad_api.sources import (
+    SourceRegistryEntry,
+    load_source_registry,
+    validate_court_source_payload,
+)
 from immcad_api.sources.source_registry import UpdateCadence
 
 
@@ -52,7 +67,11 @@ class IngestionSourceResult:
     checksum_sha256: str | None
     bytes_fetched: int | None
     error: str | None
+    policy_reason: str | None
     fetched_at: str
+    records_total: int | None = None
+    records_valid: int | None = None
+    records_invalid: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +84,7 @@ class IngestionExecutionReport:
     total: int
     succeeded: int
     not_modified: int
+    blocked: int
     failed: int
     results: list[IngestionSourceResult]
 
@@ -131,6 +151,38 @@ def _select_sources(
     return plan.jurisdiction, plan.version, selected
 
 
+def _fetch_with_retry_budget(
+    *,
+    fetcher: Fetcher,
+    source: SourceRegistryEntry,
+    context: FetchContext,
+    fetch_policy: SourceFetchPolicy,
+) -> FetchResult:
+    source_fetch_policy = fetch_policy.for_source(source.source_id)
+    attempts = source_fetch_policy.max_retries + 1
+    last_error: Exception | None = None
+
+    for attempt_index in range(attempts):
+        try:
+            return fetcher(source, context)
+        except Exception as exc:
+            last_error = exc
+            if attempt_index + 1 >= attempts:
+                break
+            backoff_seconds = source_fetch_policy.retry_backoff_seconds * (
+                attempt_index + 1
+            )
+            if backoff_seconds > 0:
+                time.sleep(backoff_seconds)
+
+    if last_error is not None:
+        raise RuntimeError(
+            f"fetch failed after {attempts} attempts: {last_error}"
+        ) from last_error
+
+    raise RuntimeError(f"fetch failed after {attempts} attempts")
+
+
 def _execute_jobs(
     *,
     jurisdiction: str,
@@ -139,6 +191,9 @@ def _execute_jobs(
     sources: list[SourceRegistryEntry],
     fetcher: Fetcher,
     checkpoints: dict[str, SourceCheckpoint],
+    source_policy: SourcePolicy,
+    fetch_policy: SourceFetchPolicy,
+    environment: str,
 ) -> tuple[IngestionExecutionReport, dict[str, SourceCheckpoint]]:
     started_at = _utc_now_iso()
     results: list[IngestionSourceResult] = []
@@ -147,12 +202,40 @@ def _execute_jobs(
     for source in sources:
         fetched_at = _utc_now_iso()
         checkpoint = updated_checkpoints.get(source.source_id)
+        ingest_allowed, policy_reason = is_source_ingest_allowed(
+            source.source_id,
+            source_policy=source_policy,
+            environment=environment,
+        )
+        if not ingest_allowed:
+            results.append(
+                IngestionSourceResult(
+                    source_id=source.source_id,
+                    source_type=source.source_type,
+                    update_cadence=source.update_cadence,
+                    url=str(source.url),
+                    status="blocked_policy",
+                    http_status=None,
+                    checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
+                    bytes_fetched=0,
+                    error=None,
+                    policy_reason=policy_reason,
+                    fetched_at=fetched_at,
+                )
+            )
+            continue
+
         context = FetchContext(
             etag=checkpoint.etag if checkpoint else None,
             last_modified=checkpoint.last_modified if checkpoint else None,
         )
         try:
-            fetch_result = fetcher(source, context)
+            fetch_result = _fetch_with_retry_budget(
+                fetcher=fetcher,
+                source=source,
+                context=context,
+                fetch_policy=fetch_policy,
+            )
 
             if fetch_result.http_status == 304:
                 results.append(
@@ -166,6 +249,7 @@ def _execute_jobs(
                         checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
                         bytes_fetched=0,
                         error=None,
+                        policy_reason=policy_reason,
                         fetched_at=fetched_at,
                     )
                 )
@@ -185,6 +269,20 @@ def _execute_jobs(
                     f"Provider fetch returned empty payload for status={fetch_result.http_status}"
                 )
 
+            court_validation = validate_court_source_payload(source.source_id, fetch_result.payload)
+            if court_validation is not None:
+                if court_validation.records_total == 0:
+                    raise ValueError(
+                        f"{source.source_id} payload did not include any decision records"
+                    )
+                if court_validation.records_invalid > 0:
+                    first_errors = "; ".join(court_validation.errors[:3])
+                    raise ValueError(
+                        f"{source.source_id} validation failed: "
+                        f"{court_validation.records_invalid}/{court_validation.records_total} "
+                        f"invalid records ({first_errors})"
+                    )
+
             checksum = hashlib.sha256(fetch_result.payload).hexdigest()
             results.append(
                 IngestionSourceResult(
@@ -197,6 +295,10 @@ def _execute_jobs(
                     checksum_sha256=checksum,
                     bytes_fetched=len(fetch_result.payload),
                     error=None,
+                    policy_reason=policy_reason,
+                    records_total=court_validation.records_total if court_validation else None,
+                    records_valid=court_validation.records_valid if court_validation else None,
+                    records_invalid=court_validation.records_invalid if court_validation else None,
                     fetched_at=fetched_at,
                 )
             )
@@ -220,12 +322,14 @@ def _execute_jobs(
                     checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
                     bytes_fetched=None,
                     error=str(exc),
+                    policy_reason=policy_reason,
                     fetched_at=fetched_at,
                 )
             )
 
     succeeded = sum(1 for item in results if item.status == "success")
     not_modified = sum(1 for item in results if item.status == "not_modified")
+    blocked = sum(1 for item in results if item.status == "blocked_policy")
     failed = sum(1 for item in results if item.status == "error")
 
     report = IngestionExecutionReport(
@@ -237,23 +341,55 @@ def _execute_jobs(
         total=len(results),
         succeeded=succeeded,
         not_modified=not_modified,
+        blocked=blocked,
         failed=failed,
         results=results,
     )
     return report, updated_checkpoints
 
 
+def _apply_timeout_override(
+    fetch_policy: SourceFetchPolicy,
+    timeout_seconds: float,
+) -> SourceFetchPolicy:
+    normalized_timeout = max(timeout_seconds, 1.0)
+    default_rule = FetchPolicyRule(
+        timeout_seconds=normalized_timeout,
+        max_retries=fetch_policy.default.max_retries,
+        retry_backoff_seconds=fetch_policy.default.retry_backoff_seconds,
+    )
+    source_rules = {
+        source_id: FetchPolicyRule(
+            timeout_seconds=normalized_timeout,
+            max_retries=rule.max_retries,
+            retry_backoff_seconds=rule.retry_backoff_seconds,
+        )
+        for source_id, rule in fetch_policy.by_source.items()
+    }
+    return SourceFetchPolicy(default=default_rule, by_source=source_rules)
+
+
 def run_ingestion_jobs(
     *,
     cadence: UpdateCadence | None = None,
     registry_path: str | Path | None = None,
-    timeout_seconds: float = 30.0,
+    source_policy_path: str | Path | None = None,
+    fetch_policy_path: str | Path | None = None,
+    environment: str = "development",
+    timeout_seconds: float | None = None,
     state_path: str | Path | None = None,
     fetcher: Fetcher | None = None,
 ) -> IngestionExecutionReport:
     jurisdiction, version, sources = _select_sources(registry_path, cadence)
     cadence_label = cadence or "all"
     checkpoints = _load_checkpoints(state_path)
+    source_policy = load_source_policy(source_policy_path)
+    fetch_policy = load_fetch_policy(
+        fetch_policy_path,
+        default_timeout_seconds=30.0 if timeout_seconds is None else timeout_seconds,
+    )
+    if timeout_seconds is not None:
+        fetch_policy = _apply_timeout_override(fetch_policy, timeout_seconds)
 
     if fetcher is not None:
         report, updated_checkpoints = _execute_jobs(
@@ -263,11 +399,14 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=fetcher,
             checkpoints=checkpoints,
+            source_policy=source_policy,
+            fetch_policy=fetch_policy,
+            environment=environment,
         )
         _save_checkpoints(state_path, updated_checkpoints)
         return report
 
-    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+    with httpx.Client(follow_redirects=True) as client:
 
         def _fetch(source: SourceRegistryEntry, context: FetchContext) -> FetchResult:
             headers: dict[str, str] = {}
@@ -276,7 +415,12 @@ def run_ingestion_jobs(
             if context.last_modified:
                 headers["If-Modified-Since"] = context.last_modified
 
-            response = client.get(str(source.url), headers=headers or None)
+            source_fetch_policy = fetch_policy.for_source(source.source_id)
+            response = client.get(
+                str(source.url),
+                headers=headers or None,
+                timeout=source_fetch_policy.timeout_seconds,
+            )
             etag = response.headers.get("ETag")
             last_modified = response.headers.get("Last-Modified")
 
@@ -303,6 +447,9 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=_fetch,
             checkpoints=checkpoints,
+            source_policy=source_policy,
+            fetch_policy=fetch_policy,
+            environment=environment,
         )
 
     _save_checkpoints(state_path, updated_checkpoints)

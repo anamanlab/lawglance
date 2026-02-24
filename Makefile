@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
@@ -55,6 +55,9 @@ docs-fix:
 source-registry-validate:
 	./scripts/venv_exec.sh python scripts/validate_source_registry.py
 
+backend-vercel-sync-validate:
+	./scripts/venv_exec.sh python scripts/validate_backend_vercel_source_sync.py
+
 legal-review-validate:
 	./scripts/venv_exec.sh python scripts/validate_legal_review_checklist.py
 
@@ -89,7 +92,7 @@ canlii-live-smoke:
 hygiene:
 	bash scripts/check_repository_hygiene.sh
 
-quality: lint-api test arch-validate docs-audit source-registry-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
+quality: lint-api test arch-validate docs-audit source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 
 integration-quality: quality ingestion-smoke
 

@@ -54,6 +54,8 @@ def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     for snippet in REQUIRED_BACKEND_POLICY_STEP_SNIPPETS:
         assert snippet in workflow
+    assert "Validate backend-vercel source sync" in workflow
+    assert "scripts/validate_backend_vercel_source_sync.py" in workflow
 
 
 def test_release_gates_enforces_hardened_synthetic_citation_toggle() -> None:

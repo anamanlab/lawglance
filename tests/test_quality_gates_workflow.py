@@ -16,6 +16,7 @@ REQUIRED_FRONTEND_QUALITY_STEPS = [
 ]
 REQUIRED_SECURITY_AND_INGESTION_STEPS = [
     "Dependency review (PR)",
+    "Validate backend-vercel source sync",
     "Run ingestion smoke checks",
     "Upload ingestion smoke artifact",
 ]

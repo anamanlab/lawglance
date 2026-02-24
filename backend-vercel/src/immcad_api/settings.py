@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
+from immcad_api.policy.compliance import (
+    DEFAULT_TRUSTED_CITATION_DOMAINS,
+    normalize_trusted_domains,
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -27,6 +32,9 @@ class Settings:
     provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
     allow_scaffold_synthetic_citations: bool
+    export_policy_gate_enabled: bool
+    export_max_download_bytes: int
+    citation_trusted_domains: tuple[str, ...]
     api_rate_limit_per_minute: int
     cors_allowed_origins: tuple[str, ...]
 
@@ -101,9 +109,23 @@ def load_settings() -> Settings:
         True,
     )
     raw_citation_trusted_domains = os.getenv("CITATION_TRUSTED_DOMAINS")
+    parsed_citation_trusted_domains = (
+        tuple(
+            item.strip()
+            for item in raw_citation_trusted_domains.split(",")
+            if item.strip()
+        )
+        if raw_citation_trusted_domains is not None
+        else None
+    )
+    citation_trusted_domains = normalize_trusted_domains(
+        list(parsed_citation_trusted_domains or DEFAULT_TRUSTED_CITATION_DOMAINS)
+    )
 
     if hardened_environment and not api_bearer_token:
-        raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+        raise ValueError(
+            "API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci"
+        )
     if hardened_environment and enable_scaffold_provider:
         raise ValueError(
             "ENABLE_SCAFFOLD_PROVIDER must be false when ENVIRONMENT is production/prod/ci"
@@ -113,7 +135,9 @@ def load_settings() -> Settings:
             "PRIMARY_PROVIDER cannot be scaffold when ENVIRONMENT is production/prod/ci"
         )
     if hardened_environment and not gemini_api_key:
-        raise ValueError("GEMINI_API_KEY is required when ENVIRONMENT is production/prod/ci")
+        raise ValueError(
+            "GEMINI_API_KEY is required when ENVIRONMENT is production/prod/ci"
+        )
     if hardened_environment and enable_case_search and not canlii_api_key:
         raise ValueError(
             "CANLII_API_KEY is required when ENABLE_CASE_SEARCH=true in production/prod/ci"
@@ -132,8 +156,28 @@ def load_settings() -> Settings:
         raise ValueError(
             "CITATION_TRUSTED_DOMAINS must be explicitly set when ENVIRONMENT is production/prod/ci"
         )
+    if hardened_environment and not parsed_citation_trusted_domains:
+        raise ValueError(
+            "CITATION_TRUSTED_DOMAINS must define at least one trusted domain in production/prod/ci"
+        )
+    export_policy_gate_enabled = parse_bool_env(
+        "EXPORT_POLICY_GATE_ENABLED",
+        hardened_environment,
+    )
+    if hardened_environment and not export_policy_gate_enabled:
+        raise ValueError(
+            "EXPORT_POLICY_GATE_ENABLED must be true when ENVIRONMENT is production/prod/ci"
+        )
+    export_max_download_bytes = parse_int_env(
+        "EXPORT_MAX_DOWNLOAD_BYTES", 10 * 1024 * 1024
+    )
+    if export_max_download_bytes < 1:
+        raise ValueError("EXPORT_MAX_DOWNLOAD_BYTES must be >= 1")
 
-    gemini_model = parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview") or "gemini-3-flash-preview"
+    gemini_model = (
+        parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview")
+        or "gemini-3-flash-preview"
+    )
     gemini_model_fallbacks = tuple(
         model
         for model in parse_csv_env("GEMINI_MODEL_FALLBACKS", ("gemini-2.5-flash",))
@@ -170,6 +214,9 @@ def load_settings() -> Settings:
         ),
         enable_scaffold_provider=enable_scaffold_provider,
         allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
+        export_policy_gate_enabled=export_policy_gate_enabled,
+        export_max_download_bytes=export_max_download_bytes,
+        citation_trusted_domains=citation_trusted_domains,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
         cors_allowed_origins=parse_csv_env(
             "CORS_ALLOWED_ORIGINS",

@@ -3,18 +3,20 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 Confidence = Literal["low", "medium", "high"]
 FallbackReason = Literal["timeout", "rate_limit", "policy_block", "provider_error"]
+ChatLocale = Literal["en-CA", "fr-CA"]
+ChatMode = Literal["standard"]
 
 
 class ChatRequest(BaseModel):
     session_id: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=8000)
-    locale: str = Field(default="en-CA", max_length=16)
-    mode: str = Field(default="standard", max_length=32)
+    locale: ChatLocale = "en-CA"
+    mode: ChatMode = "standard"
 
 
 class Citation(BaseModel):
@@ -58,6 +60,21 @@ class CaseSearchResponse(BaseModel):
     results: list[CaseSearchResult]
 
 
+class CaseExportRequest(BaseModel):
+    source_id: str = Field(min_length=2, max_length=128)
+    case_id: str = Field(min_length=1, max_length=256)
+    document_url: HttpUrl
+    format: Literal["pdf"] = "pdf"
+
+
+class CaseExportResponse(BaseModel):
+    source_id: str
+    case_id: str
+    format: Literal["pdf"]
+    export_allowed: bool
+    policy_reason: str | None = None
+
+
 class ErrorBody(BaseModel):
     code: Literal[
         "VALIDATION_ERROR",
@@ -69,6 +86,7 @@ class ErrorBody(BaseModel):
     ]
     message: str
     trace_id: str
+    policy_reason: str | None = None
 
 
 class ErrorEnvelope(BaseModel):

@@ -18,7 +18,6 @@ jobs:
             run_on_schedule: false
           - cadence: scheduled_incremental
             run_on_schedule: true
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && matrix.run_on_schedule) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

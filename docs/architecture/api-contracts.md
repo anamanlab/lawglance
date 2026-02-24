@@ -161,6 +161,12 @@ Purpose:
 - Exposes the production observability baseline for incident detection and triage.
 - Intended for operations dashboards and alert evaluators.
 
+Headers:
+
+```text
+Authorization: Bearer <token>   # required
+```
+
 Response:
 
 ```json
@@ -182,6 +188,18 @@ Response:
     "refusal": {
       "total": 41,
       "rate": 0.1171
+    },
+    "export": {
+      "attempts": 12,
+      "allowed": 9,
+      "blocked": 2,
+      "fetch_failures": 1,
+      "too_large": 0,
+      "policy_reasons": {
+        "source_export_allowed": 9,
+        "source_export_blocked_by_policy": 2,
+        "source_export_fetch_failed": 1
+      }
     },
     "latency_ms": {
       "sample_count": 350,
@@ -221,7 +239,7 @@ Error envelope contract note: `error.trace_id` is required for error responses a
 
 - All responses include `x-trace-id` header for observability correlation.
 - Error responses include `error.trace_id` in the body in addition to `x-trace-id`.
-- `GET /ops/metrics` is the canonical endpoint for request rate, error rate, fallback rate, refusal rate, and latency percentiles.
+- `GET /ops/metrics` is the canonical endpoint for request rate, error rate, fallback rate, refusal rate, export outcomes, and latency percentiles.
 - `POST /api/chat` must return at least one citation unless either:
   - response is a policy refusal, or
   - synthetic scaffold citations are disabled and no grounded citations are available (safe constrained response path).

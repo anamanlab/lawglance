@@ -174,7 +174,9 @@ def test_bearer_auth_enforced_for_production_modes(
     assert unauthorized.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
-def test_provider_error_envelope_when_scaffold_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_error_envelope_when_scaffold_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -205,7 +207,9 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
 
     openai_calls = {"count": 0}
 
-    def flaky_openai_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+    def flaky_openai_generate(
+        self, *, message: str, citations, locale: str
+    ) -> ProviderResult:
         del self, message, citations, locale
         openai_calls["count"] += 1
         if openai_calls["count"] == 1:
@@ -225,7 +229,9 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
             confidence="medium",
         )
 
-    def gemini_fallback_generate(self, *, message: str, citations, locale: str) -> ProviderResult:
+    def gemini_fallback_generate(
+        self, *, message: str, citations, locale: str
+    ) -> ProviderResult:
         del self, message, citations, locale
         return ProviderResult(
             provider="gemini",
@@ -242,8 +248,12 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
             confidence="medium",
         )
 
-    monkeypatch.setattr("immcad_api.main.OpenAIProvider.generate", flaky_openai_generate)
-    monkeypatch.setattr("immcad_api.main.GeminiProvider.generate", gemini_fallback_generate)
+    monkeypatch.setattr(
+        "immcad_api.main.OpenAIProvider.generate", flaky_openai_generate
+    )
+    monkeypatch.setattr(
+        "immcad_api.main.GeminiProvider.generate", gemini_fallback_generate
+    )
 
     transient_client = TestClient(create_app())
     first = transient_client.post(
@@ -324,6 +334,7 @@ def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_ground
     assert body["citations"] == []
     assert body["confidence"] == "low"
     assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["disclaimer"] == DISCLAIMER_TEXT
 
 
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -379,7 +390,10 @@ def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
     assert response.status_code == 400
     body = response.json()
     assert body["error"]["code"] == "VALIDATION_ERROR"
-    assert body["error"]["message"] == "Unable to determine client identifier for rate limiting"
+    assert (
+        body["error"]["message"]
+        == "Unable to determine client identifier for rate limiting"
+    )
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
@@ -461,6 +475,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["errors"]["total"] >= 1
     assert request_metrics["refusal"]["total"] >= 1
     assert "fallback" in request_metrics
+    assert "export" in request_metrics
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
@@ -488,7 +503,7 @@ def test_ops_metrics_requires_auth_when_bearer_token_configured(
     assert authorized.status_code == 200
 
 
-def test_ops_metrics_does_not_require_auth_when_bearer_token_unset(
+def test_ops_metrics_requires_bearer_token_configuration_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
@@ -496,4 +511,8 @@ def test_ops_metrics_does_not_require_auth_when_bearer_token_unset(
 
     response = open_client.get("/ops/metrics")
 
-    assert response.status_code == 200
+    assert response.status_code == 401
+    body = response.json()
+    assert body["error"]["code"] == "UNAUTHORIZED"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]

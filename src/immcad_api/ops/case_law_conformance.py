@@ -85,7 +85,11 @@ def _evaluate_source_payload(
             error="unsupported_source",
         )
 
-    invalid_ratio = summary.invalid_ratio
+    invalid_ratio = (
+        (summary.records_invalid / summary.records_total)
+        if summary.records_total > 0
+        else 0.0
+    )
     if summary.records_total < min_records:
         source_status = "fail"
         error = f"too_few_records:{summary.records_total}<{min_records}"

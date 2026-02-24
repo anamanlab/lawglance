@@ -80,6 +80,51 @@ def test_case_search_contract_shape() -> None:
     assert "url" in body["results"][0]
 
 
+def test_source_export_contract_shape_for_allowed_source() -> None:
+    response = client.get("/api/sources/IRPA/export")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_id"] == "IRPA"
+    assert body["export_allowed"] is True
+    assert body["policy_reason"] == "source_export_allowed"
+    assert body["status"] == "ready"
+    assert body["source_type"] == "statute"
+    assert "Immigration and Refugee Protection Act" in body["instrument"]
+    assert body["download_url"].startswith("https://")
+    assert body["registry_version"]
+    assert body["jurisdiction"] == "ca"
+    assert "x-trace-id" in response.headers
+
+
+def test_source_export_policy_block_response() -> None:
+    response = client.get("/api/sources/IRCC_PDI/export")
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"]["code"] == "POLICY_BLOCKED"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_source_export_source_unavailable_when_registry_entry_missing() -> None:
+    response = client.get("/api/sources/SCC_DECISIONS/export")
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_source_export_redirect_mode_for_allowed_source() -> None:
+    response = client.get("/api/sources/IRPA/export?redirect=true", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"].startswith("https://laws-lois.justice.gc.ca/")
+    assert "x-trace-id" in response.headers
+
+
 def test_validation_error_uses_error_envelope() -> None:
     response = client.post(
         "/api/chat",

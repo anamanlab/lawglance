@@ -58,6 +58,19 @@ class CaseSearchResponse(BaseModel):
     results: list[CaseSearchResult]
 
 
+class SourceExportResponse(BaseModel):
+    source_id: str
+    export_allowed: bool
+    policy_reason: str
+    source_type: str
+    instrument: str
+    download_url: str
+    registry_version: str
+    jurisdiction: str
+    status: Literal["ready", "not_implemented"]
+    message: str
+
+
 class ErrorBody(BaseModel):
     code: Literal[
         "VALIDATION_ERROR",

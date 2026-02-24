@@ -22,6 +22,7 @@ from immcad_api.services import (
 )
 from immcad_api.settings import load_settings
 from immcad_api.sources import CanLIIClient
+from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
 
 
@@ -132,11 +133,16 @@ def create_app() -> FastAPI:
         grounding_adapter=StaticGroundingAdapter(grounded_citations),
     )
     allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
+    canlii_usage_limiter = build_canlii_usage_limiter(
+        redis_url=settings.redis_url,
+        lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
+    )
     case_search_service = CaseSearchService(
         CanLIIClient(
             api_key=settings.canlii_api_key,
             base_url=settings.canlii_base_url,
             allow_scaffold_fallback=allow_canlii_scaffold_fallback,
+            usage_limiter=canlii_usage_limiter,
         )
     )
 

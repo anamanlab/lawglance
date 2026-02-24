@@ -41,7 +41,8 @@ Endpoints:
 - If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
-  - `production`/`prod`/`ci`: CanLII failures return a structured `PROVIDER_ERROR` envelope with `trace_id`; synthetic scaffold cases are disabled.
+  - `production`/`prod`/`ci`: CanLII failures return a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`; synthetic scaffold cases are disabled.
+- CanLII integration uses metadata endpoints only and enforces plan limits (`5000/day`, `2 req/s`, `1 in-flight request`).
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.
 - Provider routing has circuit-breaker safeguards for repeated provider failures.

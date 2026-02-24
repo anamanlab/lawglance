@@ -170,6 +170,7 @@ export function ChatShell({
   const [supportContext, setSupportContext] = useState<SupportContext | null>(null);
   const [relatedCases, setRelatedCases] = useState<CaseSearchResult[]>([]);
   const [relatedCasesStatus, setRelatedCasesStatus] = useState<string>("");
+  const [pendingCaseQuery, setPendingCaseQuery] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
 
   const apiClient = useMemo(() => createApiClient({ apiBaseUrl }), [apiBaseUrl]);
@@ -222,6 +223,7 @@ export function ChatShell({
     setRetryPrompt(null);
     setRelatedCases([]);
     setRelatedCasesStatus("");
+    setPendingCaseQuery(null);
     setIsSubmitting(true);
     setSubmissionPhase("chat");
 
@@ -274,16 +276,35 @@ export function ChatShell({
       });
 
       if (isPolicyRefusal) {
+        setPendingCaseQuery(null);
         setRelatedCasesStatus(
           "Policy refusal response returned. Ask a general informational question to continue."
         );
         return;
       }
+      setPendingCaseQuery(promptToSubmit);
+      setRelatedCasesStatus(
+        "Related case search is ready. Click Search related cases to fetch authoritative metadata."
+      );
+    } finally {
+      setIsSubmitting(false);
+      setSubmissionPhase("idle");
+      textareaRef.current?.focus();
+    }
+  };
 
-      setSubmissionPhase("cases");
-      setRelatedCasesStatus("Loading related case results...");
+  const runRelatedCaseSearch = async (): Promise<void> => {
+    if (isSubmitting || !pendingCaseQuery) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmissionPhase("cases");
+    setRelatedCasesStatus("Loading related case results...");
+
+    try {
       const caseSearchResult = await apiClient.searchCases({
-        query: promptToSubmit,
+        query: pendingCaseQuery,
         jurisdiction: "ca",
         limit: 5,
       });
@@ -318,7 +339,6 @@ export function ChatShell({
     } finally {
       setIsSubmitting(false);
       setSubmissionPhase("idle");
-      textareaRef.current?.focus();
     }
   };
 
@@ -550,6 +570,16 @@ export function ChatShell({
                 {supportContext?.status ?? "idle"}
               </span>
             </div>
+            <button
+              className="min-h-[44px] min-w-[44px] rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 transition duration-200 ease-out hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSubmitting || !pendingCaseQuery}
+              onClick={() => {
+                void runRelatedCaseSearch();
+              }}
+              type="button"
+            >
+              {isSubmitting && submissionPhase === "cases" ? "Searching..." : "Search related cases"}
+            </button>
             {relatedCasesStatus ? <p className="mt-1 text-slate-600">{relatedCasesStatus}</p> : null}
             {relatedCases.length ? (
               <ul className="mt-2 space-y-2 text-xs text-slate-700">

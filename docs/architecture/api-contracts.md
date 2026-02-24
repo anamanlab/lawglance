@@ -92,7 +92,7 @@ Trace correlation requirements:
 Case-law fallback behavior:
 
 - `development` (and non-prod environments): if CanLII is unavailable, deterministic scaffold case results may be returned.
-- `production`/`prod`/`ci`: if CanLII is unavailable (including missing API key), API returns `502` with `ErrorEnvelope` (`code=PROVIDER_ERROR`) and matching `x-trace-id`; synthetic scaffold cases are not returned.
+- `production`/`prod`/`ci`: if CanLII is unavailable (including missing API key), API returns `503` with `ErrorEnvelope` (`code=SOURCE_UNAVAILABLE`) and matching `x-trace-id`; synthetic scaffold cases are not returned.
 
 Trace ID behavior for `POST /api/chat`:
 
@@ -147,6 +147,12 @@ Response:
   ]
 }
 ```
+
+CanLII compliance notes:
+
+- The backend uses CanLII metadata endpoints only; it does not fetch or index document text from CanLII.
+- Query matching is performed on returned metadata fields in IMMCAD.
+- Service-level guardrails enforce CanLII plan limits: `5000/day`, `2 requests/second`, and `1 in-flight request`.
 
 ## `GET /ops/metrics`
 

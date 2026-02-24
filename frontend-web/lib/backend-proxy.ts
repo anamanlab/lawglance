@@ -151,6 +151,10 @@ function buildScaffoldFallbackResponse(
   return null;
 }
 
+function isScaffoldFallbackAllowed(): boolean {
+  return (process.env.NODE_ENV ?? "development") !== "production";
+}
+
 export async function forwardPostRequest(
   request: NextRequest,
   upstreamPath: string
@@ -164,9 +168,11 @@ export async function forwardPostRequest(
     backendBaseUrl = runtimeConfig.backendBaseUrl;
     backendBearerToken = runtimeConfig.backendBearerToken;
   } catch {
-    const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
-    if (scaffoldResponse) {
-      return scaffoldResponse;
+    if (isScaffoldFallbackAllowed()) {
+      const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
+      if (scaffoldResponse) {
+        return scaffoldResponse;
+      }
     }
     return buildProxyErrorResponse(
       503,
@@ -205,9 +211,11 @@ export async function forwardPostRequest(
     }
     return response;
   } catch {
-    const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
-    if (scaffoldResponse) {
-      return scaffoldResponse;
+    if (isScaffoldFallbackAllowed()) {
+      const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
+      if (scaffoldResponse) {
+        return scaffoldResponse;
+      }
     }
     return buildProxyErrorResponse(
       502,

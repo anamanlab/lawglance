@@ -39,7 +39,7 @@ describe("chat shell contract behavior", () => {
     cleanup();
   });
 
-  it("renders success response citations and trace IDs", async () => {
+  it("renders chat response first and runs case search only on explicit action", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
@@ -74,8 +74,13 @@ describe("chat shell contract behavior", () => {
     expect(citationLink.getAttribute("href")).toBe(
       CHAT_SUCCESS_RESPONSE.citations[0]?.url
     );
-    expect(screen.getByText("Sample Tribunal Decision")).toBeTruthy();
-    expect(screen.getByText("Trace ID: trace-chat-success")).toBeTruthy();
+    expect(screen.getAllByText("Trace ID: trace-chat-success").length).toBeGreaterThan(0);
+    expect(screen.getByText("Last endpoint: /api/chat")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Search related cases" }));
+
+    expect(await screen.findByText("Sample Tribunal Decision")).toBeTruthy();
     expect(screen.getByText("Last endpoint: /api/search/cases")).toBeTruthy();
     expect(screen.getByText("Trace ID: trace-case-success")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);

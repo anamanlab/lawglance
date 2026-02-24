@@ -20,7 +20,7 @@ Endpoints:
 - `PRIMARY_PROVIDER` (optional, default `openai`; set `gemini` for Gemini-only runtime)
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
-- `ENVIRONMENT` (optional, default `development`; use `production`/`prod`/`ci` for hardened mode)
+- `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
 - `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
@@ -32,13 +32,14 @@ Endpoints:
 - `PROVIDER_MAX_RETRIES` (optional, default `1`)
 - `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (optional, default `3`)
 - `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
-- `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
+- `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
 
 ## Notes
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
 - If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
+- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY` and `CANLII_API_KEY`; if `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: CanLII failures return a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`; synthetic scaffold cases are disabled.

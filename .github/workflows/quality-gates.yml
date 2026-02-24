@@ -41,6 +41,13 @@ jobs:
           PYTHONPATH: src
           ENVIRONMENT: ci
           API_BEARER_TOKEN: quality-gate-token
+          ENABLE_SCAFFOLD_PROVIDER: "false"
+          ENABLE_OPENAI_PROVIDER: "true"
+          PRIMARY_PROVIDER: openai
+          OPENAI_API_KEY: quality-gate-openai-key
+          GEMINI_API_KEY: quality-gate-gemini-key
+          CANLII_API_KEY: quality-gate-canlii-key
+          EXPORT_POLICY_GATE_ENABLED: "true"
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
           CITATION_TRUSTED_DOMAINS: laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
         run: |

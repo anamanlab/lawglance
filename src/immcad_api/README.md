@@ -21,7 +21,7 @@ Endpoints:
 - `PRIMARY_PROVIDER` (optional, default `openai`; set `gemini` for Gemini-only runtime)
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
-- `ENVIRONMENT` (optional, default `development`; use `production`/`prod`/`ci` for hardened mode)
+- `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
 - `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
@@ -33,7 +33,7 @@ Endpoints:
 - `PROVIDER_MAX_RETRIES` (optional, default `1`)
 - `PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (optional, default `3`)
 - `PROVIDER_CIRCUIT_BREAKER_OPEN_SECONDS` (optional, default `30`)
-- `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`)
+- `ENABLE_SCAFFOLD_PROVIDER` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` (optional, default `true`; must be `false` in `production`/`prod`/`ci`)
 - `EXPORT_POLICY_GATE_ENABLED` (optional, default `false`; when `true`, export endpoints enforce source-policy gate checks)
 - `CITATION_TRUSTED_DOMAINS` (CSV; default in development: `laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org`; must be explicitly set in `production`/`prod`/`ci`)
@@ -45,6 +45,7 @@ Endpoints:
 - If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
 - Runtime citation enforcement accepts citations only when they are well-formed and match grounding-adapter candidates; ungrounded citations are dropped and the response is constrained safely.
 - Runtime citation enforcement also validates citation URL domains against `CITATION_TRUSTED_DOMAINS`.
+- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY` and `CANLII_API_KEY`; if `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: CanLII failures return a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`; synthetic scaffold cases are disabled.

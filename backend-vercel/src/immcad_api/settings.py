@@ -78,26 +78,56 @@ def parse_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 
 
 def load_settings() -> Settings:
-    environment = parse_str_env("ENVIRONMENT", "development") or "development"
+    vercel_environment = parse_str_env("VERCEL_ENV")
+    default_environment = "production" if vercel_environment == "production" else "development"
+    environment = parse_str_env("ENVIRONMENT", default_environment) or default_environment
     environment_normalized = environment.lower()
+    hardened_environment = environment_normalized in {"production", "prod", "ci"}
     api_bearer_token = parse_str_env("API_BEARER_TOKEN")
+    openai_api_key = parse_str_env("OPENAI_API_KEY")
+    gemini_api_key = parse_str_env("GEMINI_API_KEY")
+    canlii_api_key = parse_str_env("CANLII_API_KEY")
     enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
-    allow_scaffold_synthetic_citations = parse_bool_env(
-        "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
-        True,
-    )
-
-    if environment_normalized in {"production", "prod", "ci"} and not api_bearer_token:
-        raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
-    if environment_normalized in {"production", "prod", "ci"} and allow_scaffold_synthetic_citations:
-        raise ValueError(
-            "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
-        )
-
     enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
     primary_provider = parse_str_env("PRIMARY_PROVIDER", "openai") or "openai"
     if primary_provider not in {"openai", "gemini", "scaffold"}:
         raise ValueError("PRIMARY_PROVIDER must be one of: openai, gemini, scaffold")
+    if primary_provider == "openai" and not enable_openai_provider:
+        raise ValueError("PRIMARY_PROVIDER=openai requires ENABLE_OPENAI_PROVIDER=true")
+    allow_scaffold_synthetic_citations = parse_bool_env(
+        "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
+        True,
+    )
+    raw_citation_trusted_domains = os.getenv("CITATION_TRUSTED_DOMAINS")
+
+    if hardened_environment and not api_bearer_token:
+        raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
+    if hardened_environment and enable_scaffold_provider:
+        raise ValueError(
+            "ENABLE_SCAFFOLD_PROVIDER must be false when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and primary_provider == "scaffold":
+        raise ValueError(
+            "PRIMARY_PROVIDER cannot be scaffold when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and not gemini_api_key:
+        raise ValueError("GEMINI_API_KEY is required when ENVIRONMENT is production/prod/ci")
+    if hardened_environment and not canlii_api_key:
+        raise ValueError("CANLII_API_KEY is required when ENVIRONMENT is production/prod/ci")
+    if hardened_environment and enable_openai_provider and not openai_api_key:
+        raise ValueError(
+            "OPENAI_API_KEY is required when ENABLE_OPENAI_PROVIDER=true in production/prod/ci"
+        )
+    if hardened_environment and allow_scaffold_synthetic_citations:
+        raise ValueError(
+            "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and (
+        raw_citation_trusted_domains is None or not raw_citation_trusted_domains.strip()
+    ):
+        raise ValueError(
+            "CITATION_TRUSTED_DOMAINS must be explicitly set when ENVIRONMENT is production/prod/ci"
+        )
 
     gemini_model = parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview") or "gemini-3-flash-preview"
     gemini_model_fallbacks = tuple(
@@ -110,9 +140,9 @@ def load_settings() -> Settings:
         app_name=parse_str_env("API_APP_NAME", "IMMCAD API") or "IMMCAD API",
         environment=environment,
         default_locale=parse_str_env("DEFAULT_LOCALE", "en-CA") or "en-CA",
-        openai_api_key=parse_str_env("OPENAI_API_KEY"),
-        gemini_api_key=parse_str_env("GEMINI_API_KEY"),
-        canlii_api_key=parse_str_env("CANLII_API_KEY"),
+        openai_api_key=openai_api_key,
+        gemini_api_key=gemini_api_key,
+        canlii_api_key=canlii_api_key,
         enable_openai_provider=enable_openai_provider,
         primary_provider=primary_provider,
         canlii_base_url=parse_str_env("CANLII_BASE_URL", "https://api.canlii.org/v1")

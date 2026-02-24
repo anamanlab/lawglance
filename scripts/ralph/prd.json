@@ -1,187 +1,187 @@
 {
   "project": "IMMCAD",
-  "branchName": "ralph/prod-readiness-canlii-legal-research",
-  "description": "IMMCAD production-ready V1 backlog for authoritative Canada legal sources, policy safety, compliance gates, and operational hardening.",
+  "branchName": "ralph/phase2-frontend-authoritative-runtime",
+  "description": "Phase 2 backlog to launch Next.js frontend and enforce authoritative-only runtime behavior for Canada immigration legal outputs.",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Complete required Canada legal source registry",
-      "description": "As a legal/compliance owner, I want all mandatory Canada immigration and citizenship sources tracked so answers remain grounded in authoritative sources.",
+      "title": "Correct authoritative legal source links",
+      "description": "As a legal/compliance owner, I want authoritative registry links corrected so required sources point to current canonical references.",
       "acceptanceCriteria": [
-        "Add missing tribunal rules source IDs for ID, IAD, RPD, and RAD to the source registry",
-        "Add product compliance source IDs for PIPEDA, CASL, and CanLII Terms to the source registry",
-        "Registry entries include HTTPS URLs and valid source_type/update_cadence fields",
+        "Update source registry entries for outdated tribunal/compliance URLs to canonical references",
+        "Add/adjust tests to assert corrected source URLs where applicable",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-002",
-      "title": "Enforce strict source-registry validation",
-      "description": "As an engineer, I want validation and tests to fail when required legal sources are missing so production cannot ship with incomplete legal corpus coverage.",
+      "title": "Disable synthetic CanLII fallback in production",
+      "description": "As a user, I want case-law results to be authoritative in production so synthetic fallback cases are never returned.",
       "acceptanceCriteria": [
-        "Update validation logic and tests to require all production source IDs including tribunal and compliance references",
-        "Validation output identifies missing source IDs clearly for maintainers",
-        "Quality gates run the stricter validation in CI",
+        "In production/prod/ci modes, CanLII client does not emit synthetic scaffold cases",
+        "Case search returns structured source-unavailable response contract when CanLII is unavailable in hardened modes",
+        "Add tests for hardened-mode behavior and development-mode behavior",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-003",
-      "title": "Disable synthetic CanLII case output in production",
-      "description": "As a user, I want case-law outputs to be authoritative so synthetic fallback cases are never shown in production.",
+      "title": "Enforce no synthetic citations in production",
+      "description": "As a legal reliability owner, I want synthetic citations blocked in production so responses remain source-authentic.",
       "acceptanceCriteria": [
-        "In production/prod/ci modes, CanLII client does not return synthetic scaffold cases",
-        "On CanLII unavailability, API returns a structured safe response with trace ID",
-        "Document fallback behavior for case-law queries",
+        "Introduce setting for synthetic citation allowance and wire it into app creation",
+        "Startup fails in production/prod/ci if synthetic citations are enabled",
+        "Add tests for startup guard and constrained response path when grounded citations are absent",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-004",
-      "title": "Harden policy refusal coverage",
-      "description": "As a compliance owner, I want broader refusal detection for representation and personalized legal-advice requests to maintain informational-only behavior.",
+      "title": "Implement grounded citation adapter contract",
+      "description": "As a platform engineer, I want chat service citation inputs to come from a grounding adapter contract instead of static scaffold defaults.",
       "acceptanceCriteria": [
-        "Expand refusal pattern coverage for representation, personalized strategy, filing on behalf, and guarantee requests",
-        "Add tests with blocked and allowed prompts to prevent false positives",
-        "Maintain refusal response contract with disclaimer and low confidence",
+        "Introduce grounding adapter interface used by ChatService for citation candidate retrieval",
+        "Default implementation returns safe empty list unless explicit grounded source is provided",
+        "Unit tests cover grounded and ungrounded paths with no raw user content leakage",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-005",
-      "title": "Enforce no synthetic citations in production",
-      "description": "As a legal reliability owner, I want production chat responses to avoid synthetic citations so outputs remain source-authentic.",
+      "title": "Expand policy refusal coverage",
+      "description": "As a compliance owner, I want broader refusal detection for representation and personalized strategy requests while preserving legitimate informational answers.",
       "acceptanceCriteria": [
-        "Wire settings into app/service so ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS is enforced at runtime",
-        "Production/prod/ci startup fails if synthetic citations are enabled",
-        "Add tests for safe constrained response when grounded citations are unavailable",
+        "Add additional blocked patterns for representation, filing-on-behalf, and guarantee phrasing variants",
+        "Add allowed-case tests to prevent over-blocking neutral informational prompts",
+        "Preserve refusal response contract and disclaimer behavior",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
       "id": "US-006",
-      "title": "Lock provider routing contract",
-      "description": "As a platform engineer, I want deterministic provider routing so OpenAI is always first and Gemini is the ordered fallback.",
+      "title": "Scaffold Next.js and Tailwind frontend",
+      "description": "As a user, I want a minimal chat-first web app so I can use IMMCAD without Streamlit in production.",
       "acceptanceCriteria": [
-        "Router configuration explicitly sets OpenAI as primary and Gemini as second",
-        "Fallback reason propagation remains stable in API responses",
-        "Tests validate fallback behavior for transient primary failures",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-007",
-      "title": "Strengthen API security baseline enforcement",
-      "description": "As a security owner, I want `/api/*` controls enforced in production and CI so unauthorized or abusive access is blocked.",
-      "acceptanceCriteria": [
-        "Bearer token requirement remains enforced for production/prod/ci environments",
-        "Rate-limiter client ID resolution failure returns a structured 400 error with trace ID",
-        "Add tests for authentication and rate-limit envelopes with trace headers",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-008",
-      "title": "Add PII-minimizing audit logging guarantees",
-      "description": "As a privacy owner, I want audit logs to support investigations without storing raw user message content.",
-      "acceptanceCriteria": [
-        "Audit events include trace_id, event_type, locale, mode, and message_length",
-        "Audit logs avoid raw message text for policy and provider error paths",
-        "Tests assert non-PII logging behavior",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 8,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-009",
-      "title": "Enforce legal release checklist sign-off",
-      "description": "As a release manager, I want strict legal checklist validation to block release until mandatory legal sign-off is complete.",
-      "acceptanceCriteria": [
-        "Release workflow strict mode uses validate_legal_review_checklist.py --require-checked",
-        "Unchecked reviewer/date/items fail release-gates workflow",
-        "Required legal evaluation artifacts remain part of release evidence",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 9,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-010",
-      "title": "Create production observability baseline",
-      "description": "As an operator, I want baseline metrics and alert criteria so incidents are detected quickly and traced end-to-end.",
-      "acceptanceCriteria": [
-        "Document and expose metrics for request rate, error rate, fallback rate, refusal rate, and latency percentiles",
-        "Define actionable alert thresholds and runbook links in architecture/ops docs",
-        "Trace ID correlation path is documented for incident triage",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 10,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-011",
-      "title": "Define backup and recovery operational targets",
-      "description": "As ops, I want explicit backup frequency, retention, RTO/RPO, and drill procedures so recovery is predictable.",
-      "acceptanceCriteria": [
-        "Backup and recovery documentation includes frequency, retention, and pruning policy",
-        "RTO and RPO targets are explicitly stated with responsible roles",
-        "Restore verification checklist and drill cadence are documented",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 11,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "US-012",
-      "title": "Scaffold Next.js minimal chat UI plan and integration contract",
-      "description": "As a product owner, I want a minimal chat-first UI implementation contract so frontend migration can begin without breaking API guarantees.",
-      "acceptanceCriteria": [
-        "Document frontend API contract expectations for chat, refusal, and error envelopes including trace_id handling",
-        "Define minimal UI acceptance criteria including disclaimer visibility and citation rendering",
-        "Add implementation-ready feature doc for Next.js + Tailwind migration path",
+        "Create Next.js app scaffold with Tailwind and production-safe env handling",
+        "Implement minimalist chat layout shell with disclaimer banner and message area",
+        "Add frontend scripts and README run instructions",
         "Typecheck passes",
         "Tests pass",
         "Verify in browser using dev-browser skill"
       ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement frontend API integration with trace IDs",
+      "description": "As a user, I want chat interactions to call backend APIs reliably and expose trace IDs for support.",
+      "acceptanceCriteria": [
+        "Frontend client integrates with POST /api/chat and POST /api/search/cases",
+        "Success and error flows capture x-trace-id and display it in UI support context",
+        "Handle auth, validation, policy-refusal, and provider-error envelopes consistently",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Render citation chips and refusal/error UX states",
+      "description": "As a user, I want clear citation and safety UX so I can understand source provenance and system limits.",
+      "acceptanceCriteria": [
+        "Render citation chips with title/url/pin and accessible interactions",
+        "Render clear refusal and error states with actionable guidance and trace reference",
+        "Add loading and retry states for chat submission",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Add frontend quality and contract tests",
+      "description": "As a release manager, I want frontend tests validating chat contract behavior so regressions are blocked before merge.",
+      "acceptanceCriteria": [
+        "Add frontend unit/contract tests for chat success, policy-refusal, and error envelope handling",
+        "Add tests for citation rendering and trace-id surfacing",
+        "Tests run in CI with deterministic fixtures",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Add frontend CI and release evidence integration",
+      "description": "As an operator, I want frontend build/test and runtime safety checks integrated into gates so releases are production-ready.",
+      "acceptanceCriteria": [
+        "Quality/release workflows include frontend install/build/test steps",
+        "Release evidence includes frontend test summary artifact",
+        "Gates fail when production safety toggles for synthetic behavior are misconfigured",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Mark Streamlit as legacy and update docs",
+      "description": "As a maintainer, I want documentation aligned to the new frontend architecture so developers follow the correct production path.",
+      "acceptanceCriteria": [
+        "Update README and architecture docs to set Next.js frontend as production path",
+        "Mark Streamlit app.py as legacy/dev-only path with explicit note",
+        "Update run commands and onboarding notes",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Add staging end-to-end smoke workflow",
+      "description": "As a release manager, I want staging smoke checks covering frontend-to-backend critical paths before promotion.",
+      "acceptanceCriteria": [
+        "Add staging smoke script/workflow validating chat submit, refusal path, and citation display contract",
+        "Smoke output includes trace-id capture for debugging",
+        "Document rollback trigger criteria when smoke fails",
+        "Typecheck passes",
+        "Tests pass"
+      ],
       "priority": 12,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

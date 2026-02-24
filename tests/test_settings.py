@@ -360,6 +360,19 @@ def test_load_settings_requires_canlii_key_in_hardened_modes(
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_allows_missing_canlii_key_when_case_search_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    monkeypatch.setenv("ENABLE_CASE_SEARCH", "false")
+
+    settings = load_settings()
+    assert settings.enable_case_search is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
 def test_load_settings_requires_openai_key_when_openai_enabled_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,

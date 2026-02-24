@@ -20,6 +20,7 @@ Endpoints:
 - `PRIMARY_PROVIDER` (optional, default `openai`; set `gemini` for Gemini-only runtime)
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
+- `ENABLE_CASE_SEARCH` (optional, default `true`; set `false` for Gemini-only MVP to disable `/api/search/cases` and `/api/export/cases`)
 - `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
 - `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
@@ -39,7 +40,7 @@ Endpoints:
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
 - If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
-- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY` and `CANLII_API_KEY`; if `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
+- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY`; `CANLII_API_KEY` is required only when `ENABLE_CASE_SEARCH=true`. If `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: CanLII failures return a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`; synthetic scaffold cases are disabled.

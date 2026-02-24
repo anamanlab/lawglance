@@ -134,21 +134,30 @@ def create_app() -> FastAPI:
         grounding_adapter=StaticGroundingAdapter(grounded_citations),
         trusted_citation_domains=settings.citation_trusted_domains,
     )
-    allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
-    canlii_usage_limiter = build_canlii_usage_limiter(
-        redis_url=settings.redis_url,
-        lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
-    )
-    case_search_service = CaseSearchService(
-        CanLIIClient(
-            api_key=settings.canlii_api_key,
-            base_url=settings.canlii_base_url,
-            allow_scaffold_fallback=allow_canlii_scaffold_fallback,
-            usage_limiter=canlii_usage_limiter,
+    case_search_service: CaseSearchService | None = None
+    canlii_usage_limiter = None
+    source_policy = None
+    source_registry = None
+    if settings.enable_case_search:
+        allow_canlii_scaffold_fallback = settings.environment.lower() not in {
+            "production",
+            "prod",
+            "ci",
+        }
+        canlii_usage_limiter = build_canlii_usage_limiter(
+            redis_url=settings.redis_url,
+            lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
         )
-    )
-    source_policy = load_source_policy()
-    source_registry = load_source_registry()
+        case_search_service = CaseSearchService(
+            CanLIIClient(
+                api_key=settings.canlii_api_key,
+                base_url=settings.canlii_base_url,
+                allow_scaffold_fallback=allow_canlii_scaffold_fallback,
+                usage_limiter=canlii_usage_limiter,
+            )
+        )
+        source_policy = load_source_policy()
+        source_registry = load_source_registry()
 
     has_api_bearer_token = bool(settings.api_bearer_token)
 
@@ -293,16 +302,17 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    app.include_router(
-        build_case_router(
-            case_search_service,
-            source_policy=source_policy,
-            source_registry=source_registry,
-            request_metrics=request_metrics,
-            export_policy_gate_enabled=settings.export_policy_gate_enabled,
-            export_max_download_bytes=settings.export_max_download_bytes,
+    if case_search_service and source_policy and source_registry:
+        app.include_router(
+            build_case_router(
+                case_search_service,
+                source_policy=source_policy,
+                source_registry=source_registry,
+                request_metrics=request_metrics,
+                export_policy_gate_enabled=settings.export_policy_gate_enabled,
+                export_max_download_bytes=settings.export_max_download_bytes,
+            )
         )
-    )
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:
@@ -311,7 +321,9 @@ def create_app() -> FastAPI:
     @app.get("/ops/metrics", tags=["ops"])
     def ops_metrics() -> dict[str, object]:
         canlii_metrics_snapshot = (
-            canlii_usage_limiter.snapshot() if hasattr(canlii_usage_limiter, "snapshot") else {}
+            canlii_usage_limiter.snapshot()
+            if canlii_usage_limiter and hasattr(canlii_usage_limiter, "snapshot")
+            else {}
         )
         return {
             "request_metrics": request_metrics.snapshot(),

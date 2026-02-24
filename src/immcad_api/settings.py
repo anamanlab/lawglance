@@ -20,6 +20,7 @@ class Settings:
     enable_openai_provider: bool
     primary_provider: str
     canlii_base_url: str
+    enable_case_search: bool
     api_bearer_token: str | None
     redis_url: str
     openai_model: str
@@ -95,6 +96,7 @@ def load_settings() -> Settings:
     openai_api_key = parse_str_env("OPENAI_API_KEY")
     gemini_api_key = parse_str_env("GEMINI_API_KEY")
     canlii_api_key = parse_str_env("CANLII_API_KEY")
+    enable_case_search = parse_bool_env("ENABLE_CASE_SEARCH", True)
     enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
     enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
     primary_provider = parse_str_env("PRIMARY_PROVIDER", "openai") or "openai"
@@ -136,9 +138,9 @@ def load_settings() -> Settings:
         raise ValueError(
             "GEMINI_API_KEY is required when ENVIRONMENT is production/prod/ci"
         )
-    if hardened_environment and not canlii_api_key:
+    if hardened_environment and enable_case_search and not canlii_api_key:
         raise ValueError(
-            "CANLII_API_KEY is required when ENVIRONMENT is production/prod/ci"
+            "CANLII_API_KEY is required when ENABLE_CASE_SEARCH=true in production/prod/ci"
         )
     if hardened_environment and enable_openai_provider and not openai_api_key:
         raise ValueError(
@@ -193,6 +195,7 @@ def load_settings() -> Settings:
         primary_provider=primary_provider,
         canlii_base_url=parse_str_env("CANLII_BASE_URL", "https://api.canlii.org/v1")
         or "https://api.canlii.org/v1",
+        enable_case_search=enable_case_search,
         api_bearer_token=api_bearer_token,
         redis_url=parse_str_env("REDIS_URL", "redis://localhost:6379/0")
         or "redis://localhost:6379/0",

@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
+from immcad_api.policy.compliance import (
+    DEFAULT_TRUSTED_CITATION_DOMAINS,
+    normalize_trusted_domains,
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -26,6 +31,7 @@ class Settings:
     provider_circuit_breaker_open_seconds: float
     enable_scaffold_provider: bool
     allow_scaffold_synthetic_citations: bool
+    citation_trusted_domains: tuple[str, ...]
     api_rate_limit_per_minute: int
     cors_allowed_origins: tuple[str, ...]
 
@@ -80,18 +86,38 @@ def parse_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 def load_settings() -> Settings:
     environment = parse_str_env("ENVIRONMENT", "development") or "development"
     environment_normalized = environment.lower()
+    hardened_environment = environment_normalized in {"production", "prod", "ci"}
     api_bearer_token = parse_str_env("API_BEARER_TOKEN")
     enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
     allow_scaffold_synthetic_citations = parse_bool_env(
         "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
         True,
     )
+    raw_citation_trusted_domains = os.getenv("CITATION_TRUSTED_DOMAINS")
+    parsed_citation_trusted_domains = (
+        tuple(item.strip() for item in raw_citation_trusted_domains.split(",") if item.strip())
+        if raw_citation_trusted_domains is not None
+        else None
+    )
+    citation_trusted_domains = normalize_trusted_domains(
+        list(parsed_citation_trusted_domains or DEFAULT_TRUSTED_CITATION_DOMAINS)
+    )
 
-    if environment_normalized in {"production", "prod", "ci"} and not api_bearer_token:
+    if hardened_environment and not api_bearer_token:
         raise ValueError("API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci")
-    if environment_normalized in {"production", "prod", "ci"} and allow_scaffold_synthetic_citations:
+    if hardened_environment and allow_scaffold_synthetic_citations:
         raise ValueError(
             "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and (
+        raw_citation_trusted_domains is None or not raw_citation_trusted_domains.strip()
+    ):
+        raise ValueError(
+            "CITATION_TRUSTED_DOMAINS must be explicitly set when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and not parsed_citation_trusted_domains:
+        raise ValueError(
+            "CITATION_TRUSTED_DOMAINS must define at least one trusted domain in production/prod/ci"
         )
 
     enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
@@ -135,6 +161,7 @@ def load_settings() -> Settings:
         ),
         enable_scaffold_provider=enable_scaffold_provider,
         allow_scaffold_synthetic_citations=allow_scaffold_synthetic_citations,
+        citation_trusted_domains=citation_trusted_domains,
         api_rate_limit_per_minute=parse_int_env("API_RATE_LIMIT_PER_MINUTE", 120),
         cors_allowed_origins=parse_csv_env(
             "CORS_ALLOWED_ORIGINS",

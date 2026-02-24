@@ -85,7 +85,7 @@ jobs:
           CI: "true"
         run: |
           mkdir -p artifacts/evals
-          npm run test --prefix frontend-web -- --reporter=default --reporter=junit --outputFile=artifacts/evals/frontend-test-summary.xml
+          npm run test --prefix frontend-web -- --reporter=default --reporter=junit --outputFile=../artifacts/evals/frontend-test-summary.xml
 
       - name: Validate legal review checklist (structure)
         run: uv run python scripts/validate_legal_review_checklist.py

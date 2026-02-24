@@ -30,6 +30,7 @@ def test_evaluate_alert_rules_marks_threshold_breaches() -> None:
     rules = load_alert_rules(THRESHOLDS_PATH)
     metrics_payload = {
         "request_metrics": {
+            "requests": {"total": 100},
             "errors": {"rate": 0.06},
             "fallback": {"rate": 0.01},
             "refusal": {"rate": 0.1},
@@ -47,7 +48,10 @@ def test_evaluate_alert_rules_marks_threshold_breaches() -> None:
 
 def test_evaluate_alert_rules_handles_missing_metric_paths_as_failures() -> None:
     rules = load_alert_rules(THRESHOLDS_PATH)
-    checks = evaluate_alert_rules(metrics_payload={"request_metrics": {}}, rules=rules)
+    checks = evaluate_alert_rules(
+        metrics_payload={"request_metrics": {"requests": {"total": 100}}},
+        rules=rules,
+    )
     report = build_alert_report(metrics_url="https://immcad.example/ops/metrics", checks=checks)
 
     assert report.status == "fail"
@@ -56,7 +60,7 @@ def test_evaluate_alert_rules_handles_missing_metric_paths_as_failures() -> None
 
 def test_evaluate_alert_rules_treats_boolean_metrics_as_missing() -> None:
     checks = evaluate_alert_rules(
-        metrics_payload={"request_metrics": {"errors": {"rate": False}}},
+        metrics_payload={"request_metrics": {"requests": {"total": 100}, "errors": {"rate": False}}},
         rules=[load_alert_rules(THRESHOLDS_PATH)[0]],
     )
     assert checks[0].current_value is None
@@ -89,3 +93,25 @@ def test_build_alert_report_returns_warn_when_only_warnings_present() -> None:
     assert report.status == "warn"
     assert report.failing_checks == 0
     assert report.warning_checks == len(rules)
+
+
+def test_evaluate_alert_rules_warns_when_request_volume_is_below_minimum() -> None:
+    rules = load_alert_rules(THRESHOLDS_PATH)
+    checks = evaluate_alert_rules(
+        metrics_payload={
+            "request_metrics": {
+                "requests": {"total": 6},
+                "errors": {"rate": 0.5},
+                "fallback": {"rate": 0.5},
+                "refusal": {"rate": 0.5},
+                "latency_ms": {"p95": 25_000},
+            }
+        },
+        rules=rules,
+    )
+    report = build_alert_report(metrics_url="https://immcad.example/ops/metrics", checks=checks)
+
+    assert report.status == "warn"
+    assert report.failing_checks == 0
+    assert report.warning_checks == len(rules)
+    assert all(check.status == "warn" for check in checks)

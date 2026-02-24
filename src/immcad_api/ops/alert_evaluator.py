@@ -19,6 +19,7 @@ class AlertRule:
     comparison: str
     threshold: float
     duration_minutes: int
+    min_request_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ def load_alert_rules(path: str | Path) -> list[AlertRule]:
                 comparison=comparison,
                 threshold=float(raw["threshold"]),
                 duration_minutes=int(raw["duration_minutes"]),
+                min_request_count=max(0, int(raw.get("min_request_count", 0))),
             )
         )
     return rules
@@ -129,7 +131,44 @@ def evaluate_alert_rules(
     fail_on_missing: bool = True,
 ) -> list[AlertCheckResult]:
     results: list[AlertCheckResult] = []
+    request_total = _get_numeric_value(metrics_payload, "request_metrics.requests.total")
     for rule in rules:
+        if rule.min_request_count > 0:
+            if request_total is None:
+                results.append(
+                    AlertCheckResult(
+                        name=rule.name,
+                        metric_path=rule.metric_path,
+                        comparison=rule.comparison,
+                        threshold=rule.threshold,
+                        duration_minutes=rule.duration_minutes,
+                        current_value=None,
+                        status="warn",
+                        message=(
+                            "Insufficient samples: request_metrics.requests.total missing; "
+                            f"requires at least {rule.min_request_count} requests"
+                        ),
+                    )
+                )
+                continue
+            if request_total < rule.min_request_count:
+                results.append(
+                    AlertCheckResult(
+                        name=rule.name,
+                        metric_path=rule.metric_path,
+                        comparison=rule.comparison,
+                        threshold=rule.threshold,
+                        duration_minutes=rule.duration_minutes,
+                        current_value=None,
+                        status="warn",
+                        message=(
+                            "Insufficient samples: "
+                            f"{request_total:.0f}/{rule.min_request_count} requests in window"
+                        ),
+                    )
+                )
+                continue
+
         current_value = _get_numeric_value(metrics_payload, rule.metric_path)
         if current_value is None:
             status = "fail" if fail_on_missing else "warn"

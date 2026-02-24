@@ -47,6 +47,7 @@ def test_release_gates_runs_frontend_build_and_tests() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     for step_name in REQUIRED_FRONTEND_RELEASE_STEPS:
         assert step_name in workflow
+    assert "../artifacts/evals/frontend-test-summary.xml" in workflow
 
 
 def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:

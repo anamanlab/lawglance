@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parent.parent
 TARGET_DIR = ROOT / "docs" / "architecture" / "diagrams"
 TARGET_FILE = TARGET_DIR / "generated-module-dependencies.mmd"
 
-LEGACY_ROOT_FILES = {"app.py", "lawglance_main.py", "chains.py", "cache.py", "prompts.py"}
+LEGACY_ROOT_FILES = {
+    "app.py",
+}
 
 
 def module_name_from_path(path: Path) -> str:

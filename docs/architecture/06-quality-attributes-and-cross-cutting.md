@@ -2,18 +2,9 @@
 
 ## Table of Contents
 
-- [Table of Contents](#table-of-contents)
 - [Performance](#performance)
 - [Reliability and Availability](#reliability-and-availability)
-- [Security](#security)
-- [Observability](#observability)
-- [Maintainability](#maintainability)
-- [Evolution Strategy](#evolution-strategy)
-- [Business Continuity](#business-continuity)
-
-- [Performance](#performance)
-- [Reliability and Availability](#reliability-and-availability)
-- [Security](#security)
+- [Security and Compliance](#security-and-compliance)
 - [Observability](#observability)
 - [Maintainability](#maintainability)
 - [Evolution Strategy](#evolution-strategy)
@@ -23,76 +14,78 @@
 
 Targets (MVP):
 
-- P50 chat latency: <= 3.0s
-- P95 chat latency: <= 8.0s
-- Fallback activation overhead: <= 2.0s additional in P95
+- P50 chat latency <= 3.0s
+- P95 chat latency <= 8.0s
+- Controlled fallback overhead under provider degradation
 
-Approach:
+Current controls:
 
-- Query rewrite + bounded retrieval k.
-- Cache repeated query/session combinations.
-- Provider timeout budgets and short retry policy.
+- bounded provider timeout and retry budgets,
+- API request rate limiting,
+- usage limiting for CanLII access,
+- request latency tracking in `RequestMetrics`.
 
 ## Reliability and Availability
 
 Targets:
 
-- API success rate: >= 99.0% (MVP target)
-- Graceful degradation on provider failure.
+- API success rate >= 99.0% (MVP)
+- graceful degradation on provider or source instability
 
-Approach:
+Current controls:
 
-- Primary provider with Gemini fallback.
-- Optional Grok fallback behind feature flag.
-- Circuit breaker for provider error storms.
+- ordered provider routing with circuit-breaker behavior,
+- OpenAI primary + Gemini fallback + optional scaffold fallback,
+- ingestion smoke checks in CI,
+- release-gate workflow checks for staging readiness.
 
-## Security
+Known risk:
 
-Targets:
+- live court feeds may drift from strict citation assumptions; conformance gates and threshold tuning are required for production resilience.
 
-- Authentication and authorization enforced on all `/api/*` routes in production.
-- Correlation/session identifiers propagated for incident traceability.
-- No plaintext credentials in source control or local logs.
-- PII handling follows minimization and redaction policies.
+## Security and Compliance
 
-Approach:
+Core requirements:
 
-- AuthN/AuthZ middleware with bearer/JWT controls and session/correlation ID handling.
-- API keys and credentials stored in secrets managers with scheduled rotation policy.
-- Input validation/sanitization with strict bounds, schema validation, and PII-safe logging.
-- Rate limiting and abuse prevention controls (throttling, anomaly detection, deny rules).
-- TLS-secured communication to all providers and external APIs.
-- Logging/privacy constraints: redact secrets, avoid raw personal data, enforce retention limits.
+- bearer-token protection for `/api/*` and `/ops/*` in hardened environments,
+- explicit trusted citation domain configuration in hardened environments,
+- refusal policy for disallowed legal-advice/representation prompts,
+- source-policy gating for ingestion and export controls.
+
+Controls:
+
+- schema validation + typed models,
+- rate limiting and abuse controls,
+- secrets in environment variables (not source),
+- policy and registry validation in CI.
 
 ## Observability
 
-- Structured logs with correlation ID and session ID.
-- Metrics are exposed from `GET /ops/metrics` and include:
-  - request rate (`request_metrics.requests.rate_per_minute`)
-  - error rate (`request_metrics.errors.rate`)
-  - fallback rate (`request_metrics.fallback.rate`)
-  - refusal rate (`request_metrics.refusal.rate`)
-  - latency percentiles (`request_metrics.latency_ms.p50|p95|p99`)
-- Trace correlation path for triage:
-  - `x-trace-id` response header
-  - `error.trace_id` in error envelope bodies
-  - `immcad_api.audit` structured events (`audit_event.trace_id`)
-- Tracing for orchestration and tool calls.
+Available telemetry:
+
+- `x-trace-id` response header and error envelope trace IDs,
+- request metrics (`requests`, `errors`, `fallback`, `refusal`, latency percentiles),
+- provider metrics (success/failure/circuit/fallback counters),
+- `GET /ops/metrics` operational snapshot,
+- ops alert evaluation pipeline using configured thresholds.
 
 ## Maintainability
 
-- Clear module boundaries and adapter interfaces.
-- ADR-based decision process.
-- Documentation validation in CI.
+- modular package structure (`api`, `services`, `providers`, `policy`, `sources`, `ingestion`),
+- ADR-driven architecture change tracking,
+- architecture documentation validation in CI,
+- deterministic smoke scripts for API and ingestion paths.
 
 ## Evolution Strategy
 
-- Start with modular monolith.
-- Extract ingestion worker first if needed.
-- Extract independent provider gateway only when justified by scale.
+- keep modular monolith boundaries until scale requires extraction,
+- likely first extraction: ingestion execution path,
+- keep provider adapters isolated for future model/routing changes,
+- evolve source conformance into release-blocking quality gates.
 
 ## Business Continuity
 
-- Backup vector artifacts and metadata snapshots.
-- Define cold-start rebuild process for indexes.
-- Runbook for provider outage mode.
+- keep ingestion state/checkpoint artifacts,
+- maintain rebuild path for source registry + vector data,
+- provide rollback guidance in release workflows,
+- preserve legal/compliance evidence artifacts in CI uploads.

@@ -1,18 +1,41 @@
 %% AUTO-GENERATED. DO NOT EDIT DIRECTLY.
 graph TD
-    app --> lawglance_main
     immcad_api.api.routes --> immcad_api.api.routes.cases
     immcad_api.api.routes --> immcad_api.api.routes.chat
     immcad_api.api.routes.cases --> immcad_api.schemas
     immcad_api.api.routes.cases --> immcad_api.services
     immcad_api.api.routes.chat --> immcad_api.schemas
     immcad_api.api.routes.chat --> immcad_api.services
+    immcad_api.api.routes.chat --> immcad_api.telemetry
+    immcad_api.evaluation --> immcad_api.evaluation.jurisdiction
+    immcad_api.evaluation --> immcad_api.evaluation.jurisdiction_suite
+    immcad_api.evaluation.jurisdiction --> immcad_api.policy.compliance
+    immcad_api.evaluation.jurisdiction --> immcad_api.policy.prompts
+    immcad_api.evaluation.jurisdiction --> immcad_api.sources
+    immcad_api.evaluation.jurisdiction_suite --> immcad_api.policy.compliance
+    immcad_api.evaluation.jurisdiction_suite --> immcad_api.providers
+    immcad_api.evaluation.jurisdiction_suite --> immcad_api.schemas
+    immcad_api.evaluation.jurisdiction_suite --> immcad_api.services
+    immcad_api.ingestion --> immcad_api.ingestion.jobs
+    immcad_api.ingestion --> immcad_api.ingestion.planner
+    immcad_api.ingestion.jobs --> immcad_api.ingestion.planner
+    immcad_api.ingestion.jobs --> immcad_api.policy.source_policy
+    immcad_api.ingestion.jobs --> immcad_api.sources
+    immcad_api.ingestion.jobs --> immcad_api.sources.source_registry
+    immcad_api.ingestion.planner --> immcad_api.sources
     immcad_api.main --> immcad_api.api.routes
+    immcad_api.main --> immcad_api.errors
+    immcad_api.main --> immcad_api.middleware.rate_limit
     immcad_api.main --> immcad_api.providers
+    immcad_api.main --> immcad_api.schemas
     immcad_api.main --> immcad_api.services
     immcad_api.main --> immcad_api.settings
+    immcad_api.main --> immcad_api.sources
+    immcad_api.main --> immcad_api.sources.canlii_usage_limiter
     immcad_api.main --> immcad_api.telemetry
     immcad_api.policy --> immcad_api.policy.compliance
+    immcad_api.policy --> immcad_api.policy.prompts
+    immcad_api.policy --> immcad_api.policy.source_policy
     immcad_api.policy.compliance --> immcad_api.schemas
     immcad_api.providers --> immcad_api.providers.base
     immcad_api.providers --> immcad_api.providers.gemini_provider
@@ -20,20 +43,36 @@ graph TD
     immcad_api.providers --> immcad_api.providers.router
     immcad_api.providers --> immcad_api.providers.scaffold_provider
     immcad_api.providers.base --> immcad_api.schemas
+    immcad_api.providers.error_mapping --> immcad_api.providers.base
     immcad_api.providers.gemini_provider --> immcad_api.providers.base
+    immcad_api.providers.gemini_provider --> immcad_api.providers.error_mapping
     immcad_api.providers.gemini_provider --> immcad_api.schemas
     immcad_api.providers.openai_provider --> immcad_api.providers.base
+    immcad_api.providers.openai_provider --> immcad_api.providers.error_mapping
     immcad_api.providers.openai_provider --> immcad_api.schemas
     immcad_api.providers.router --> immcad_api.providers.base
+    immcad_api.providers.router --> immcad_api.telemetry
     immcad_api.providers.scaffold_provider --> immcad_api.providers.base
     immcad_api.providers.scaffold_provider --> immcad_api.schemas
     immcad_api.services --> immcad_api.services.case_search_service
     immcad_api.services --> immcad_api.services.chat_service
+    immcad_api.services --> immcad_api.services.grounding
     immcad_api.services.case_search_service --> immcad_api.schemas
+    immcad_api.services.case_search_service --> immcad_api.sources
+    immcad_api.services.chat_service --> immcad_api.errors
     immcad_api.services.chat_service --> immcad_api.policy.compliance
     immcad_api.services.chat_service --> immcad_api.providers
     immcad_api.services.chat_service --> immcad_api.schemas
+    immcad_api.services.chat_service --> immcad_api.services.grounding
+    immcad_api.services.grounding --> immcad_api.schemas
+    immcad_api.settings --> immcad_api.policy.compliance
+    immcad_api.sources --> immcad_api.sources.canada_courts
+    immcad_api.sources --> immcad_api.sources.canlii_client
+    immcad_api.sources --> immcad_api.sources.required_sources
+    immcad_api.sources --> immcad_api.sources.source_registry
+    immcad_api.sources.canlii_client --> immcad_api.errors
+    immcad_api.sources.canlii_client --> immcad_api.schemas
+    immcad_api.sources.canlii_client --> immcad_api.sources.canlii_usage_limiter
+    immcad_api.telemetry --> immcad_api.telemetry.provider_metrics
+    immcad_api.telemetry --> immcad_api.telemetry.request_metrics
     immcad_api.telemetry --> immcad_api.telemetry.tracing
-    lawglance_main --> cache
-    lawglance_main --> chains
-    lawglance_main --> prompts

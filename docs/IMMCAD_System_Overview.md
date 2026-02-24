@@ -49,9 +49,9 @@ Unlike its predecessor which focused on Indian statutes, IMMCAD is exclusively f
 ## Technical Stack
 
 - **Language**: Python 3.11+
-- **Framework**: FastAPI (Modern API) / Streamlit (Prototype UI)
+- **Framework**: FastAPI backend + Next.js frontend (production), Streamlit thin client (legacy dev-only)
 - **AI/NLP**: OpenAI GPT-4o-mini & Gemini 2.0 Flash
-- **Vector Intelligence**: ChromaDB (to be rebuilt with Canadian corpus)
+- **Vector Intelligence**: ChromaDB-backed retrieval pipeline with Canada-focused source governance
 - **Orchestration**: Custom Modular API (`src/immcad_api`)
 - **Observability**: Trace ID-centric logging and telemetry.
 
@@ -60,7 +60,8 @@ Unlike its predecessor which focused on Indian statutes, IMMCAD is exclusively f
 - `src/immcad_api/`: The next-generation FastAPI backend.
 - `docs/architecture/`: Technical design documents and ADRs.
 - `scripts/`: Maintenance, ingestion, and deployment utilities.
-- `app.py`: Legacy Streamlit UI (serving as the current prototype interface).
+- `frontend-web/`: Production chat interface.
+- `app.py`: Legacy Streamlit dev client that forwards requests to `/api/chat` only.
 
 ## Future Enhancements
 

@@ -1,0 +1,109 @@
+name: Ops Metrics Alerts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  evaluate-ops-metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Validate required secrets
+        env:
+          API_BASE_URL: ${{ secrets.IMMCAD_API_BASE_URL }}
+          API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_BASE_URL}" ]; then
+            echo "Missing required secret: IMMCAD_API_BASE_URL"
+            exit 1
+          fi
+          if [ -z "${API_BEARER_TOKEN}" ]; then
+            echo "Missing required secret: IMMCAD_API_BEARER_TOKEN"
+            exit 1
+          fi
+
+      - name: Evaluate ops metrics alert thresholds
+        id: evaluate
+        env:
+          IMMCAD_API_BASE_URL: ${{ secrets.IMMCAD_API_BASE_URL }}
+          IMMCAD_API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+        run: |
+          uv run python scripts/evaluate_ops_alerts.py \
+            --thresholds config/ops_alert_thresholds.json \
+            --output artifacts/ops/ops-alert-eval.json
+
+      - name: Upload ops alert report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-alert-eval-report
+          if-no-files-found: error
+          path: artifacts/ops/ops-alert-eval.json
+
+      - name: Parse ops alert report
+        id: eval-report
+        if: always()
+        run: |
+          if [ ! -f artifacts/ops/ops-alert-eval.json ]; then
+            echo "breached=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          status="$(uv run python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path("artifacts/ops/ops-alert-eval.json").read_text(encoding="utf-8"))
+          print(payload.get("status", "unknown"))
+          PY
+          )"
+          if [ "$status" = "pass" ]; then
+            echo "breached=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "breached=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Incident runbook guidance
+        if: ${{ failure() || steps.eval-report.outputs.breached == 'true' }}
+        run: |
+          echo "Operational thresholds breached."
+          echo "Follow docs/release/incident-observability-runbook.md."
+
+      - name: Create incident issue
+        if: ${{ steps.eval-report.outputs.breached == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Ops metrics breach detected (${context.runId})`;
+            const body = [
+              "Automated ops alert threshold breach detected.",
+              "",
+              `- Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              `- Report status: ${process.env.REPORT_STATUS || "unknown"}`,
+              "- Runbook: docs/release/incident-observability-runbook.md"
+            ].join("\\n");
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ["incident", "ops-alert"]
+            });
+        env:
+          REPORT_STATUS: ${{ steps.eval-report.outputs.status }}

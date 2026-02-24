@@ -1,0 +1,33 @@
+{
+  "version": "2026-02-24",
+  "rules": [
+    {
+      "name": "error_rate",
+      "metric_path": "request_metrics.errors.rate",
+      "comparison": "gt",
+      "threshold": 0.05,
+      "duration_minutes": 10
+    },
+    {
+      "name": "fallback_rate",
+      "metric_path": "request_metrics.fallback.rate",
+      "comparison": "gt",
+      "threshold": 0.2,
+      "duration_minutes": 10
+    },
+    {
+      "name": "refusal_rate",
+      "metric_path": "request_metrics.refusal.rate",
+      "comparison": "gt",
+      "threshold": 0.35,
+      "duration_minutes": 15
+    },
+    {
+      "name": "latency_p95_ms",
+      "metric_path": "request_metrics.latency_ms.p95",
+      "comparison": "gt",
+      "threshold": 8000,
+      "duration_minutes": 10
+    }
+  ]
+}

@@ -9,9 +9,18 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Dependency review (PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803
+        with:
+          fail-on-severity: critical
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -27,6 +36,7 @@ jobs:
           ENVIRONMENT: ci
           API_BEARER_TOKEN: quality-gate-token
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
+          CITATION_TRUSTED_DOMAINS: laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
         run: |
           uv run python - <<'PY'
           import os
@@ -75,6 +85,11 @@ jobs:
       - name: Validate architecture docs
         run: bash scripts/validate_architecture_docs.sh
 
+      - name: Run documentation maintenance audit
+        env:
+          PYTHONPATH: src
+        run: uv run python scripts/doc_maintenance/main.py --dry-run
+
       - name: Validate source registry
         env:
           PYTHONPATH: src
@@ -96,6 +111,13 @@ jobs:
           PYTHONPATH: src
         run: uv run python scripts/run_jurisdictional_test_suite.py
 
+      - name: Run ingestion smoke checks
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p artifacts/ingestion
+          uv run python scripts/run_ingestion_smoke.py --output artifacts/ingestion/ingestion-smoke-report.json --state-path artifacts/ingestion/ingestion-smoke-checkpoints-ci.json
+
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
 
@@ -116,3 +138,20 @@ jobs:
           path: |
             artifacts/evals/jurisdictional-suite-report.json
             artifacts/evals/jurisdictional-suite-report.md
+
+      - name: Upload ingestion smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ingestion-smoke-report
+          path: artifacts/ingestion/ingestion-smoke-report.json
+
+      - name: Upload docs maintenance artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-maintenance-report
+          if-no-files-found: ignore
+          path: |
+            artifacts/docs/doc-maintenance-report.md
+            artifacts/docs/doc-maintenance-report.json

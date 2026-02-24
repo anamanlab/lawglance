@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from immcad_api.ingestion import FetchContext, FetchResult, run_ingestion_jobs
 from immcad_api.sources import SourceRegistryEntry
 
@@ -126,3 +128,173 @@ def test_run_ingestion_jobs_uses_checkpoint_conditional_context(tmp_path: Path) 
     assert second_report.failed == 0
     assert second_report.results[0].status == "not_modified"
     assert second_report.results[0].bytes_fetched == 0
+
+
+def test_run_ingestion_jobs_blocks_source_by_policy_in_production(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    registry_payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "A2AJ",
+                "source_type": "case_law",
+                "instrument": "A2AJ feed",
+                "url": "https://example.com/a2aj",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        raise AssertionError("Fetcher should not run for policy-blocked source")
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        environment="production",
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 0
+    assert report.not_modified == 0
+    assert report.blocked == 1
+    assert report.failed == 0
+    assert report.results[0].status == "blocked_policy"
+    assert report.results[0].policy_reason == "production_ingest_blocked_by_policy"
+
+
+@pytest.mark.parametrize("environment", ["development", "internal_runtime"])
+def test_run_ingestion_jobs_allows_source_by_policy_in_internal_runtime(
+    tmp_path: Path,
+    environment: str,
+) -> None:
+    registry_path = tmp_path / "registry.json"
+    registry_payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "A2AJ",
+                "source_type": "case_law",
+                "instrument": "A2AJ feed",
+                "url": "https://example.com/a2aj",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    def fetcher(source: SourceRegistryEntry, _: FetchContext) -> FetchResult:
+        return FetchResult(payload=source.source_id.encode("utf-8"), http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        environment=environment,
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.not_modified == 0
+    assert report.blocked == 0
+    assert report.failed == 0
+    assert report.results[0].status == "success"
+    assert report.results[0].policy_reason == "internal_ingest_allowed"
+
+
+def test_run_ingestion_jobs_validates_scc_payload_success(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    registry_payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "SCC_DECISIONS",
+                "source_type": "case_law",
+                "instrument": "SCC decisions feed",
+                "url": "https://example.com/scc",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    payload = {
+        "rss": {
+            "channel": {
+                "item": [
+                    {
+                        "title": "Example v Canada, 2024 SCC 3",
+                        "link": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+                        "pubDate": "Tue, 20 Feb 2024 10:00:00 GMT",
+                    }
+                ]
+            }
+        }
+    }
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        return FetchResult(payload=json.dumps(payload).encode("utf-8"), http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        environment="production",
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.failed == 0
+    assert report.results[0].status == "success"
+    assert report.results[0].records_total == 1
+    assert report.results[0].records_valid == 1
+    assert report.results[0].records_invalid == 0
+
+
+def test_run_ingestion_jobs_fails_on_invalid_scc_payload(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    registry_payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "SCC_DECISIONS",
+                "source_type": "case_law",
+                "instrument": "SCC decisions feed",
+                "url": "https://example.com/scc",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    bad_payload = {
+        "rss": {
+            "channel": {
+                "item": [
+                    {
+                        "title": "Missing SCC citation",
+                        "link": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/321/index.do",
+                        "pubDate": "Tue, 20 Feb 2024 10:00:00 GMT",
+                    }
+                ]
+            }
+        }
+    }
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        return FetchResult(payload=json.dumps(bad_payload).encode("utf-8"), http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        environment="production",
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 0
+    assert report.failed == 1
+    assert report.results[0].status == "error"
+    assert "validation failed" in (report.results[0].error or "")

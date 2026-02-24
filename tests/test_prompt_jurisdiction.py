@@ -1,16 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-PROMPTS_PATH = REPO_ROOT / "prompts.py"
-SPEC = importlib.util.spec_from_file_location("immcad_prompts", PROMPTS_PATH)
-assert SPEC and SPEC.loader
-PROMPTS_MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(PROMPTS_MODULE)
-QA_PROMPT = PROMPTS_MODULE.QA_PROMPT
-SYSTEM_PROMPT = PROMPTS_MODULE.SYSTEM_PROMPT
+from immcad_api.policy.prompts import QA_PROMPT, SYSTEM_PROMPT
 
 
 def test_system_prompt_is_canada_scoped() -> None:

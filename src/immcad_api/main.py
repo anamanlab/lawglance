@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from immcad_api.errors import AuthError, ProviderApiError
 from immcad_api.api.routes import build_case_router, build_chat_router
 from immcad_api.middleware.rate_limit import build_rate_limiter
+from immcad_api.policy import load_source_policy
 from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
 from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import (
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     chat_service = ChatService(
         provider_router,
         grounding_adapter=StaticGroundingAdapter(grounded_citations),
+        trusted_citation_domains=settings.citation_trusted_domains,
     )
     allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
     canlii_usage_limiter = build_canlii_usage_limiter(
@@ -145,6 +147,9 @@ def create_app() -> FastAPI:
             usage_limiter=canlii_usage_limiter,
         )
     )
+    source_policy = load_source_policy()
+
+    has_api_bearer_token = bool(settings.api_bearer_token)
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.add_middleware(
@@ -167,9 +172,12 @@ def create_app() -> FastAPI:
         request.state.trace_id = generate_trace_id()
         start_time = time.perf_counter()
         status_code = 500
-        is_api_request = request.url.path.startswith("/api")
+        request_path = request.url.path
+        is_api_request = request_path.startswith("/api")
+        is_ops_request = request_path.startswith("/ops")
+        requires_bearer_auth = has_api_bearer_token and (is_ops_request or is_api_request)
         try:
-            if is_api_request and settings.api_bearer_token:
+            if requires_bearer_auth:
                 auth_header = request.headers.get("authorization", "")
                 expected = f"Bearer {settings.api_bearer_token}"
                 if not secrets.compare_digest(auth_header, expected):
@@ -270,7 +278,13 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    app.include_router(build_case_router(case_search_service))
+    app.include_router(
+        build_case_router(
+            case_search_service,
+            source_policy=source_policy,
+            export_policy_gate_enabled=settings.export_policy_gate_enabled,
+        )
+    )
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:

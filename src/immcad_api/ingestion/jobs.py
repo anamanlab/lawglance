@@ -10,7 +10,16 @@ from typing import Callable
 import httpx
 
 from immcad_api.ingestion.planner import build_ingestion_plan_from_registry
-from immcad_api.sources import SourceRegistryEntry, load_source_registry
+from immcad_api.policy.source_policy import (
+    SourcePolicy,
+    is_source_ingest_allowed,
+    load_source_policy,
+)
+from immcad_api.sources import (
+    SourceRegistryEntry,
+    load_source_registry,
+    validate_court_source_payload,
+)
 from immcad_api.sources.source_registry import UpdateCadence
 
 
@@ -52,7 +61,11 @@ class IngestionSourceResult:
     checksum_sha256: str | None
     bytes_fetched: int | None
     error: str | None
+    policy_reason: str | None
     fetched_at: str
+    records_total: int | None = None
+    records_valid: int | None = None
+    records_invalid: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +78,7 @@ class IngestionExecutionReport:
     total: int
     succeeded: int
     not_modified: int
+    blocked: int
     failed: int
     results: list[IngestionSourceResult]
 
@@ -139,6 +153,8 @@ def _execute_jobs(
     sources: list[SourceRegistryEntry],
     fetcher: Fetcher,
     checkpoints: dict[str, SourceCheckpoint],
+    source_policy: SourcePolicy,
+    environment: str,
 ) -> tuple[IngestionExecutionReport, dict[str, SourceCheckpoint]]:
     started_at = _utc_now_iso()
     results: list[IngestionSourceResult] = []
@@ -147,6 +163,29 @@ def _execute_jobs(
     for source in sources:
         fetched_at = _utc_now_iso()
         checkpoint = updated_checkpoints.get(source.source_id)
+        ingest_allowed, policy_reason = is_source_ingest_allowed(
+            source.source_id,
+            source_policy=source_policy,
+            environment=environment,
+        )
+        if not ingest_allowed:
+            results.append(
+                IngestionSourceResult(
+                    source_id=source.source_id,
+                    source_type=source.source_type,
+                    update_cadence=source.update_cadence,
+                    url=str(source.url),
+                    status="blocked_policy",
+                    http_status=None,
+                    checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
+                    bytes_fetched=0,
+                    error=None,
+                    policy_reason=policy_reason,
+                    fetched_at=fetched_at,
+                )
+            )
+            continue
+
         context = FetchContext(
             etag=checkpoint.etag if checkpoint else None,
             last_modified=checkpoint.last_modified if checkpoint else None,
@@ -166,6 +205,7 @@ def _execute_jobs(
                         checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
                         bytes_fetched=0,
                         error=None,
+                        policy_reason=policy_reason,
                         fetched_at=fetched_at,
                     )
                 )
@@ -185,6 +225,20 @@ def _execute_jobs(
                     f"Provider fetch returned empty payload for status={fetch_result.http_status}"
                 )
 
+            court_validation = validate_court_source_payload(source.source_id, fetch_result.payload)
+            if court_validation is not None:
+                if court_validation.records_total == 0:
+                    raise ValueError(
+                        f"{source.source_id} payload did not include any decision records"
+                    )
+                if court_validation.records_invalid > 0:
+                    first_errors = "; ".join(court_validation.errors[:3])
+                    raise ValueError(
+                        f"{source.source_id} validation failed: "
+                        f"{court_validation.records_invalid}/{court_validation.records_total} "
+                        f"invalid records ({first_errors})"
+                    )
+
             checksum = hashlib.sha256(fetch_result.payload).hexdigest()
             results.append(
                 IngestionSourceResult(
@@ -197,6 +251,10 @@ def _execute_jobs(
                     checksum_sha256=checksum,
                     bytes_fetched=len(fetch_result.payload),
                     error=None,
+                    policy_reason=policy_reason,
+                    records_total=court_validation.records_total if court_validation else None,
+                    records_valid=court_validation.records_valid if court_validation else None,
+                    records_invalid=court_validation.records_invalid if court_validation else None,
                     fetched_at=fetched_at,
                 )
             )
@@ -220,12 +278,14 @@ def _execute_jobs(
                     checksum_sha256=checkpoint.checksum_sha256 if checkpoint else None,
                     bytes_fetched=None,
                     error=str(exc),
+                    policy_reason=policy_reason,
                     fetched_at=fetched_at,
                 )
             )
 
     succeeded = sum(1 for item in results if item.status == "success")
     not_modified = sum(1 for item in results if item.status == "not_modified")
+    blocked = sum(1 for item in results if item.status == "blocked_policy")
     failed = sum(1 for item in results if item.status == "error")
 
     report = IngestionExecutionReport(
@@ -237,6 +297,7 @@ def _execute_jobs(
         total=len(results),
         succeeded=succeeded,
         not_modified=not_modified,
+        blocked=blocked,
         failed=failed,
         results=results,
     )
@@ -247,6 +308,8 @@ def run_ingestion_jobs(
     *,
     cadence: UpdateCadence | None = None,
     registry_path: str | Path | None = None,
+    source_policy_path: str | Path | None = None,
+    environment: str = "development",
     timeout_seconds: float = 30.0,
     state_path: str | Path | None = None,
     fetcher: Fetcher | None = None,
@@ -254,6 +317,7 @@ def run_ingestion_jobs(
     jurisdiction, version, sources = _select_sources(registry_path, cadence)
     cadence_label = cadence or "all"
     checkpoints = _load_checkpoints(state_path)
+    source_policy = load_source_policy(source_policy_path)
 
     if fetcher is not None:
         report, updated_checkpoints = _execute_jobs(
@@ -263,6 +327,8 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=fetcher,
             checkpoints=checkpoints,
+            source_policy=source_policy,
+            environment=environment,
         )
         _save_checkpoints(state_path, updated_checkpoints)
         return report
@@ -303,6 +369,8 @@ def run_ingestion_jobs(
             sources=sources,
             fetcher=_fetch,
             checkpoints=checkpoints,
+            source_policy=source_policy,
+            environment=environment,
         )
 
     _save_checkpoints(state_path, updated_checkpoints)

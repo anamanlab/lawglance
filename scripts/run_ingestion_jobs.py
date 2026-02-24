@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -24,6 +25,16 @@ def parse_args() -> argparse.Namespace:
         "--registry",
         default=None,
         help="Optional path to source registry JSON (defaults to canonical registry).",
+    )
+    parser.add_argument(
+        "--source-policy",
+        default=os.getenv("SOURCE_POLICY_PATH") or "config/source_policy.yaml",
+        help="Optional path to source policy JSON/YAML (defaults to config/source_policy.yaml).",
+    )
+    parser.add_argument(
+        "--environment",
+        default=os.getenv("ENVIRONMENT", "development"),
+        help="Runtime environment for policy gates (development/staging/production/prod/ci).",
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -58,6 +69,8 @@ def main() -> int:
     report = run_ingestion_jobs(
         cadence=cadence,
         registry_path=args.registry,
+        source_policy_path=args.source_policy,
+        environment=args.environment,
         timeout_seconds=args.timeout_seconds,
         state_path=args.state_path,
     )
@@ -69,7 +82,8 @@ def main() -> int:
     print(
         "Ingestion report generated "
         f"(cadence={report.cadence}, total={report.total}, "
-        f"succeeded={report.succeeded}, not_modified={report.not_modified}, failed={report.failed})"
+        f"succeeded={report.succeeded}, not_modified={report.not_modified}, "
+        f"blocked={report.blocked}, failed={report.failed})"
     )
     print(f"Report path: {output_path}")
     print(f"State path: {args.state_path}")

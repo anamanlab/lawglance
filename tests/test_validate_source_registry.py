@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from immcad_api.policy.source_policy import load_source_policy
 from immcad_api.sources import SourceRegistry
 from immcad_api.sources.required_sources import PRODUCTION_REQUIRED_SOURCE_IDS
 
@@ -37,7 +38,7 @@ def _build_registry(*, source_ids: set[str], jurisdiction: str = "ca") -> Source
 
 def test_validate_source_registry_requirements_passes_with_all_required_ids() -> None:
     registry = _build_registry(source_ids=set(PRODUCTION_REQUIRED_SOURCE_IDS))
-    MODULE.validate_source_registry_requirements(registry)
+    MODULE.validate_source_registry_requirements(registry, load_source_policy())
 
 
 def test_validate_source_registry_requirements_reports_missing_required_ids() -> None:
@@ -47,7 +48,7 @@ def test_validate_source_registry_requirements_reports_missing_required_ids() ->
     registry = _build_registry(source_ids=source_ids)
 
     with pytest.raises(ValueError) as exc_info:
-        MODULE.validate_source_registry_requirements(registry)
+        MODULE.validate_source_registry_requirements(registry, load_source_policy())
 
     message = str(exc_info.value)
     assert "Missing required source IDs:" in message
@@ -62,4 +63,17 @@ def test_validate_source_registry_requirements_rejects_non_canadian_jurisdiction
     )
 
     with pytest.raises(ValueError, match="Registry jurisdiction must be 'ca'"):
-        MODULE.validate_source_registry_requirements(registry)
+        MODULE.validate_source_registry_requirements(registry, load_source_policy())
+
+
+def test_validate_source_registry_requirements_reports_sources_missing_in_policy() -> None:
+    source_ids = set(PRODUCTION_REQUIRED_SOURCE_IDS)
+    source_ids.add("UNLISTED_SOURCE")
+    registry = _build_registry(source_ids=source_ids)
+
+    with pytest.raises(ValueError) as exc_info:
+        MODULE.validate_source_registry_requirements(registry, load_source_policy())
+
+    message = str(exc_info.value)
+    assert "Sources missing in source policy:" in message
+    assert "UNLISTED_SOURCE" in message

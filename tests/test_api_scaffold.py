@@ -96,6 +96,24 @@ def test_validation_error_uses_error_envelope() -> None:
     assert "x-trace-id" in response.headers
 
 
+def test_chat_validation_error_for_unsupported_locale_and_mode() -> None:
+    response = client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What are the eligibility pathways?",
+            "locale": "en-US",
+            "mode": "expert",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["trace_id"]
+    assert "x-trace-id" in response.headers
+
+
 def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     secured_client = TestClient(create_app())
@@ -135,6 +153,7 @@ def test_bearer_auth_enforced_for_production_modes(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     secured_client = TestClient(create_app())
 
@@ -284,6 +303,30 @@ def test_safe_constrained_response_when_synthetic_citations_disabled(
     assert body["disclaimer"] == DISCLAIMER_TEXT
 
 
+def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_grounding_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "canlii.org")
+    allowlist_client = TestClient(create_app())
+
+    response = allowlist_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "What are the basic PR eligibility pathways?",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["citations"] == []
+    assert body["confidence"] == "low"
+    assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["disclaimer"] == DISCLAIMER_TEXT
+
+
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("API_RATE_LIMIT_PER_MINUTE", "1")
     throttled_client = TestClient(create_app())
@@ -349,6 +392,7 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.delenv("CANLII_API_KEY", raising=False)
     hardened_client = TestClient(create_app())
@@ -371,11 +415,16 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
-def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
+def test_ops_metrics_endpoint_exposes_observability_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     metrics_client = TestClient(create_app())
+    auth_headers = {"Authorization": "Bearer secret-token"}
 
     ok_response = metrics_client.post(
         "/api/chat",
+        headers=auth_headers,
         json={
             "session_id": "session-123456",
             "message": "Summarize IRPA section 11.",
@@ -385,6 +434,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
     )
     refusal_response = metrics_client.post(
         "/api/chat",
+        headers=auth_headers,
         json={
             "session_id": "session-123456",
             "message": "Please represent me and file my application",
@@ -394,9 +444,10 @@ def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
     )
     validation_error_response = metrics_client.post(
         "/api/chat",
+        headers=auth_headers,
         json={"session_id": "short", "message": ""},
     )
-    metrics = metrics_client.get("/ops/metrics")
+    metrics = metrics_client.get("/ops/metrics", headers=auth_headers)
 
     assert ok_response.status_code == 200
     assert refusal_response.status_code == 200
@@ -416,3 +467,34 @@ def test_ops_metrics_endpoint_exposes_observability_baseline() -> None:
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
     assert "provider_routing_metrics" in payload
     assert "canlii_usage_metrics" in payload
+
+
+def test_ops_metrics_requires_auth_when_bearer_token_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    secured_client = TestClient(create_app())
+
+    unauthorized = secured_client.get("/ops/metrics")
+    assert unauthorized.status_code == 401
+    unauthorized_body = unauthorized.json()
+    assert unauthorized_body["error"]["code"] == "UNAUTHORIZED"
+    assert unauthorized_body["error"]["trace_id"]
+    assert unauthorized.headers["x-trace-id"] == unauthorized_body["error"]["trace_id"]
+
+    authorized = secured_client.get(
+        "/ops/metrics",
+        headers={"Authorization": "Bearer secret-token"},
+    )
+    assert authorized.status_code == 200
+
+
+def test_ops_metrics_does_not_require_auth_when_bearer_token_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    open_client = TestClient(create_app())
+
+    response = open_client.get("/ops/metrics")
+
+    assert response.status_code == 200

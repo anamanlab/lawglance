@@ -113,9 +113,15 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
     )
 
     with caplog.at_level(logging.INFO, logger="immcad_api.audit"):
-        with pytest.raises(ProviderApiError):
-            service.handle_chat(payload, trace_id="trace-provider-001")
+        response = service.handle_chat(payload, trace_id="trace-provider-001")
 
+    assert response.answer.startswith("I do not have enough grounded legal context")
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is True
+    assert response.fallback_used.provider == "openai"
+    assert response.fallback_used.reason == "provider_error"
     events = _audit_events(caplog)
     assert events
     event = events[-1]
@@ -132,6 +138,24 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
     )
     for record in caplog.records:
         assert payload.message not in record.getMessage()
+
+
+def test_chat_service_raises_provider_error_for_non_transient_failures() -> None:
+    service = ChatService(
+        _FailingRouter(
+            code="provider_error",
+            message="GEMINI_API_KEY not configured",
+        )
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    with pytest.raises(ProviderApiError):
+        service.handle_chat(payload, trace_id="trace-provider-002")
 
 
 def test_chat_service_returns_grounded_response_when_adapter_supplies_citations() -> None:

@@ -6,6 +6,7 @@ from immcad_api.policy.compliance import (
     DEFAULT_TRUSTED_CITATION_DOMAINS,
     DISCLAIMER_TEXT,
     POLICY_REFUSAL_TEXT,
+    SAFE_CONSTRAINED_RESPONSE,
     enforce_citation_requirement,
     normalize_trusted_domains,
     should_refuse_for_policy,
@@ -90,6 +91,26 @@ class ChatService:
                 provider=exc.provider,
                 provider_error_code=exc.code,
             )
+            normalized_message = exc.message.lower()
+            is_transient_provider_failure = (
+                exc.code in {"timeout", "rate_limit"}
+                or "circuit breaker open" in normalized_message
+                or "resource_exhausted" in normalized_message
+                or "quota" in normalized_message
+                or "429" in normalized_message
+            )
+            if is_transient_provider_failure:
+                return ChatResponse(
+                    answer=SAFE_CONSTRAINED_RESPONSE,
+                    citations=[],
+                    confidence="low",
+                    disclaimer=DISCLAIMER_TEXT,
+                    fallback_used=FallbackUsed(
+                        used=True,
+                        provider=exc.provider,
+                        reason="provider_error",
+                    ),
+                )
             raise ProviderApiError(exc.message) from exc
 
         answer, validated_citations, confidence = enforce_citation_requirement(

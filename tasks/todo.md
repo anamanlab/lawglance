@@ -643,3 +643,24 @@
   - `PYTHONPATH=.:src uv run python scripts/doc_maintenance/main.py --config scripts/doc_maintenance/config.yaml --dry-run` -> pass
 - Merged into local `main` and pushed to `origin/main` (`5847ff1..4a7aedd`).
 - Residual local-only artifacts intentionally retained: `.ai/` snapshot backups (untracked).
+
+---
+
+# Task Plan - 2026-02-24 - Archived Branch Extraction Backlog (Post-Reconcile)
+
+## Current Focus
+- Keep `main` stable while extracting any still-useful deltas from archived historical branches in small, reviewable slices.
+
+## Plan
+- [x] Preserve all non-main branch states as immutable remote archive refs (`archive/*`).
+- [x] Verify all active worktrees are clean and no uncommitted changes remain.
+- [x] Triage `archive/feature-source-registry-loader-20260224` against `main` and confirm whether core loader/validation assets are already present.
+- [x] Triage `archive/feature-api-scaffold-20260224` commit-level deltas (`f66a290`, `ee7dd8b`, `e40b997`) with dry-run checks.
+- [ ] Extract only high-value, low-risk deltas from `archive/feature-api-scaffold-20260224` into a new branch from `main` (no bulk merge).
+- [ ] Defer `archive/ralph-canada-hardening-next-loop-20260224` and `archive/ralph-prod-readiness-canlii-legal-research-20260224` to selective cherry-pick only; no direct merge due to high drift risk.
+
+## Review
+- `main` is clean and synchronized with `origin/main`.
+- Archive refs were created for all at-risk local/gone-upstream branches to prevent work loss.
+- `feature/source-registry-loader` content is functionally superseded by current `main` (core loader/tests already present and evolved).
+- `feature-api-scaffold` does not merge cleanly into current `main`; must be handled via selective extraction, not branch merge.

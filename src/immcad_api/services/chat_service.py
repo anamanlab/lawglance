@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 
 from immcad_api.policy.compliance import (
+    DEFAULT_TRUSTED_CITATION_DOMAINS,
     DISCLAIMER_TEXT,
     POLICY_REFUSAL_TEXT,
     enforce_citation_requirement,
+    normalize_trusted_domains,
     should_refuse_for_policy,
 )
 from immcad_api.errors import ProviderApiError
@@ -23,9 +25,13 @@ class ChatService:
         provider_router: ProviderRouter,
         *,
         grounding_adapter: GroundingAdapter | None = None,
+        trusted_citation_domains: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self.provider_router = provider_router
         self.grounding_adapter = grounding_adapter or StaticGroundingAdapter()
+        self.trusted_citation_domains = normalize_trusted_domains(
+            trusted_citation_domains if trusted_citation_domains is not None else DEFAULT_TRUSTED_CITATION_DOMAINS
+        )
 
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
@@ -75,7 +81,20 @@ class ChatService:
         answer, validated_citations, confidence = enforce_citation_requirement(
             routed.result.answer,
             routed.result.citations,
+            grounded_citations=citations,
+            trusted_domains=self.trusted_citation_domains,
         )
+        if routed.result.citations and not validated_citations:
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="grounding_validation_failed",
+                locale=request.locale,
+                mode=request.mode,
+                message_length=len(request.message),
+                provider=routed.result.provider,
+                provider_citation_count=len(routed.result.citations),
+                grounded_citation_count=len(citations),
+            )
 
         fallback_provider = routed.result.provider if routed.fallback_used else None
         fallback_reason = routed.fallback_reason if routed.fallback_used else None
@@ -102,6 +121,8 @@ class ChatService:
         message_length: int,
         provider: str | None = None,
         provider_error_code: str | None = None,
+        provider_citation_count: int | None = None,
+        grounded_citation_count: int | None = None,
     ) -> None:
         event: dict[str, object] = {
             "trace_id": trace_id or "",
@@ -114,4 +135,8 @@ class ChatService:
             event["provider"] = provider
         if provider_error_code:
             event["provider_error_code"] = provider_error_code
+        if provider_citation_count is not None:
+            event["provider_citation_count"] = provider_citation_count
+        if grounded_citation_count is not None:
+            event["grounded_citation_count"] = grounded_citation_count
         AUDIT_LOGGER.info("chat_audit_event", extra={"audit_event": event})

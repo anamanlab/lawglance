@@ -156,23 +156,15 @@ def enforce_citation_requirement(
     answer: str,
     citations: list[Citation | dict[str, object] | object],
     *,
-    grounded_citations: list[Citation] | None = None,
+    grounded_citations: list[Citation],
     trusted_domains: tuple[str, ...] | list[str] | None = None,
 ) -> tuple[str, list[Citation], str]:
     normalized_trusted_domains = normalize_trusted_domains(
         trusted_domains if trusted_domains is not None else DEFAULT_TRUSTED_CITATION_DOMAINS
     )
-    # Backward compatibility for existing callers that only pass routed citations.
-    effective_grounded_citations = grounded_citations
-    if effective_grounded_citations is None:
-        effective_grounded_citations = [
-            citation
-            for raw_citation in citations
-            if (citation := _coerce_citation(raw_citation)) is not None
-        ]
     validated_citations = verify_grounded_citations(
         citations,
-        grounded_citations=effective_grounded_citations,
+        grounded_citations=grounded_citations,
         trusted_domains=normalized_trusted_domains,
     )
     if validated_citations:

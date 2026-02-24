@@ -5,11 +5,17 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import time
 from typing import Callable
 
 import httpx
 
 from immcad_api.ingestion.planner import build_ingestion_plan_from_registry
+from immcad_api.ingestion.source_fetch_policy import (
+    FetchPolicyRule,
+    SourceFetchPolicy,
+    load_fetch_policy,
+)
 from immcad_api.policy.source_policy import (
     SourcePolicy,
     is_source_ingest_allowed,
@@ -145,6 +151,38 @@ def _select_sources(
     return plan.jurisdiction, plan.version, selected
 
 
+def _fetch_with_retry_budget(
+    *,
+    fetcher: Fetcher,
+    source: SourceRegistryEntry,
+    context: FetchContext,
+    fetch_policy: SourceFetchPolicy,
+) -> FetchResult:
+    source_fetch_policy = fetch_policy.for_source(source.source_id)
+    attempts = source_fetch_policy.max_retries + 1
+    last_error: Exception | None = None
+
+    for attempt_index in range(attempts):
+        try:
+            return fetcher(source, context)
+        except Exception as exc:
+            last_error = exc
+            if attempt_index + 1 >= attempts:
+                break
+            backoff_seconds = source_fetch_policy.retry_backoff_seconds * (
+                attempt_index + 1
+            )
+            if backoff_seconds > 0:
+                time.sleep(backoff_seconds)
+
+    if last_error is not None:
+        raise RuntimeError(
+            f"fetch failed after {attempts} attempts: {last_error}"
+        ) from last_error
+
+    raise RuntimeError(f"fetch failed after {attempts} attempts")
+
+
 def _execute_jobs(
     *,
     jurisdiction: str,
@@ -154,6 +192,7 @@ def _execute_jobs(
     fetcher: Fetcher,
     checkpoints: dict[str, SourceCheckpoint],
     source_policy: SourcePolicy,
+    fetch_policy: SourceFetchPolicy,
     environment: str,
 ) -> tuple[IngestionExecutionReport, dict[str, SourceCheckpoint]]:
     started_at = _utc_now_iso()
@@ -191,7 +230,12 @@ def _execute_jobs(
             last_modified=checkpoint.last_modified if checkpoint else None,
         )
         try:
-            fetch_result = fetcher(source, context)
+            fetch_result = _fetch_with_retry_budget(
+                fetcher=fetcher,
+                source=source,
+                context=context,
+                fetch_policy=fetch_policy,
+            )
 
             if fetch_result.http_status == 304:
                 results.append(
@@ -304,13 +348,35 @@ def _execute_jobs(
     return report, updated_checkpoints
 
 
+def _apply_timeout_override(
+    fetch_policy: SourceFetchPolicy,
+    timeout_seconds: float,
+) -> SourceFetchPolicy:
+    normalized_timeout = max(timeout_seconds, 1.0)
+    default_rule = FetchPolicyRule(
+        timeout_seconds=normalized_timeout,
+        max_retries=fetch_policy.default.max_retries,
+        retry_backoff_seconds=fetch_policy.default.retry_backoff_seconds,
+    )
+    source_rules = {
+        source_id: FetchPolicyRule(
+            timeout_seconds=normalized_timeout,
+            max_retries=rule.max_retries,
+            retry_backoff_seconds=rule.retry_backoff_seconds,
+        )
+        for source_id, rule in fetch_policy.by_source.items()
+    }
+    return SourceFetchPolicy(default=default_rule, by_source=source_rules)
+
+
 def run_ingestion_jobs(
     *,
     cadence: UpdateCadence | None = None,
     registry_path: str | Path | None = None,
     source_policy_path: str | Path | None = None,
+    fetch_policy_path: str | Path | None = None,
     environment: str = "development",
-    timeout_seconds: float = 30.0,
+    timeout_seconds: float | None = None,
     state_path: str | Path | None = None,
     fetcher: Fetcher | None = None,
 ) -> IngestionExecutionReport:
@@ -318,6 +384,12 @@ def run_ingestion_jobs(
     cadence_label = cadence or "all"
     checkpoints = _load_checkpoints(state_path)
     source_policy = load_source_policy(source_policy_path)
+    fetch_policy = load_fetch_policy(
+        fetch_policy_path,
+        default_timeout_seconds=30.0 if timeout_seconds is None else timeout_seconds,
+    )
+    if timeout_seconds is not None:
+        fetch_policy = _apply_timeout_override(fetch_policy, timeout_seconds)
 
     if fetcher is not None:
         report, updated_checkpoints = _execute_jobs(
@@ -328,12 +400,13 @@ def run_ingestion_jobs(
             fetcher=fetcher,
             checkpoints=checkpoints,
             source_policy=source_policy,
+            fetch_policy=fetch_policy,
             environment=environment,
         )
         _save_checkpoints(state_path, updated_checkpoints)
         return report
 
-    with httpx.Client(timeout=timeout_seconds, follow_redirects=True) as client:
+    with httpx.Client(follow_redirects=True) as client:
 
         def _fetch(source: SourceRegistryEntry, context: FetchContext) -> FetchResult:
             headers: dict[str, str] = {}
@@ -342,7 +415,12 @@ def run_ingestion_jobs(
             if context.last_modified:
                 headers["If-Modified-Since"] = context.last_modified
 
-            response = client.get(str(source.url), headers=headers or None)
+            source_fetch_policy = fetch_policy.for_source(source.source_id)
+            response = client.get(
+                str(source.url),
+                headers=headers or None,
+                timeout=source_fetch_policy.timeout_seconds,
+            )
             etag = response.headers.get("ETag")
             last_modified = response.headers.get("Last-Modified")
 
@@ -370,6 +448,7 @@ def run_ingestion_jobs(
             fetcher=_fetch,
             checkpoints=checkpoints,
             source_policy=source_policy,
+            fetch_policy=fetch_policy,
             environment=environment,
         )
 

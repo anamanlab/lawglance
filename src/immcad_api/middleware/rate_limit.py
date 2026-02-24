@@ -6,7 +6,7 @@ from threading import Lock
 import time
 
 
-LOGGER = logging.getLogger("immcad_api.rate_limit")
+LOGGER = logging.getLogger(__name__)
 
 
 class InMemoryRateLimiter:

@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from immcad_api.main import create_app  # noqa: E402
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
+from immcad_api.errors import SourceUnavailableError  # noqa: E402
 from immcad_api.providers import ProviderError, ProviderResult  # noqa: E402
 
 
@@ -153,6 +154,10 @@ def test_bearer_auth_enforced_for_production_modes(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     secured_client = TestClient(create_app())
@@ -403,11 +408,23 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
+    def unavailable_case_search(*_args, **_kwargs):
+        raise SourceUnavailableError(
+            "Case-law source is currently unavailable. Please retry later."
+        )
+
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.CanLIIClient.search_cases",
+        unavailable_case_search,
+    )
     monkeypatch.setenv("ENVIRONMENT", environment)
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
-    monkeypatch.delenv("CANLII_API_KEY", raising=False)
     hardened_client = TestClient(create_app())
 
     response = hardened_client.post(

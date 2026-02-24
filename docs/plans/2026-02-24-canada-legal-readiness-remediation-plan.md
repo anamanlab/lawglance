@@ -8,6 +8,22 @@
 
 ---
 
+## Immediate Execution Order (Senior Lead Sequence)
+
+1. **Phase 0 - Release safety first (Day 0-1)**
+   - Finalize secret/backups hygiene and workflow dedupe/concurrency.
+   - Require workflow test gate pass before runtime changes continue.
+2. **Phase 1 - Ingestion correctness (Day 1-2)**
+   - Complete SCC/FC/FCA parser hardening and registry/source consistency.
+   - Require parser + ingestion + registry test pass.
+3. **Phase 2 - Runtime/API safety (Day 2-3)**
+   - Close auth/prompt/citation/export-policy safety gaps with targeted contract tests.
+4. **Phase 3 - Tooling/docs alignment + final gate (Day 3-4)**
+   - Finish Makefile/doc-maintenance hardening and documentation consistency.
+   - Run full typed + lint + targeted pytest + registry/smoke verification gate.
+
+---
+
 ### Task 1: Stabilize SCC/FC/FCA Source Definitions
 
 **Files:**

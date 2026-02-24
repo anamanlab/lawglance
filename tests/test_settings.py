@@ -5,12 +5,59 @@ import pytest
 from immcad_api.settings import load_settings
 
 
+def _set_hardened_env(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+
+
+def _set_hardened_env_without_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+
+
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])
 def test_load_settings_requires_bearer_token_in_production(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="API_BEARER_TOKEN is required"):
+        load_settings()
+
+
+def test_load_settings_defaults_to_production_when_vercel_env_is_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("VERCEL_ENV", "production")
+
+    settings = load_settings()
+
+    assert settings.environment == "production"
+
+
+def test_load_settings_requires_hardened_guards_when_vercel_env_is_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
 
     with pytest.raises(ValueError, match="API_BEARER_TOKEN is required"):
@@ -44,9 +91,7 @@ def test_load_settings_rejects_synthetic_citations_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    _set_hardened_env(monkeypatch, environment)
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "true")
 
     with pytest.raises(
@@ -58,10 +103,7 @@ def test_load_settings_rejects_synthetic_citations_in_hardened_modes(
 def test_load_settings_allows_disabled_synthetic_citations_in_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
-    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    _set_hardened_env(monkeypatch, "production")
 
     settings = load_settings()
     assert settings.allow_scaffold_synthetic_citations is False
@@ -72,9 +114,7 @@ def test_load_settings_requires_explicit_trusted_domains_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    _set_hardened_env(monkeypatch, environment)
     monkeypatch.delenv("CITATION_TRUSTED_DOMAINS", raising=False)
 
     with pytest.raises(
@@ -88,9 +128,7 @@ def test_load_settings_rejects_empty_parsed_trusted_domains_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    _set_hardened_env(monkeypatch, environment)
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", ",,")
 
     with pytest.raises(
@@ -157,11 +195,10 @@ def test_load_settings_parses_trusted_citation_domains_csv(
 def test_load_settings_trims_sensitive_env_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _set_hardened_env(monkeypatch, "production")
     monkeypatch.setenv("ENVIRONMENT", " production ")
     monkeypatch.setenv("API_BEARER_TOKEN", " secret-token ")
-    monkeypatch.setenv(
-        "CITATION_TRUSTED_DOMAINS", " laws-lois.justice.gc.ca,canlii.org "
-    )
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", " laws-lois.justice.gc.ca,canlii.org ")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
 
     settings = load_settings()
@@ -231,6 +268,19 @@ def test_load_settings_rejects_invalid_primary_provider(
         load_settings()
 
 
+def test_load_settings_rejects_openai_primary_when_openai_provider_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("PRIMARY_PROVIDER", "openai")
+    monkeypatch.setenv("ENABLE_OPENAI_PROVIDER", "false")
+
+    with pytest.raises(
+        ValueError, match="PRIMARY_PROVIDER=openai requires ENABLE_OPENAI_PROVIDER=true"
+    ):
+        load_settings()
+
+
 def test_load_settings_defaults_export_policy_gate_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -246,10 +296,7 @@ def test_load_settings_defaults_export_policy_gate_enabled_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
-    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    _set_hardened_env(monkeypatch, environment)
     monkeypatch.delenv("EXPORT_POLICY_GATE_ENABLED", raising=False)
 
     settings = load_settings()
@@ -261,10 +308,7 @@ def test_load_settings_rejects_disabled_export_policy_gate_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
-    monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
-    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
-    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    _set_hardened_env(monkeypatch, environment)
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "false")
 
     with pytest.raises(ValueError, match="EXPORT_POLICY_GATE_ENABLED must be true"):
@@ -288,4 +332,77 @@ def test_load_settings_rejects_non_positive_export_max_download_bytes(
     monkeypatch.setenv("EXPORT_MAX_DOWNLOAD_BYTES", "0")
 
     with pytest.raises(ValueError, match="EXPORT_MAX_DOWNLOAD_BYTES must be >= 1"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_gemini_key_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="GEMINI_API_KEY is required"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_canlii_key_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="CANLII_API_KEY is required"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_allows_missing_canlii_key_when_case_search_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    monkeypatch.setenv("ENABLE_CASE_SEARCH", "false")
+
+    settings = load_settings()
+    assert settings.enable_case_search is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_openai_key_when_openai_enabled_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="OPENAI_API_KEY is required"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_scaffold_provider_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "true")
+
+    with pytest.raises(ValueError, match="ENABLE_SCAFFOLD_PROVIDER must be false"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_scaffold_primary_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("PRIMARY_PROVIDER", "scaffold")
+
+    with pytest.raises(ValueError, match="PRIMARY_PROVIDER cannot be scaffold"):
         load_settings()

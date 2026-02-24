@@ -132,19 +132,26 @@ def create_app() -> FastAPI:
         provider_router,
         grounding_adapter=StaticGroundingAdapter(grounded_citations),
     )
-    allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
-    canlii_usage_limiter = build_canlii_usage_limiter(
-        redis_url=settings.redis_url,
-        lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
-    )
-    case_search_service = CaseSearchService(
-        CanLIIClient(
-            api_key=settings.canlii_api_key,
-            base_url=settings.canlii_base_url,
-            allow_scaffold_fallback=allow_canlii_scaffold_fallback,
-            usage_limiter=canlii_usage_limiter,
+    case_search_service: CaseSearchService | None = None
+    canlii_usage_limiter = None
+    if settings.enable_case_search:
+        allow_canlii_scaffold_fallback = settings.environment.lower() not in {
+            "production",
+            "prod",
+            "ci",
+        }
+        canlii_usage_limiter = build_canlii_usage_limiter(
+            redis_url=settings.redis_url,
+            lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
         )
-    )
+        case_search_service = CaseSearchService(
+            CanLIIClient(
+                api_key=settings.canlii_api_key,
+                base_url=settings.canlii_base_url,
+                allow_scaffold_fallback=allow_canlii_scaffold_fallback,
+                usage_limiter=canlii_usage_limiter,
+            )
+        )
 
     app = FastAPI(title=settings.app_name, version="0.1.0")
     app.add_middleware(
@@ -270,7 +277,8 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
-    app.include_router(build_case_router(case_search_service))
+    if case_search_service:
+        app.include_router(build_case_router(case_search_service))
 
     @app.get("/healthz", tags=["health"])
     def healthz() -> dict[str, str]:
@@ -279,7 +287,9 @@ def create_app() -> FastAPI:
     @app.get("/ops/metrics", tags=["ops"])
     def ops_metrics() -> dict[str, object]:
         canlii_metrics_snapshot = (
-            canlii_usage_limiter.snapshot() if hasattr(canlii_usage_limiter, "snapshot") else {}
+            canlii_usage_limiter.snapshot()
+            if canlii_usage_limiter and hasattr(canlii_usage_limiter, "snapshot")
+            else {}
         )
         return {
             "request_metrics": request_metrics.snapshot(),

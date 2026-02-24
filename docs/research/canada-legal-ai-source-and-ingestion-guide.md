@@ -40,7 +40,7 @@ Use a **hybrid source strategy**:
 1. Keep CanLII API for metadata discovery and candidate ranking only.
 2. Build primary full-text ingestion from official court publication endpoints (SCC, FC, FCA).
 3. Add a rights-filtered ingestion lane for user PDFs and approved websites.
-4. Run commercial provider procurement in parallel (vLex/Lexum and similar) for coverage expansion and service guarantees.
+4. Run commercial provider procurement in parallel (vLex (vLex Canada), Lexum / CanLII commercial API, and similar) for coverage expansion and service guarantees.
 
 This path gives immediate launch viability without blocking on procurement.
 
@@ -290,7 +290,7 @@ Implementation implication for IMMCAD:
 
 ### Phase 3: Commercial expansion (parallel procurement)
 
-- Evaluate vLex/Lexum and other licensed feeds.
+- Evaluate vLex (vLex Canada), Lexum / CanLII commercial API offerings, and other licensed feeds.
 - Integrate licensed connector behind feature flag.
 
 ## 11. Operational Metrics and SLOs

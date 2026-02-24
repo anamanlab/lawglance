@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from immcad_api.policy.compliance import DEFAULT_TRUSTED_CITATION_DOMAINS
 from immcad_api.settings import load_settings
 
 

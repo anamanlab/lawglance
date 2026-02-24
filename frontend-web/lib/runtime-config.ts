@@ -1,7 +1,9 @@
 const DEV_DEFAULT_API_BASE_URL = "/api";
+const DEV_DEFAULT_REDESIGN_ENABLED = true;
 
 export type RuntimeConfig = {
   apiBaseUrl: string;
+  enableRedesignedShell: boolean;
 };
 
 function normalizeValue(value: string | undefined): string | undefined {
@@ -21,14 +23,36 @@ function ensureProductionSafeApiUrl(apiBaseUrl: string, nodeEnv: string): void {
   }
 }
 
+function parseBooleanFlag(
+  value: string | undefined,
+  defaultValue: boolean
+): boolean {
+  const normalizedValue = normalizeValue(value)?.toLowerCase();
+  if (!normalizedValue) {
+    return defaultValue;
+  }
+  if (["1", "true", "yes", "on"].includes(normalizedValue)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalizedValue)) {
+    return false;
+  }
+  return defaultValue;
+}
+
 export function getRuntimeConfig(): RuntimeConfig {
   const nodeEnv = process.env.NODE_ENV ?? "development";
   const configuredBaseUrl = normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL);
   const apiBaseUrl = configuredBaseUrl ?? DEV_DEFAULT_API_BASE_URL;
+  const enableRedesignedShell = parseBooleanFlag(
+    process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED,
+    DEV_DEFAULT_REDESIGN_ENABLED
+  );
 
   ensureProductionSafeApiUrl(apiBaseUrl, nodeEnv);
 
   return {
     apiBaseUrl,
+    enableRedesignedShell,
   };
 }

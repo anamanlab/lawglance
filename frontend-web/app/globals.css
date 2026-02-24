@@ -4,22 +4,35 @@
 
 :root {
   color-scheme: light;
-  --imm-bg: #f8fafc;
-  --imm-bg-soft: #e8eef8;
-  --imm-card: #ffffff;
+  --imm-bg: #f2f5fb;
+  --imm-bg-soft: #e7edf9;
+  --imm-surface: #ffffff;
+  --imm-surface-muted: #f8fafc;
   --imm-text: #0f172a;
-  --imm-navy: #1e3a8a;
-  --imm-blue: #1e40af;
-  --imm-gold: #b45309;
+  --imm-text-muted: #475569;
+  --imm-primary: #1e3a8a;
+  --imm-primary-strong: #1e40af;
+  --imm-accent: #0369a1;
+  --imm-warning: #b45309;
   --imm-focus: #1d4ed8;
+  --imm-shadow-strong: 0 18px 48px rgba(15, 23, 42, 0.16);
+  --imm-shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.1);
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
   margin: 0;
   min-height: 100vh;
+}
+
+body {
   background:
-    radial-gradient(circle at 10% 10%, rgba(30, 58, 138, 0.07), transparent 35%),
-    radial-gradient(circle at 90% 0%, rgba(180, 83, 9, 0.08), transparent 30%),
+    radial-gradient(circle at 6% 4%, rgba(30, 58, 138, 0.1), transparent 34%),
+    radial-gradient(circle at 90% 0%, rgba(180, 83, 9, 0.12), transparent 32%),
     linear-gradient(180deg, var(--imm-bg) 0%, var(--imm-bg-soft) 100%);
   color: var(--imm-text);
   font-family: var(--font-body), "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -32,6 +45,11 @@ h4,
 h5,
 h6 {
   font-family: var(--font-heading), Georgia, "Times New Roman", serif;
+  color: var(--imm-text);
+}
+
+a {
+  color: inherit;
 }
 
 a:focus-visible,
@@ -39,6 +57,18 @@ button:focus-visible,
 textarea:focus-visible {
   outline: 3px solid var(--imm-focus);
   outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(30, 58, 138, 0.18);
+}
+
+@media (max-width: 767px) {
+  body {
+    background:
+      radial-gradient(circle at 8% 6%, rgba(30, 58, 138, 0.08), transparent 30%),
+      linear-gradient(180deg, var(--imm-bg) 0%, var(--imm-bg-soft) 100%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

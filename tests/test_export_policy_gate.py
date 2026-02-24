@@ -181,3 +181,43 @@ def test_case_export_policy_rejects_document_url_host_not_matching_source(
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["policy_reason"] == "export_url_not_allowed_for_source"
     assert getattr(policy_gate_client, "_download_calls") == []
+
+
+def test_case_export_policy_rejects_redirected_document_host_not_matching_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, *, timeout: float, follow_redirects: bool) -> httpx.Response:
+        del timeout, follow_redirects
+        calls.append(url)
+        # Simulate final redirected URL landing on an untrusted host.
+        request = httpx.Request("GET", "https://evil.example/file.pdf")
+        return httpx.Response(
+            status_code=200,
+            content=b"%PDF-1.7\nfake-pdf\n",
+            headers={"content-type": "application/pdf"},
+            request=request,
+        )
+
+    monkeypatch.setattr("immcad_api.api.routes.cases.httpx.get", fake_get)
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/export/cases",
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "export_redirect_url_not_allowed_for_source"
+    assert calls == ["https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do"]

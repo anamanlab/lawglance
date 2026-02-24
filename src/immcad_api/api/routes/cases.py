@@ -114,13 +114,22 @@ def build_case_router(
                 follow_redirects=True,
             )
             export_response.raise_for_status()
-        except Exception as exc:
+        except httpx.HTTPError as exc:
             return _error_response(
                 status_code=503,
                 trace_id=trace_id,
                 code="SOURCE_UNAVAILABLE",
                 message=f"Case export download failed: {exc}",
                 policy_reason="source_export_fetch_failed",
+            )
+
+        if not _is_url_allowed_for_source(str(export_response.url), str(source_entry.url)):
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message="Case export redirected to a URL host that does not match the configured source host",
+                policy_reason="export_redirect_url_not_allowed_for_source",
             )
 
         media_type = export_response.headers.get("content-type", "application/octet-stream")

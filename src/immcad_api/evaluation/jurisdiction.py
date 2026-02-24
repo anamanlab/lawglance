@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-import importlib.util
 import json
 from pathlib import Path
 
 from immcad_api.policy.compliance import should_refuse_for_policy
+from immcad_api.policy.prompts import QA_PROMPT, SYSTEM_PROMPT
 from immcad_api.sources import PRODUCTION_REQUIRED_SOURCE_IDS, load_source_registry
 
 _DISALLOWED_INDIA_TERMS = (
@@ -18,11 +18,14 @@ _DISALLOWED_INDIA_TERMS = (
     "india",
 )
 
+# FCA decisions are also served under the Federal Court host/path namespace.
 _ALLOWED_URL_MARKERS = (
     "canada.ca",
     "justice.gc.ca",
     "canlii.org",
     "github.com/canlii",
+    "decisions.scc-csc.ca",
+    "decisions.fct-cf.gc.ca",
 )
 
 
@@ -54,14 +57,7 @@ def _utc_now_iso() -> str:
 
 
 def _load_prompts() -> tuple[str, str]:
-    repo_root = Path(__file__).resolve().parents[3]
-    prompts_path = repo_root / "prompts.py"
-    spec = importlib.util.spec_from_file_location("immcad_prompts", prompts_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to load prompts.py for jurisdiction evaluation")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.SYSTEM_PROMPT, module.QA_PROMPT
+    return SYSTEM_PROMPT, QA_PROMPT
 
 
 def _check_prompt_scope(system_prompt: str) -> JurisdictionCheck:

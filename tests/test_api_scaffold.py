@@ -108,11 +108,12 @@ def test_source_export_policy_block_response() -> None:
 
 
 def test_source_export_source_unavailable_when_registry_entry_missing() -> None:
-    response = client.get("/api/sources/SCC_DECISIONS/export")
+    response = client.get("/api/sources/UNKNOWN_SOURCE_DOES_NOT_EXIST/export")
 
-    assert response.status_code == 404
+    # Unknown sources are policy-blocked before registry lookup in hardened mode.
+    assert response.status_code == 403
     body = response.json()
-    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["code"] == "POLICY_BLOCKED"
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 

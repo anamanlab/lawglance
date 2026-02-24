@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from datetime import date
 from email.utils import parsedate_to_datetime
 import json
+import logging
 import re
 from typing import Any, Literal
 import xml.etree.ElementTree as ET
+
+LOGGER = logging.getLogger(__name__)
 
 
 CourtCode = Literal["SCC", "FC", "FCA"]
@@ -37,34 +40,12 @@ class CourtDecisionRecord:
 
 
 @dataclass(frozen=True)
-class CourtPayloadValidationConfig:
-    max_invalid_ratio: float = 0.0
-    min_valid_records: int = 1
-    expected_year: int | None = None
-    year_window: int = 0
-
-    def __post_init__(self) -> None:
-        if not 0.0 <= self.max_invalid_ratio <= 1.0:
-            raise ValueError("max_invalid_ratio must be between 0.0 and 1.0")
-        if self.min_valid_records < 0:
-            raise ValueError("min_valid_records must be >= 0")
-        if self.year_window < 0:
-            raise ValueError("year_window must be >= 0")
-
-
-@dataclass(frozen=True)
 class CourtPayloadValidation:
     source_id: str
     records_total: int
     records_valid: int
     records_invalid: int
     errors: list[str]
-
-    @property
-    def invalid_ratio(self) -> float:
-        if self.records_total <= 0:
-            return 1.0
-        return self.records_invalid / self.records_total
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -128,7 +109,10 @@ def _dict_text(value: object) -> str | None:
         for candidate in value.values():
             if isinstance(candidate, str) and candidate.strip():
                 return candidate.strip()
-    return None
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def _iter_json_item_dicts(node: object) -> list[dict[str, Any]]:
@@ -141,6 +125,7 @@ def _iter_json_item_dicts(node: object) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         if any(key in node for key in ("title", "link", "url", "pubDate", "date", "decisionDate")):
             results.append(node)
+            return results
         for value in node.values():
             results.extend(_iter_json_item_dicts(value))
         return results
@@ -235,7 +220,6 @@ def validate_decision_record(
     *,
     expected_court_code: CourtCode,
     expected_year: int | None = None,
-    year_window: int = 0,
 ) -> list[str]:
     errors: list[str] = []
     if record.court_code != expected_court_code:
@@ -253,14 +237,8 @@ def validate_decision_record(
     if expected_year is not None:
         if record.decision_date is None:
             errors.append("missing_decision_date")
-        else:
-            min_year = expected_year - year_window
-            max_year = expected_year + year_window
-            if not (min_year <= record.decision_date.year <= max_year):
-                if year_window > 0:
-                    errors.append("decision_year_out_of_window")
-                else:
-                    errors.append("decision_year_mismatch")
+        elif record.decision_date.year != expected_year:
+            errors.append("decision_year_mismatch")
     return errors
 
 
@@ -268,22 +246,30 @@ def validate_court_source_payload(
     source_id: str,
     payload: bytes,
     *,
-    validation_config: CourtPayloadValidationConfig | None = None,
+    expected_year: int | None = None,
 ) -> CourtPayloadValidation | None:
     expected_court_code = _SOURCE_TO_COURT.get(source_id)
     if expected_court_code is None:
         return None
 
-    config = validation_config or CourtPayloadValidationConfig()
-
-    if source_id == "SCC_DECISIONS":
-        records = parse_scc_json_feed(payload)
-    elif source_id == "FC_DECISIONS":
-        records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FC")
-    elif source_id == "FCA_DECISIONS":
-        records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FCA")
-    else:  # pragma: no cover
-        return None
+    try:
+        if source_id == "SCC_DECISIONS":
+            records = parse_scc_json_feed(payload)
+        elif source_id == "FC_DECISIONS":
+            records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FC")
+        elif source_id == "FCA_DECISIONS":
+            records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FCA")
+        else:  # pragma: no cover
+            return None
+    except (json.JSONDecodeError, ET.ParseError, UnicodeDecodeError) as exc:
+        LOGGER.warning("Court payload parse failed for %s", source_id, exc_info=exc)
+        return CourtPayloadValidation(
+            source_id=source_id,
+            records_total=1,
+            records_valid=0,
+            records_invalid=1,
+            errors=[f"payload_parse_error: {exc}"],
+        )
 
     errors: list[str] = []
     valid_count = 0
@@ -292,8 +278,7 @@ def validate_court_source_payload(
         record_errors = validate_decision_record(
             record,
             expected_court_code=expected_court_code,
-            expected_year=config.expected_year,
-            year_window=config.year_window,
+            expected_year=expected_year,
         )
         if not record_errors:
             valid_count += 1
@@ -309,4 +294,3 @@ def validate_court_source_payload(
         records_invalid=invalid_count,
         errors=errors,
     )
-

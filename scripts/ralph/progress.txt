@@ -509,3 +509,26 @@ Started: 2026-02-23
   - Useful context
   - Release evidence validation now requires `artifacts/evals/frontend-test-summary.xml`; release workflow generates it via Vitest JUnit output before artifact upload.
 ---
+## 2026-02-23 22:07:06 -0300 - US-011
+- What was implemented
+- Updated developer-facing docs to make Next.js (`frontend-web`) + `immcad_api` the production runtime path, moved Streamlit to explicit legacy/dev-only guidance, and aligned onboarding/run commands accordingly.
+- Added explicit legacy notice in `app.py` (module docstring + runtime warning banner) so Streamlit sessions signal non-production status.
+- Files changed
+- `README.md`
+- `docs/development-environment.md`
+- `scripts/setup_dev_env.sh`
+- `app.py`
+- `docs/architecture/README.md`
+- `docs/architecture/01-system-context.md`
+- `docs/architecture/02-container-and-service-architecture.md`
+- `docs/architecture/08-architecture-debt-and-improvement-plan.md`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - When migrating runtime ownership, update both onboarding docs and architecture narratives in the same commit to avoid conflicting "current vs target" instructions.
+  - Gotcha
+  - `make` is unavailable in this execution environment; run `make quality` first for compliance, then execute the exact `quality` target command chain manually when `make` is missing.
+  - Useful context
+  - `./scripts/validate_architecture_docs.sh` catches stale architecture references quickly and should remain in the quality sequence for doc-heavy stories.
+---

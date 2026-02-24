@@ -17,7 +17,9 @@ The goal is to help users quickly understand:
 ## Current baseline analysis
 
 The current codebase already provides a strong foundation:
-- Streamlit chat UI in `app.py`
+- Next.js chat UI in `frontend-web` (production path)
+- Python API backend in `src/immcad_api` (production path)
+- Streamlit chat UI in `app.py` (legacy/dev-only)
 - RAG pipeline with LangChain + Chroma in `chains.py`
 - Session history + caching with Redis in `cache.py` and `lawglance_main.py` (legacy filename retained for compatibility during IMMCAD migration)
 - Prompt templates in `prompts.py`
@@ -124,6 +126,7 @@ The repository is still jurisdiction-specific to Indian legal context and needs 
 ### Prerequisites
 - Python 3.11+
 - `uv`
+- Node.js 20+
 - OpenAI API key
 - Redis (recommended)
 
@@ -143,19 +146,29 @@ Create `.env`:
 OPENAI_API_KEY=your-api-key-here
 ```
 
-Run:
+Run the production path locally:
+
+Terminal 1 (API):
 
 ```bash
-uv run streamlit run app.py
+make api-dev
 ```
 
-App URL:
+Terminal 2 (frontend):
 
 ```bash
-http://127.0.0.1:8501
+make frontend-install
+make frontend-dev
 ```
 
-### API scaffold (new feature)
+App URLs:
+
+```bash
+Frontend: http://127.0.0.1:3000
+API:      http://127.0.0.1:8000
+```
+
+### Backend API (production runtime)
 
 Run API service scaffold:
 
@@ -169,7 +182,7 @@ Health check:
 http://127.0.0.1:8000/healthz
 ```
 
-### Next.js frontend scaffold (`frontend-web`)
+### Next.js frontend (`frontend-web`, production runtime)
 
 Install frontend dependencies:
 
@@ -177,7 +190,7 @@ Install frontend dependencies:
 make frontend-install
 ```
 
-Run frontend (chat shell scaffold):
+Run frontend:
 
 ```bash
 make frontend-dev
@@ -196,6 +209,20 @@ NEXT_PUBLIC_IMMCAD_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 Production safety note: `NEXT_PUBLIC_IMMCAD_API_BASE_URL` must use `https://` in `NODE_ENV=production`.
+
+### Legacy Streamlit UI (`app.py`) - dev-only
+
+Use this only for local prototyping or migration troubleshooting. It is not the production runtime path.
+
+```bash
+uv run streamlit run app.py
+```
+
+Legacy UI URL:
+
+```bash
+http://127.0.0.1:8501
+```
 
 ### Ingestion + jurisdiction evaluation workflows
 

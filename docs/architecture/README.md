@@ -19,8 +19,8 @@ This directory contains the authoritative architecture documentation for IMMCAD.
 
 ## Scope
 
-- Current architecture baseline (Streamlit + LangChain + Chroma + Redis).
-- Target architecture for Canada-focused legal assistant (Next.js UI + Python API backend + provider abstraction).
+- Production architecture baseline (Next.js UI + Python API backend + provider abstraction + Chroma + Redis).
+- Legacy development path (`app.py` Streamlit UI) retained for local prototype and troubleshooting workflows only.
 - Security, compliance, data, quality, and operations architecture.
 - Architecture Decision Records (ADRs).
 

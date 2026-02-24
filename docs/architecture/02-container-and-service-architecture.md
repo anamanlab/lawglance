@@ -3,29 +3,29 @@
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
-- [Current Container View](#current-container-view)
-- [Target MVP Container View](#target-mvp-container-view)
+- [Legacy and Development Container View](#legacy-and-development-container-view)
+- [Production Container View](#production-container-view)
 - [C4 Container Diagram](#c4-container-diagram)
 - [Service Boundaries and API Contracts](#service-boundaries-and-api-contracts)
 - [Communication Patterns](#communication-patterns)
 - [Deployment Notes](#deployment-notes)
 
-- [Current Container View](#current-container-view)
-- [Target MVP Container View](#target-mvp-container-view)
+- [Legacy and Development Container View](#legacy-and-development-container-view)
+- [Production Container View](#production-container-view)
 - [C4 Container Diagram](#c4-container-diagram)
 - [Service Boundaries and API Contracts](#service-boundaries-and-api-contracts)
 - [Communication Patterns](#communication-patterns)
 - [Deployment Notes](#deployment-notes)
 
-## Current Container View
+## Legacy and Development Container View
 
-- `app.py`: Streamlit UI + orchestration bootstrap.
+- `app.py`: Streamlit UI + orchestration bootstrap (legacy/dev-only).
 - `lawglance_main.py`: conversation flow, retrieval invocation, cache usage.
 - `chains.py`: history-aware retriever and RAG chain construction.
 - `cache.py`: Redis cache and chat history adapter.
 - Chroma local persistence in `chroma_db_legal_bot_part1/`.
 
-## Target MVP Container View
+## Production Container View
 
 1. `frontend-web` (Next.js + Tailwind)
 - Minimal chat UI.

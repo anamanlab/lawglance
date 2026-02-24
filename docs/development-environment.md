@@ -34,6 +34,7 @@ This guide standardizes local development for IMMCAD.
 - OS: Linux/macOS (Windows via WSL recommended)
 - Python: `3.11+`
 - Package/runtime manager: `uv`
+- Node.js: `20+` (required for `frontend-web`)
 - Optional runtime: Redis for chat history cache
 
 ## Quick start (recommended)
@@ -45,11 +46,18 @@ Run from repository root:
 ./scripts/verify_dev_env.sh
 ```
 
-Then start the app:
+Then start the production runtime:
 
 ```bash
-uv run streamlit run app.py
+# Terminal 1
+make api-dev
+
+# Terminal 2
+make frontend-install
+make frontend-dev
 ```
+
+Legacy note: `app.py` (Streamlit) is dev-only and no longer the production path.
 
 ## Manual install prerequisites
 
@@ -107,6 +115,16 @@ The setup script performs:
 
 # Lint and test
 make quality
+```
+
+Run services in separate terminals when actively developing:
+
+```bash
+# Terminal 1
+make api-dev
+
+# Terminal 2
+make frontend-dev
 ```
 
 ## Environment variables

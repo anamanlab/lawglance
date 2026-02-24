@@ -15,7 +15,7 @@
 
 ## Current Debt
 
-1. UI and orchestration are still loosely coupled in legacy `app.py`; migration to `immcad_api` service is ongoing.
+1. Legacy Streamlit `app.py` is still present for local/dev workflows and requires continued deprecation controls to avoid production usage.
 2. Production vector database is still using legacy Indian legal data (requires full purge/rebuild).
 3. System prompts in `prompts.py` are jurisdictionally ambiguous.
 4. No automated "Grounding" layer to verify citations before user delivery.
@@ -31,7 +31,7 @@
 
 1. **[HIGH] Data Migration**: Purge legacy vectors; ingest IRPA/IRPR and IRCC sources into a new "Canada" collection.
 2. **[HIGH] Prompt Engineering**: Rewrite `prompts.py` for strict Canadian legal disclaimer and citation-only behavior.
-3. **[MEDIUM] API Integration**: Point Streamlit `app.py` to the new `immcad_api` FastAPI service for production-grade orchestration.
+3. **[MEDIUM] Legacy Decommissioning**: Keep Streamlit `app.py` marked dev-only in docs/tooling and route production traffic exclusively through `frontend-web` + `immcad_api`.
 4. **[MEDIUM] Observability Rollout**: Finalize the telemetry implementation in `src/immcad_api/telemetry` to capture all provider latency/error metrics.
 5. **[LOW] Quality Evaluation**: Implement the benchmark-based evaluation harness to score groundedness on 50 sample Canadian immigration queries.
 

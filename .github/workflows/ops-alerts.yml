@@ -1,0 +1,60 @@
+name: Ops Metrics Alerts
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  evaluate-ops-metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Validate required secrets
+        env:
+          API_BASE_URL: ${{ secrets.IMMCAD_API_BASE_URL }}
+          API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_BASE_URL}" ]; then
+            echo "Missing required secret: IMMCAD_API_BASE_URL"
+            exit 1
+          fi
+          if [ -z "${API_BEARER_TOKEN}" ]; then
+            echo "Missing required secret: IMMCAD_API_BEARER_TOKEN"
+            exit 1
+          fi
+
+      - name: Evaluate ops metrics alert thresholds
+        env:
+          IMMCAD_API_BASE_URL: ${{ secrets.IMMCAD_API_BASE_URL }}
+          IMMCAD_API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+        run: |
+          uv run python scripts/evaluate_ops_alerts.py \
+            --thresholds config/ops_alert_thresholds.json \
+            --output artifacts/ops/ops-alert-eval.json
+
+      - name: Upload ops alert report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-alert-eval-report
+          path: artifacts/ops/ops-alert-eval.json
+
+      - name: Incident runbook guidance
+        if: failure()
+        run: |
+          echo "Operational thresholds breached."
+          echo "Follow docs/release/incident-observability-runbook.md."

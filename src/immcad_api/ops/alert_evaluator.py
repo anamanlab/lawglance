@@ -147,14 +147,19 @@ def evaluate_alert_rules(
             )
             continue
 
-        breached = (
-            current_value > rule.threshold
-            if rule.comparison == "gt"
-            else current_value >= rule.threshold
-        )
+        if rule.comparison == "gt":
+            breached = current_value > rule.threshold
+            comparator = ">"
+            healthy_relation = "at or below"
+        elif rule.comparison in {"gte", ">="}:
+            breached = current_value >= rule.threshold
+            comparator = ">="
+            healthy_relation = "below"
+        else:
+            raise ValueError(
+                f"Unsupported comparison operator: {rule.comparison!r} for rule {rule.name!r}"
+            )
         status = "fail" if breached else "pass"
-        comparator = ">" if rule.comparison == "gt" else ">="
-        healthy_relation = "at or below" if rule.comparison == "gt" else "below"
         message = (
             f"Threshold breached: {current_value} {comparator} {rule.threshold}"
             if breached
@@ -178,7 +183,7 @@ def evaluate_alert_rules(
 def build_alert_report(*, metrics_url: str, checks: list[AlertCheckResult]) -> OpsAlertReport:
     failing_checks = sum(1 for check in checks if check.status == "fail")
     warning_checks = sum(1 for check in checks if check.status == "warn")
-    status = "fail" if failing_checks > 0 else "pass"
+    status = "fail" if failing_checks > 0 else "warn" if warning_checks > 0 else "pass"
     return OpsAlertReport(
         status=status,
         generated_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

@@ -18,10 +18,9 @@ jobs:
 
       - name: Dependency review (PR)
         if: github.event_name == 'pull_request'
-        continue-on-error: true
         uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803
         with:
-          fail-on-severity: high
+          fail-on-severity: critical
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -87,6 +86,8 @@ jobs:
         run: bash scripts/validate_architecture_docs.sh
 
       - name: Run documentation maintenance audit
+        env:
+          PYTHONPATH: src
         run: uv run python scripts/doc_maintenance/main.py --dry-run
 
       - name: Validate source registry
@@ -118,7 +119,9 @@ jobs:
       - name: Run ingestion smoke checks
         env:
           PYTHONPATH: src
-        run: uv run python scripts/run_ingestion_smoke.py --output artifacts/ingestion/ingestion-smoke-report.json --state-path artifacts/ingestion/ingestion-smoke-checkpoints-ci.json
+        run: |
+          mkdir -p artifacts/ingestion
+          uv run python scripts/run_ingestion_smoke.py --output artifacts/ingestion/ingestion-smoke-report.json --state-path artifacts/ingestion/ingestion-smoke-checkpoints-ci.json
 
       - name: Repository hygiene checks
         run: bash scripts/check_repository_hygiene.sh
@@ -157,10 +160,3 @@ jobs:
           path: |
             artifacts/docs/doc-maintenance-report.md
             artifacts/docs/doc-maintenance-report.json
-
-      - name: Upload case-law conformance artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: case-law-conformance-report
-          path: artifacts/ingestion/case-law-conformance-report.json

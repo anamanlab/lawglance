@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from immcad_api.ops import (
+    AlertRule,
     build_alert_report,
     build_metrics_url,
     evaluate_alert_rules,
@@ -58,3 +61,31 @@ def test_evaluate_alert_rules_treats_boolean_metrics_as_missing() -> None:
     )
     assert checks[0].current_value is None
     assert checks[0].status == "fail"
+
+
+def test_evaluate_alert_rules_raises_for_invalid_comparison_operator() -> None:
+    bad_rule = AlertRule(
+        name="bad_rule",
+        metric_path="request_metrics.errors.rate",
+        comparison="bad-op",
+        threshold=0.05,
+        duration_minutes=10,
+    )
+    with pytest.raises(ValueError):
+        evaluate_alert_rules(
+            metrics_payload={"request_metrics": {"errors": {"rate": 0.01}}},
+            rules=[bad_rule],
+        )
+
+
+def test_build_alert_report_returns_warn_when_only_warnings_present() -> None:
+    rules = load_alert_rules(THRESHOLDS_PATH)
+    checks = evaluate_alert_rules(
+        metrics_payload={"request_metrics": {}},
+        rules=rules,
+        fail_on_missing=False,
+    )
+    report = build_alert_report(metrics_url="https://immcad.example/ops/metrics", checks=checks)
+    assert report.status == "warn"
+    assert report.failing_checks == 0
+    assert report.warning_checks == len(rules)

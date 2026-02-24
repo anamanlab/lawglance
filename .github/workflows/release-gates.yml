@@ -104,7 +104,7 @@ jobs:
         run: bash scripts/run_api_smoke_tests.sh
 
       - name: Rollback trigger guidance
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         run: |
           echo "Staging smoke checks failed."
           echo "Follow rollback trigger criteria in docs/release/staging-smoke-rollback-criteria.md."

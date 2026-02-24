@@ -74,6 +74,7 @@ ingestion-smoke:
 	./scripts/venv_exec.sh python scripts/run_ingestion_smoke.py
 
 ops-alert-eval:
+	mkdir -p artifacts/ops
 	./scripts/venv_exec.sh python scripts/evaluate_ops_alerts.py --thresholds config/ops_alert_thresholds.json --output artifacts/ops/ops-alert-eval.json
 
 staging-smoke:

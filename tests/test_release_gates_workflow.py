@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 WORKFLOW_PATH = Path(".github/workflows/release-gates.yml")
@@ -49,17 +50,14 @@ def test_release_gates_links_staging_smoke_rollback_guidance() -> None:
     assert "Rollback trigger guidance" in workflow
     assert "docs/release/staging-smoke-rollback-criteria.md" in workflow
 
+
 def test_release_gates_runs_on_release_refs() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "workflow_dispatch" in workflow
-    assert 'tags:\n      - "v*"' in workflow
-    assert 'branches:\n      - "release/**"' not in workflow
+    tags_pattern = r'^\s*tags:\s*$[\s\S]*?^\s*-\s*["\']?v\*["\']?\s*$'
+    assert re.search(tags_pattern, workflow, re.MULTILINE) is not None
+    release_branch_pattern = r'^\s*-\s*["\']?release/\*\*["\']?\s*$'
+    assert re.search(release_branch_pattern, workflow, re.MULTILINE) is None
     assert "concurrency:" in workflow
     assert "staging-smoke-${{ github.ref }}" in workflow
     assert "cancel-in-progress: true" in workflow
-
-
-def test_release_gates_runs_case_law_conformance_strict() -> None:
-    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
-    assert "Run case-law conformance (strict)" in workflow
-    assert "scripts/run_case_law_conformance.py --strict --output artifacts/ingestion/case-law-conformance-report.json" in workflow

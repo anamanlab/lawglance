@@ -298,3 +298,146 @@ def test_run_ingestion_jobs_fails_on_invalid_scc_payload(tmp_path: Path) -> None
     assert report.failed == 1
     assert report.results[0].status == "error"
     assert "validation failed" in (report.results[0].error or "")
+
+
+def test_run_ingestion_jobs_applies_retry_budget_from_fetch_policy(
+    tmp_path: Path,
+) -> None:
+    registry_path = _write_registry(tmp_path / "registry.json")
+    fetch_policy_path = tmp_path / "fetch_policy.yaml"
+    fetch_policy_path.write_text(
+        "\n".join(
+            [
+                "default:",
+                "  timeout_seconds: 5",
+                "  max_retries: 0",
+                "  retry_backoff_seconds: 0",
+                "sources:",
+                "  SRC_DAILY:",
+                "    timeout_seconds: 5",
+                "    max_retries: 2",
+                "    retry_backoff_seconds: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    attempts = {"count": 0}
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        attempts["count"] += 1
+        if attempts["count"] < 3:
+            raise RuntimeError("temporary upstream failure")
+        return FetchResult(payload=b"daily-ok", http_status=200)
+
+    report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        fetch_policy_path=fetch_policy_path,
+        fetcher=fetcher,
+    )
+
+    assert attempts["count"] == 3
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.failed == 0
+
+
+def test_run_ingestion_jobs_fails_when_retry_budget_exhausted(
+    tmp_path: Path,
+) -> None:
+    registry_path = _write_registry(tmp_path / "registry.json")
+    fetch_policy_path = tmp_path / "fetch_policy.yaml"
+    fetch_policy_path.write_text(
+        "\n".join(
+            [
+                "default:",
+                "  timeout_seconds: 5",
+                "  max_retries: 1",
+                "  retry_backoff_seconds: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    attempts = {"count": 0}
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        attempts["count"] += 1
+        raise RuntimeError("persistent upstream failure")
+
+    report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        fetch_policy_path=fetch_policy_path,
+        fetcher=fetcher,
+    )
+
+    assert attempts["count"] == 2
+    assert report.total == 1
+    assert report.succeeded == 0
+    assert report.failed == 1
+    assert report.results[0].status == "error"
+    assert "fetch failed after 2 attempts" in (report.results[0].error or "")
+
+
+def test_run_ingestion_jobs_timeout_override_applies_to_all_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_path = _write_registry(tmp_path / "registry.json")
+    fetch_policy_path = tmp_path / "fetch_policy.yaml"
+    fetch_policy_path.write_text(
+        "\n".join(
+            [
+                "default:",
+                "  timeout_seconds: 5",
+                "  max_retries: 1",
+                "  retry_backoff_seconds: 0",
+                "sources:",
+                "  SRC_DAILY:",
+                "    timeout_seconds: 2",
+                "    max_retries: 1",
+                "    retry_backoff_seconds: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    captured: dict[str, float | None] = {"timeout": None}
+
+    class _FakeResponse:
+        status_code = 200
+        headers: dict[str, str] = {}
+        content = b"ok"
+
+        @staticmethod
+        def raise_for_status() -> None:
+            return None
+
+    class _FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self) -> "_FakeClient":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def get(self, url: str, headers=None, timeout=None) -> _FakeResponse:
+            captured["timeout"] = timeout
+            return _FakeResponse()
+
+    monkeypatch.setattr("immcad_api.ingestion.jobs.httpx.Client", _FakeClient)
+
+    report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        fetch_policy_path=fetch_policy_path,
+        timeout_seconds=11.0,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert captured["timeout"] == 11.0

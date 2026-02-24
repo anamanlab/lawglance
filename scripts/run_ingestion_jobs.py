@@ -32,6 +32,11 @@ def parse_args() -> argparse.Namespace:
         help="Optional path to source policy JSON/YAML (defaults to config/source_policy.yaml).",
     )
     parser.add_argument(
+        "--fetch-policy",
+        default=os.getenv("FETCH_POLICY_PATH") or "config/fetch_policy.yaml",
+        help="Optional path to source fetch policy YAML (defaults to config/fetch_policy.yaml).",
+    )
+    parser.add_argument(
         "--environment",
         default=os.getenv("ENVIRONMENT", "development"),
         help="Runtime environment for policy gates (development/staging/production/prod/ci).",
@@ -39,8 +44,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--timeout-seconds",
         type=float,
-        default=30.0,
-        help="HTTP timeout applied to source fetches.",
+        default=None,
+        help=(
+            "Optional HTTP timeout override applied to all source fetches "
+            "(when omitted, fetch policy defaults are used)."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -70,6 +78,7 @@ def main() -> int:
         cadence=cadence,
         registry_path=args.registry,
         source_policy_path=args.source_policy,
+        fetch_policy_path=args.fetch_policy,
         environment=args.environment,
         timeout_seconds=args.timeout_seconds,
         state_path=args.state_path,

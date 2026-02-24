@@ -10,7 +10,8 @@ from immcad_api.policy.compliance import (
 )
 from immcad_api.errors import ProviderApiError
 from immcad_api.providers import ProviderError, ProviderRouter
-from immcad_api.schemas import ChatRequest, ChatResponse, Citation, FallbackUsed
+from immcad_api.schemas import ChatRequest, ChatResponse, FallbackUsed
+from immcad_api.services.grounding import GroundingAdapter, StaticGroundingAdapter
 
 
 AUDIT_LOGGER = logging.getLogger("immcad_api.audit")
@@ -21,10 +22,10 @@ class ChatService:
         self,
         provider_router: ProviderRouter,
         *,
-        allow_scaffold_synthetic_citations: bool = True,
+        grounding_adapter: GroundingAdapter | None = None,
     ) -> None:
         self.provider_router = provider_router
-        self.allow_scaffold_synthetic_citations = allow_scaffold_synthetic_citations
+        self.grounding_adapter = grounding_adapter or StaticGroundingAdapter()
 
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
@@ -47,7 +48,11 @@ class ChatService:
                 ),
             )
 
-        citations = self._default_citations(request.message)
+        citations = self.grounding_adapter.citation_candidates(
+            message=request.message,
+            locale=request.locale,
+            mode=request.mode,
+        )
 
         try:
             routed = self.provider_router.generate(
@@ -110,19 +115,3 @@ class ChatService:
         if provider_error_code:
             event["provider_error_code"] = provider_error_code
         AUDIT_LOGGER.info("chat_audit_event", extra={"audit_event": event})
-
-    def _default_citations(self, message: str) -> list[Citation]:
-        del message
-        if not self.allow_scaffold_synthetic_citations:
-            return []
-
-        snippet = "Reference to IRPA; user context omitted for privacy."
-        return [
-            Citation(
-                source_id="IRPA",
-                snippet=snippet,
-                title="Immigration and Refugee Protection Act",
-                url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/FullText.html",
-                pin="s. 11",
-            )
-        ]

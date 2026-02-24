@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import logging
 import json
+import logging
 
 import pytest
 
@@ -13,6 +13,7 @@ from immcad_api.providers.base import ProviderResult
 from immcad_api.providers.router import RoutingResult
 from immcad_api.schemas import ChatRequest
 from immcad_api.services.chat_service import ChatService
+from immcad_api.services.grounding import StaticGroundingAdapter, scaffold_grounded_citations
 
 
 @dataclass
@@ -123,11 +124,31 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
         assert payload.message not in record.getMessage()
 
 
-def test_chat_service_returns_safe_constrained_response_without_synthetic_citations() -> None:
+def test_chat_service_returns_grounded_response_when_adapter_supplies_citations() -> None:
     service = ChatService(
         _StaticRouter(citations=[]),
-        allow_scaffold_synthetic_citations=False,
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
     )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-grounded-001")
+
+    assert response.answer == "Scaffold response"
+    assert len(response.citations) == 1
+    assert response.citations[0].source_id == "IRPA"
+    assert response.confidence == "medium"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is False
+    assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grounding() -> None:
+    service = ChatService(_StaticRouter(citations=[]))
     payload = ChatRequest(
         session_id="session-123456",
         message="Summarize IRPA section 11.",
@@ -144,3 +165,4 @@ def test_chat_service_returns_safe_constrained_response_without_synthetic_citati
     assert response.fallback_used.used is False
     assert response.fallback_used.provider is None
     assert response.fallback_used.reason is None
+    assert payload.message not in response.model_dump_json()

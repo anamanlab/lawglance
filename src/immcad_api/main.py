@@ -13,7 +13,12 @@ from immcad_api.api.routes import build_case_router, build_chat_router
 from immcad_api.middleware.rate_limit import build_rate_limiter
 from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
 from immcad_api.schemas import ErrorEnvelope
-from immcad_api.services import CaseSearchService, ChatService
+from immcad_api.services import (
+    CaseSearchService,
+    ChatService,
+    StaticGroundingAdapter,
+    scaffold_grounded_citations,
+)
 from immcad_api.settings import load_settings
 from immcad_api.sources import CanLIIClient
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
@@ -97,9 +102,12 @@ def create_app() -> FastAPI:
         telemetry=ProviderMetrics(),
     )
 
+    grounded_citations = (
+        scaffold_grounded_citations() if settings.allow_scaffold_synthetic_citations else []
+    )
     chat_service = ChatService(
         provider_router,
-        allow_scaffold_synthetic_citations=settings.allow_scaffold_synthetic_citations,
+        grounding_adapter=StaticGroundingAdapter(grounded_citations),
     )
     allow_canlii_scaffold_fallback = settings.environment.lower() not in {"production", "prod", "ci"}
     case_search_service = CaseSearchService(

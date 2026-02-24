@@ -346,3 +346,25 @@ Started: 2026-02-23
   - Useful context
   - `ChatService(..., allow_scaffold_synthetic_citations=False)` combined with empty routed citations deterministically triggers the safe constrained response (`confidence="low"`, no citations).
 ---
+## 2026-02-23 21:17:22 -0300 - US-004
+- What was implemented
+- Replaced `ChatService` hardcoded scaffold citation defaults with a grounding adapter contract (`GroundingAdapter`) and a default safe adapter that returns no citations unless explicit grounded sources are provided.
+- Wired app/runtime composition to inject explicit grounded citations via `StaticGroundingAdapter` only when configured, and updated jurisdiction suite composition to pass explicit grounded sources for grounded-case coverage.
+- Added/updated chat service unit tests for both grounded and ungrounded adapter paths, including assertions that raw user message content is not leaked through response payload citations.
+- Files changed
+- `src/immcad_api/services/grounding.py`
+- `src/immcad_api/services/chat_service.py`
+- `src/immcad_api/services/__init__.py`
+- `src/immcad_api/main.py`
+- `src/immcad_api/evaluation/jurisdiction_suite.py`
+- `tests/test_chat_service.py`
+- `scripts/ralph/prd.json`
+- `scripts/ralph/progress.txt`
+- Learnings for future iterations:
+  - Reusable pattern
+  - Keep grounding retrieval behind a small adapter protocol so chat orchestration stays provider-agnostic and scaffold/dev citation behavior can be injected at composition time.
+  - Gotcha
+  - When replacing default citation behavior, remember to update evaluation harness composition paths (for example jurisdiction suite) that depend on explicit grounded-citation coverage expectations.
+  - Useful context
+  - In this environment `make` is unavailable; execute the exact `quality` Makefile command chain in-order as the required equivalent gate.
+---

@@ -117,3 +117,34 @@ def test_load_settings_excludes_primary_model_from_fallbacks(
 
     settings = load_settings()
     assert settings.gemini_model_fallbacks == ("gemini-2.5-flash", "gemini-2.5-flash-lite")
+
+
+def test_load_settings_primary_provider_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("PRIMARY_PROVIDER", raising=False)
+
+    settings = load_settings()
+    assert settings.primary_provider == "openai"
+    assert settings.enable_openai_provider is True
+
+
+def test_load_settings_accepts_gemini_primary_and_openai_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("PRIMARY_PROVIDER", "gemini")
+    monkeypatch.setenv("ENABLE_OPENAI_PROVIDER", "false")
+
+    settings = load_settings()
+    assert settings.primary_provider == "gemini"
+    assert settings.enable_openai_provider is False
+
+
+def test_load_settings_rejects_invalid_primary_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("PRIMARY_PROVIDER", "unknown")
+
+    with pytest.raises(ValueError, match="PRIMARY_PROVIDER must be one of"):
+        load_settings()

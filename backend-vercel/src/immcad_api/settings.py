@@ -12,6 +12,8 @@ class Settings:
     openai_api_key: str | None
     gemini_api_key: str | None
     canlii_api_key: str | None
+    enable_openai_provider: bool
+    primary_provider: str
     canlii_base_url: str
     api_bearer_token: str | None
     redis_url: str
@@ -92,6 +94,11 @@ def load_settings() -> Settings:
             "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS must be false when ENVIRONMENT is production/prod/ci"
         )
 
+    enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
+    primary_provider = parse_str_env("PRIMARY_PROVIDER", "openai") or "openai"
+    if primary_provider not in {"openai", "gemini", "scaffold"}:
+        raise ValueError("PRIMARY_PROVIDER must be one of: openai, gemini, scaffold")
+
     gemini_model = parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview") or "gemini-3-flash-preview"
     gemini_model_fallbacks = tuple(
         model
@@ -106,6 +113,8 @@ def load_settings() -> Settings:
         openai_api_key=parse_str_env("OPENAI_API_KEY"),
         gemini_api_key=parse_str_env("GEMINI_API_KEY"),
         canlii_api_key=parse_str_env("CANLII_API_KEY"),
+        enable_openai_provider=enable_openai_provider,
+        primary_provider=primary_provider,
         canlii_base_url=parse_str_env("CANLII_BASE_URL", "https://api.canlii.org/v1")
         or "https://api.canlii.org/v1",
         api_bearer_token=api_bearer_token,

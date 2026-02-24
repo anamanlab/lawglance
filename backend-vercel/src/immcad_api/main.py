@@ -78,27 +78,47 @@ def _resolve_rate_limit_client_id(request: Request) -> str | None:
 def create_app() -> FastAPI:
     settings = load_settings()
 
-    providers = [
-        OpenAIProvider(
+    provider_registry = {
+        "openai": OpenAIProvider(
             settings.openai_api_key,
             model=settings.openai_model,
             timeout_seconds=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,
         ),
-        GeminiProvider(
+        "gemini": GeminiProvider(
             settings.gemini_api_key,
             model=settings.gemini_model,
             fallback_models=settings.gemini_model_fallbacks,
             timeout_seconds=settings.provider_timeout_seconds,
             max_retries=settings.provider_max_retries,
         ),
-    ]
+    }
+
+    providers = []
+    if settings.enable_openai_provider:
+        providers.append(provider_registry["openai"])
+    providers.append(provider_registry["gemini"])
     if settings.enable_scaffold_provider:
         providers.append(ScaffoldProvider())
+    if not providers:
+        raise ValueError(
+            "At least one provider must be enabled. Configure PRIMARY_PROVIDER and provider flags."
+        )
+
+    provider_names = [provider.name for provider in providers]
+    if settings.primary_provider in provider_names:
+        primary_provider_name = settings.primary_provider
+    else:
+        primary_provider_name = provider_names[0]
+
+    if providers[0].name != primary_provider_name:
+        reordered = [provider for provider in providers if provider.name == primary_provider_name]
+        reordered.extend(provider for provider in providers if provider.name != primary_provider_name)
+        providers = reordered
 
     provider_router = ProviderRouter(
         providers=providers,
-        primary_provider_name="openai",
+        primary_provider_name=primary_provider_name,
         circuit_breaker_failure_threshold=settings.provider_circuit_breaker_failure_threshold,
         circuit_breaker_open_seconds=settings.provider_circuit_breaker_open_seconds,
         telemetry=ProviderMetrics(),

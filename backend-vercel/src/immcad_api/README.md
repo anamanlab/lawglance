@@ -16,6 +16,8 @@ Endpoints:
 
 - `OPENAI_API_KEY` (optional in scaffold; used by primary provider)
 - `GEMINI_API_KEY` (optional in scaffold; used by fallback provider)
+- `ENABLE_OPENAI_PROVIDER` (optional, default `true`; set `false` for Gemini-only runtime)
+- `PRIMARY_PROVIDER` (optional, default `openai`; set `gemini` for Gemini-only runtime)
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
 - `ENVIRONMENT` (optional, default `development`; use `production`/`prod`/`ci` for hardened mode)

@@ -40,9 +40,20 @@ def test_release_gates_enforces_hardened_synthetic_citation_toggle() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Validate hardened runtime safety toggles" in workflow
     assert "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: \"false\"" in workflow
+    assert "CITATION_TRUSTED_DOMAINS:" in workflow
 
 
 def test_release_gates_links_staging_smoke_rollback_guidance() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Rollback trigger guidance" in workflow
     assert "docs/release/staging-smoke-rollback-criteria.md" in workflow
+
+
+def test_release_gates_runs_on_release_refs() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "workflow_dispatch" in workflow
+    assert 'tags:\n      - "v*"' in workflow
+    assert 'branches:\n      - "release/**"' not in workflow
+    assert "concurrency:" in workflow
+    assert "staging-smoke-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: true" in workflow

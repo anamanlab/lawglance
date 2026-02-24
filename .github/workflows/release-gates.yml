@@ -2,6 +2,13 @@ name: Release Gates
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: staging-smoke-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release-readiness:

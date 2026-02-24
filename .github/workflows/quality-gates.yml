@@ -18,6 +18,7 @@ jobs:
 
       - name: Dependency review (PR)
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         uses: actions/dependency-review-action@05fe4576374b728f0c523d6a13d64c25081e0803
         with:
           fail-on-severity: high

@@ -32,7 +32,7 @@ function buildUpstreamUrl(baseUrl: string, path: string): string {
 function buildProxyErrorResponse(
   status: number,
   message: string,
-  traceId = randomUUID(),
+  traceId: string = randomUUID(),
   code: ProxyErrorCode = "PROVIDER_ERROR"
 ): NextResponse {
   return NextResponse.json(
@@ -172,6 +172,26 @@ function resolveProxyErrorCode(upstreamPath: string): ProxyErrorCode {
   return "PROVIDER_ERROR";
 }
 
+function mapUpstreamNotFoundResponse(
+  upstreamResponse: Response,
+  upstreamPath: string,
+  fallbackTraceId: string
+): NextResponse | null {
+  if (upstreamResponse.status !== 404) {
+    return null;
+  }
+  if (upstreamPath !== "/api/research/lawyer-cases") {
+    return null;
+  }
+  const traceId = upstreamResponse.headers.get("x-trace-id") ?? fallbackTraceId;
+  return buildProxyErrorResponse(
+    503,
+    "The lawyer case research service is currently unavailable.",
+    traceId,
+    "SOURCE_UNAVAILABLE"
+  );
+}
+
 export async function forwardPostRequest(
   request: NextRequest,
   upstreamPath: string
@@ -217,6 +237,14 @@ export async function forwardPostRequest(
       body: requestBody,
       cache: "no-store",
     });
+    const mappedNotFoundResponse = mapUpstreamNotFoundResponse(
+      upstreamResponse,
+      upstreamPath,
+      traceId
+    );
+    if (mappedNotFoundResponse) {
+      return mappedNotFoundResponse;
+    }
     const payload = await upstreamResponse.arrayBuffer();
     const response = new NextResponse(payload, {
       status: upstreamResponse.status,

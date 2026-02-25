@@ -194,6 +194,24 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
     return null;
   }
 
+  if (typeof payload.error === "string") {
+    const message =
+      typeof payload.message === "string"
+        ? payload.message
+        : DEFAULT_ERROR_MESSAGE;
+    return {
+      code: toApiErrorCode(payload.error),
+      message,
+      traceId: normalizeTraceId(
+        typeof payload.trace_id === "string" ? payload.trace_id : null
+      ),
+      policyReason:
+        typeof payload.policy_reason === "string"
+          ? normalizeTraceId(payload.policy_reason)
+          : null,
+    };
+  }
+
   const errorField = payload.error;
   if (!isRecord(errorField)) {
     return null;
@@ -211,6 +229,12 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
         ? normalizeTraceId(errorField.policy_reason)
         : null,
   };
+}
+
+function getResponseTraceId(headers: Headers): string | null {
+  return normalizeTraceId(
+    headers.get("x-trace-id") ?? headers.get("x-immcad-trace-id")
+  );
 }
 
 function buildApiUrl(apiBaseUrl: string, path: string): string {
@@ -356,7 +380,7 @@ async function postJson<TPayload>(
       buildRequestHeaders(options.bearerToken),
       payload
     );
-    const headerTraceId = normalizeTraceId(response.headers.get("x-trace-id"));
+    const headerTraceId = getResponseTraceId(response.headers);
     const responseBody = await parseResponseBody(response);
 
     if (response.ok) {
@@ -457,7 +481,7 @@ async function postCaseExport(
       }),
       payload
     );
-    const headerTraceId = normalizeTraceId(response.headers.get("x-trace-id"));
+    const headerTraceId = getResponseTraceId(response.headers);
 
     if (response.ok) {
       const exportBlob = await response.blob();

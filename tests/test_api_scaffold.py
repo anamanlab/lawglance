@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from immcad_api.main import create_app  # noqa: E402
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
-from immcad_api.errors import SourceUnavailableError  # noqa: E402
+from immcad_api.errors import RateLimitError, SourceUnavailableError  # noqa: E402
 from immcad_api.providers import ProviderError, ProviderResult  # noqa: E402
 
 
@@ -99,6 +99,69 @@ def test_case_search_rejects_broad_stopword_query() -> None:
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["policy_reason"] == "case_search_query_too_broad"
     assert "specific terms" in body["error"]["message"]
+
+
+def test_case_search_returns_rate_limited_error_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _rate_limited_case_search(self, request):
+        del self, request
+        raise RateLimitError("CanLII per-second request limit reached. Please retry shortly.")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _rate_limited_case_search,
+    )
+    rate_limited_client = TestClient(create_app())
+
+    response = rate_limited_client.post(
+        "/api/search/cases",
+        json={
+            "query": "2026 FC 101",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 429
+    body = response.json()
+    assert body["error"]["code"] == "RATE_LIMITED"
+    assert body["error"]["message"] == "CanLII per-second request limit reached. Please retry shortly."
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+@pytest.mark.parametrize("query", ["A-1234-23", "T-123-24"])
+def test_case_search_accepts_docket_style_queries(
+    monkeypatch: pytest.MonkeyPatch,
+    query: str,
+) -> None:
+    from immcad_api.schemas import CaseSearchResponse
+
+    def _mock_case_search(self, request):
+        del self, request
+        return CaseSearchResponse(results=[])
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_case_search,
+    )
+    docket_client = TestClient(create_app())
+
+    response = docket_client.post(
+        "/api/search/cases",
+        json={
+            "query": query,
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
 
 
 def test_chat_case_law_query_uses_case_search_tool_citations(

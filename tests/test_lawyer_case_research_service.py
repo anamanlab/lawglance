@@ -10,6 +10,7 @@ from immcad_api.schemas import (
     LawyerCaseResearchRequest,
 )
 from immcad_api.services.lawyer_case_research_service import LawyerCaseResearchService
+from immcad_api.sources.source_registry import SourceRegistry, SourceRegistryEntry
 
 
 class _MockCaseSearchService:
@@ -94,3 +95,71 @@ def test_orchestrator_marks_pdf_unavailable_when_source_metadata_not_loaded() ->
     assert response.cases[0].pdf_reason == "document_url_unverified_source"
     assert response.cases[0].export_allowed is False
     assert response.cases[0].export_policy_reason == "source_export_metadata_missing"
+
+
+def test_orchestrator_does_not_mark_unknown_sources_as_official() -> None:
+    class _UnknownSourceCaseSearchService:
+        def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+            del request
+            return CaseSearchResponse(
+                results=[
+                    CaseSearchResult(
+                        case_id="UNK-1",
+                        title="Unknown Source Decision",
+                        citation="UNK 1",
+                        decision_date=date(2025, 9, 1),
+                        url="https://example.invalid/decisions/1",
+                        source_id=None,
+                        document_url="https://example.invalid/decisions/1/document.pdf",
+                    )
+                ]
+            )
+
+    service = LawyerCaseResearchService(case_search_service=_UnknownSourceCaseSearchService())
+    response = service.research(_request(limit=1))
+
+    assert response.cases
+    assert response.source_status["official"] == "no_match"
+    assert response.source_status["canlii"] == "not_used"
+
+
+def test_orchestrator_uses_registry_for_official_source_classification() -> None:
+    class _RegistryOfficialCaseSearchService:
+        def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+            del request
+            return CaseSearchResponse(
+                results=[
+                    CaseSearchResult(
+                        case_id="IRB-1",
+                        title="Immigration Appeal Division Decision",
+                        citation="IRB 2025 1",
+                        decision_date=date(2025, 9, 2),
+                        url="https://irb-cisr.gc.ca/decisions/1",
+                        source_id="IRB_DECISIONS",
+                        document_url="https://irb-cisr.gc.ca/decisions/1/document.pdf",
+                    )
+                ]
+            )
+
+    registry = SourceRegistry(
+        version="2026-02-25",
+        jurisdiction="ca",
+        sources=[
+            SourceRegistryEntry(
+                source_id="IRB_DECISIONS",
+                source_type="case_law",
+                instrument="Immigration and Refugee Board Decisions",
+                url="https://irb-cisr.gc.ca/decisions",
+                update_cadence="daily",
+            )
+        ],
+    )
+    service = LawyerCaseResearchService(
+        case_search_service=_RegistryOfficialCaseSearchService(),
+        source_registry=registry,
+    )
+    response = service.research(_request(limit=1))
+
+    assert response.cases
+    assert response.source_status["official"] == "ok"
+    assert response.source_status["canlii"] == "not_used"

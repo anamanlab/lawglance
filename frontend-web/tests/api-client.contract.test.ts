@@ -162,6 +162,37 @@ describe("api client chat contract", () => {
     expect(result.policyReason).toBeNull();
   });
 
+  it("parses legacy proxy error envelope and x-immcad-trace-id fallback header", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          error: "PROVIDER_ERROR",
+          message: "Backend origin is unavailable",
+          trace_id: "trace-body-legacy",
+        },
+        {
+          status: 502,
+          headers: { "x-immcad-trace-id": "trace-header-legacy" },
+        }
+      )
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(502);
+    expect(result.error.code).toBe("PROVIDER_ERROR");
+    expect(result.error.message).toBe("Backend origin is unavailable");
+    expect(result.traceId).toBe("trace-header-legacy");
+    expect(result.traceIdMismatch).toBe(true);
+  });
+
   it("generates a client trace id when error responses omit trace metadata", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("upstream html error", {

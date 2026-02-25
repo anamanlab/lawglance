@@ -7,13 +7,15 @@ import json
 import logging
 import re
 import time
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from immcad_api.api.routes.case_query_validation import is_specific_case_query
+from immcad_api.errors import ApiError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
 from immcad_api.schemas import (
     CaseExportApprovalRequest,
@@ -25,6 +27,10 @@ from immcad_api.schemas import (
     ErrorEnvelope,
 )
 from immcad_api.services import CaseSearchService
+from immcad_api.services.case_document_resolver import (
+    allowed_hosts_for_source,
+    is_url_allowed_for_source,
+)
 from immcad_api.sources import SourceRegistry
 from immcad_api.telemetry import RequestMetrics
 
@@ -33,48 +39,77 @@ class ExportTooLargeError(Exception):
     """Raised when an export payload exceeds configured bounds."""
 
 
+class ExportRedirectHostError(Exception):
+    """Raised when an export redirect points to an untrusted host."""
+
+    def __init__(self, redirect_url: str) -> None:
+        super().__init__("Case export redirect URL host does not match source host")
+        self.redirect_url = redirect_url
+
+
 LOGGER = logging.getLogger(__name__)
 _APPROVAL_TOKEN_VERSION = 1
+_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
 
 
 def _download_export_payload(
     *,
     request_url: str,
     max_download_bytes: int,
+    allowed_hosts: set[str],
+    max_redirects: int = 5,
 ) -> tuple[bytes, str, str]:
-    with httpx.stream(
-        "GET",
-        request_url,
-        timeout=20.0,
-        follow_redirects=True,
-    ) as export_response:
-        export_response.raise_for_status()
-        content_length = export_response.headers.get("content-length")
-        if content_length:
-            try:
-                if int(content_length) > max_download_bytes:
+    current_url = request_url
+    redirect_count = 0
+    while True:
+        with httpx.stream(
+            "GET",
+            current_url,
+            timeout=20.0,
+            follow_redirects=False,
+        ) as export_response:
+            if export_response.status_code in _REDIRECT_STATUS_CODES:
+                redirect_location = export_response.headers.get("location")
+                if not redirect_location:
+                    raise httpx.HTTPError(
+                        "Case export redirect response missing location header"
+                    )
+                redirected_url = urljoin(str(export_response.url), redirect_location)
+                if not is_url_allowed_for_source(redirected_url, allowed_hosts):
+                    raise ExportRedirectHostError(redirected_url)
+                redirect_count += 1
+                if redirect_count > max_redirects:
+                    raise httpx.HTTPError("Case export exceeded maximum redirect count")
+                current_url = redirected_url
+                continue
+
+            export_response.raise_for_status()
+            content_length = export_response.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > max_download_bytes:
+                        raise ExportTooLargeError(
+                            "Case export payload exceeds configured maximum size"
+                        )
+                except ValueError:
+                    pass
+
+            chunks: list[bytes] = []
+            total_bytes = 0
+            for chunk in export_response.iter_bytes():
+                total_bytes += len(chunk)
+                if total_bytes > max_download_bytes:
                     raise ExportTooLargeError(
                         "Case export payload exceeds configured maximum size"
                     )
-            except ValueError:
-                pass
+                chunks.append(chunk)
 
-        chunks: list[bytes] = []
-        total_bytes = 0
-        for chunk in export_response.iter_bytes():
-            total_bytes += len(chunk)
-            if total_bytes > max_download_bytes:
-                raise ExportTooLargeError(
-                    "Case export payload exceeds configured maximum size"
-                )
-            chunks.append(chunk)
-
-        payload_bytes = b"".join(chunks)
-        media_type = export_response.headers.get(
-            "content-type", "application/octet-stream"
-        )
-        final_url = str(export_response.url)
-        return payload_bytes, media_type, final_url
+            payload_bytes = b"".join(chunks)
+            media_type = export_response.headers.get(
+                "content-type", "application/octet-stream"
+            )
+            final_url = str(export_response.url)
+            return payload_bytes, media_type, final_url
 
 
 def _b64url_encode(raw: bytes) -> str:
@@ -301,23 +336,6 @@ def build_case_router(
             headers={"x-trace-id": trace_id},
         )
 
-    def _allowed_hosts_for_source(source_url: str) -> set[str]:
-        source_host = (urlparse(source_url).hostname or "").lower()
-        if not source_host:
-            return set()
-        return {source_host}
-
-    def _is_url_allowed_for_source(document_url: str, allowed_hosts: set[str]) -> bool:
-        document_host = (urlparse(document_url).hostname or "").lower()
-        if not document_host or not allowed_hosts:
-            return False
-        for allowed_host in allowed_hosts:
-            if document_host == allowed_host:
-                return True
-            if document_host.endswith(f".{allowed_host}"):
-                return True
-        return False
-
     def _safe_download_filename(*, source_id: str, case_id: str, fmt: str) -> str:
         safe_source = re.sub(r"[^A-Za-z0-9_.-]+", "-", source_id).strip("-") or "source"
         safe_case = re.sub(r"[^A-Za-z0-9_.-]+", "-", case_id).strip("-") or "case"
@@ -353,8 +371,8 @@ def build_case_router(
         source_entry = source_registry.get_source(result.source_id)
         if source_entry is None:
             return False, "source_not_in_registry_for_export"
-        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
-        if not _is_url_allowed_for_source(str(result.document_url), allowed_hosts):
+        allowed_hosts = allowed_hosts_for_source(str(source_entry.url))
+        if not is_url_allowed_for_source(str(result.document_url), allowed_hosts):
             return False, "export_url_not_allowed_for_source"
         return is_source_export_allowed(
             result.source_id,
@@ -395,7 +413,16 @@ def build_case_router(
                 ),
                 policy_reason="case_search_query_too_broad",
             )
-        return _apply_case_search_export_policy(case_search_service.search(payload))
+        try:
+            case_search_response = await run_in_threadpool(case_search_service.search, payload)
+        except ApiError as exc:
+            return _error_response(
+                status_code=exc.status_code,
+                trace_id=trace_id,
+                code=exc.code,
+                message=exc.message,
+            )
+        return _apply_case_search_export_policy(case_search_response)
 
     @router.post(
         "/export/cases/approval", response_model=CaseExportApprovalResponse
@@ -426,8 +453,8 @@ def build_case_router(
                 policy_reason="source_export_user_approval_required",
             )
 
-        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
-        if not _is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
+        allowed_hosts = allowed_hosts_for_source(str(source_entry.url))
+        if not is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
@@ -485,7 +512,7 @@ def build_case_router(
                 policy_reason="source_not_in_registry_for_export",
             )
 
-        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
+        allowed_hosts = allowed_hosts_for_source(str(source_entry.url))
 
         policy_reason = "source_export_allowed_gate_disabled"
         if export_policy_gate_enabled:
@@ -508,7 +535,7 @@ def build_case_router(
                     policy_reason=policy_reason,
                 )
 
-        if not _is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
+        if not is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
             _record_export_event(
                 request=request,
                 payload=payload,
@@ -559,9 +586,11 @@ def build_case_router(
             source_url=str(source_entry.url),
         )
         try:
-            payload_bytes, media_type, final_url = _download_export_payload(
+            payload_bytes, media_type, final_url = await run_in_threadpool(
+                _download_export_payload,
                 request_url=request_url,
                 max_download_bytes=export_max_download_bytes,
+                allowed_hosts=allowed_hosts,
             )
         except ExportTooLargeError as exc:
             _record_export_event(
@@ -577,6 +606,21 @@ def build_case_router(
                 code="VALIDATION_ERROR",
                 message=str(exc),
                 policy_reason="source_export_payload_too_large",
+            )
+        except ExportRedirectHostError as exc:
+            _record_export_event(
+                request=request,
+                payload=payload,
+                outcome="blocked",
+                policy_reason="export_redirect_url_not_allowed_for_source",
+                document_url=exc.redirect_url,
+            )
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message="Case export redirected to a URL host that does not match the configured source host",
+                policy_reason="export_redirect_url_not_allowed_for_source",
             )
         except httpx.HTTPError as exc:
             _record_export_event(
@@ -594,7 +638,7 @@ def build_case_router(
                 policy_reason="source_export_fetch_failed",
             )
 
-        if not _is_url_allowed_for_source(final_url, allowed_hosts):
+        if not is_url_allowed_for_source(final_url, allowed_hosts):
             _record_export_event(
                 request=request,
                 payload=payload,

@@ -99,6 +99,41 @@ def test_lawyer_research_endpoint_rejects_broad_stopword_query() -> None:
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
+def test_lawyer_research_endpoint_handles_long_matter_summary_without_internal_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed_queries: list[str] = []
+
+    def _mock_case_search(self, request):
+        del self
+        observed_queries.append(request.query)
+        return CaseSearchResponse(results=[])
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_case_search,
+    )
+    client = TestClient(create_app())
+    long_summary = "Federal Court procedural fairness " + ("inadmissibility " * 120)
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": long_summary,
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 5,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_status"]["official"] == "no_match"
+    assert observed_queries
+    assert all(len(query) <= 300 for query in observed_queries)
+
+
 def test_lawyer_research_endpoint_returns_rate_limited_envelope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

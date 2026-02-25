@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from immcad_api.api.routes.case_query_validation import is_specific_case_query
 from immcad_api.errors import ApiError, SourceUnavailableError
@@ -66,7 +67,10 @@ def build_lawyer_research_router(
                 policy_reason="case_search_query_too_broad",
             )
         try:
-            research_response = lawyer_case_research_service.research(payload)
+            research_response = await run_in_threadpool(
+                lawyer_case_research_service.research,
+                payload,
+            )
             if request_metrics is not None:
                 pdf_available_count = sum(
                     1 for case in research_response.cases if case.pdf_status == "available"

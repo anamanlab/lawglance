@@ -24,6 +24,12 @@ from immcad_api.services.lawyer_research_planner import (
 )
 from immcad_api.sources import SourceRegistry
 
+_MAX_CASE_SEARCH_QUERY_LENGTH = 300
+_CANLII_SOURCE_PREFIX = "CANLII"
+_FALLBACK_OFFICIAL_SOURCE_IDS = frozenset(
+    {"FC_DECISIONS", "FCA_DECISIONS", "SCC_DECISIONS"}
+)
+
 
 class _CaseSearchProtocol(Protocol):
     def search(self, request: CaseSearchRequest) -> CaseSearchResponse: ...
@@ -31,6 +37,17 @@ class _CaseSearchProtocol(Protocol):
 
 def _contains_word(text: str, word: str) -> bool:
     return re.search(rf"\b{re.escape(word)}\b", text) is not None
+
+
+def _normalize_case_search_query(query: str) -> str | None:
+    normalized = re.sub(r"\s+", " ", query.strip())
+    if not normalized:
+        return None
+    if len(normalized) <= _MAX_CASE_SEARCH_QUERY_LENGTH:
+        return normalized
+    truncated = normalized[:_MAX_CASE_SEARCH_QUERY_LENGTH]
+    trimmed = truncated.rsplit(" ", 1)[0].strip()
+    return trimmed or truncated.strip()
 
 
 class LawyerCaseResearchService:
@@ -90,6 +107,25 @@ class LawyerCaseResearchService:
             source_policy=self.source_policy,
         )
         return export_allowed, export_policy_reason, source_url
+
+    def _classify_source_id(self, source_id: str | None) -> str:
+        normalized = (source_id or "").strip().upper()
+        if not normalized:
+            return "unknown"
+        if normalized.startswith(_CANLII_SOURCE_PREFIX):
+            return "canlii"
+
+        if self.source_registry is not None:
+            source_entry = self.source_registry.get_source(normalized)
+            if source_entry is None:
+                return "unknown"
+            if source_entry.source_type != "case_law":
+                return "unknown"
+            return "official"
+
+        if normalized in _FALLBACK_OFFICIAL_SOURCE_IDS:
+            return "official"
+        return "unknown"
 
     def _score_case(
         self,
@@ -204,10 +240,13 @@ class LawyerCaseResearchService:
 
         source_unavailable_errors = 0
         for query in queries:
+            normalized_query = _normalize_case_search_query(query)
+            if not normalized_query or len(normalized_query) < 2:
+                continue
             try:
                 response = self.case_search_service.search(
                     CaseSearchRequest(
-                        query=query,
+                        query=normalized_query,
                         jurisdiction=request.jurisdiction,
                         court=request.court,
                         limit=request.limit,
@@ -264,14 +303,9 @@ class LawyerCaseResearchService:
             for case_result in ranked[: request.limit]
         ]
 
-        canlii_used = any(
-            (case_result.source_id or "").upper().startswith("CANLII")
-            for case_result in ranked
-        )
-        official_used = any(
-            not (case_result.source_id or "").upper().startswith("CANLII")
-            for case_result in ranked
-        )
+        source_types = [self._classify_source_id(case_result.source_id) for case_result in ranked]
+        canlii_used = any(source_type == "canlii" for source_type in source_types)
+        official_used = any(source_type == "official" for source_type in source_types)
         source_status = {
             "official": "ok" if official_used else "no_match",
             "canlii": "used" if canlii_used else "not_used",

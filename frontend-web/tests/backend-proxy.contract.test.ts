@@ -214,4 +214,35 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(traceId).toBeTruthy();
     expect(traceId?.length).toBeGreaterThan(10);
   });
+
+  it("maps upstream lawyer research 404 responses to source-unavailable contract errors", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "Not Found" }), {
+        status: 404,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-upstream-404",
+        },
+      })
+    );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/research/lawyer-cases", {
+        session_id: "session-123456",
+        matter_summary: "Federal Court appeal on procedural fairness",
+      }),
+      "/api/research/lawyer-cases"
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-trace-id")).toBe("trace-upstream-404");
+    expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
+    expect(body.error.message).toContain("lawyer case research");
+  });
 });

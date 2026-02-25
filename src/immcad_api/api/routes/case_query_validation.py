@@ -33,9 +33,17 @@ _CASE_SEARCH_QUERY_STOPWORDS = frozenset(
 _CASE_SEARCH_SHORT_TOKEN_ALLOWLIST = frozenset(
     {"fc", "fca", "scc", "irpa", "irpr", "pr", "ee", "pnp"}
 )
+_CASE_DOCKET_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^[a-z]{1,5}-\d{1,8}-\d{2,4}$"),
+    re.compile(r"^[a-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}$"),
+)
 
 
 def is_specific_case_query(query: str) -> bool:
+    normalized_query = re.sub(r"\s+", " ", query.strip().lower())
+    if any(pattern.fullmatch(normalized_query) for pattern in _CASE_DOCKET_PATTERNS):
+        return True
+
     tokens = re.findall(r"[a-z0-9]+", query.lower())
     if not tokens:
         return False

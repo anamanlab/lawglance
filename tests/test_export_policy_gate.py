@@ -33,7 +33,7 @@ def _set_hardened_export_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     download_calls: list[tuple[str, int]] = []
 
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         download_calls.append((request_url, max_download_bytes))
         return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
 
@@ -53,7 +53,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 def policy_gate_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     download_calls: list[tuple[str, int]] = []
 
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         download_calls.append((request_url, max_download_bytes))
         return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
 
@@ -96,7 +96,7 @@ def test_case_export_hardened_mode_requires_signed_approval_token(
 ) -> None:
     download_calls: list[tuple[str, int]] = []
 
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         download_calls.append((request_url, max_download_bytes))
         return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
 
@@ -130,7 +130,7 @@ def test_case_export_hardened_mode_allows_signed_approval_token(
 ) -> None:
     download_calls: list[tuple[str, int]] = []
 
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         download_calls.append((request_url, max_download_bytes))
         return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
 
@@ -409,7 +409,7 @@ def test_case_export_policy_rejects_lookalike_host_outside_source_domain(
 def test_case_export_policy_rejects_redirected_document_host_not_matching_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         del request_url, max_download_bytes
         return (
             b"%PDF-1.7\nfake-pdf\n",
@@ -455,7 +455,7 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
 def test_case_export_policy_allows_redirect_to_source_subdomain_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         del request_url, max_download_bytes
         return (
             b"%PDF-1.7\nfake-pdf\n",
@@ -498,7 +498,7 @@ def test_case_export_policy_allows_redirect_to_source_subdomain_host(
 def test_case_export_policy_rejects_oversized_document_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         del request_url, max_download_bytes
         raise cases_routes.ExportTooLargeError(
             "Case export payload exceeds configured maximum size"
@@ -540,7 +540,7 @@ def test_case_export_policy_rejects_oversized_document_payload(
 def test_case_export_policy_rejects_non_pdf_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         del max_download_bytes
         return (
             b"<html>not a pdf</html>",
@@ -584,7 +584,7 @@ def test_case_export_policy_rejects_non_pdf_payload(
 def test_case_export_metrics_include_allowed_and_blocked_outcomes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int, allowed_hosts: set[str]):
         del max_download_bytes
         return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
 

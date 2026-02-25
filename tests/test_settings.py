@@ -248,6 +248,16 @@ def test_load_settings_has_default_cors_origins(
     )
 
 
+def test_load_settings_defaults_to_in_memory_rate_limiter_when_redis_url_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    settings = load_settings()
+    assert settings.redis_url == ""
+
+
 def test_load_settings_parses_cors_origins_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.setenv(
@@ -271,6 +281,9 @@ def test_load_settings_has_default_trusted_citation_domains(
     settings = load_settings()
     assert "laws-lois.justice.gc.ca" in settings.citation_trusted_domains
     assert "canlii.org" in settings.citation_trusted_domains
+    assert "decisions.scc-csc.ca" in settings.citation_trusted_domains
+    assert "decisions.fct-cf.gc.ca" in settings.citation_trusted_domains
+    assert "decisions.fca-caf.gc.ca" in settings.citation_trusted_domains
 
 
 def test_load_settings_parses_trusted_citation_domains_csv(
@@ -524,6 +537,30 @@ def test_load_settings_enables_official_only_case_results_when_configured(
 
     settings = load_settings()
     assert settings.case_search_official_only_results is True
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_enables_official_only_case_results_by_default_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("CASE_SEARCH_OFFICIAL_ONLY_RESULTS", raising=False)
+
+    settings = load_settings()
+    assert settings.case_search_official_only_results is True
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_non_official_only_case_results_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("CASE_SEARCH_OFFICIAL_ONLY_RESULTS", "false")
+
+    with pytest.raises(ValueError, match="CASE_SEARCH_OFFICIAL_ONLY_RESULTS must be true"):
+        load_settings()
 
 
 def test_load_settings_has_default_official_case_cache_ttls(

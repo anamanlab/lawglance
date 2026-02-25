@@ -63,6 +63,16 @@ export const SOURCE_UNAVAILABLE_ERROR = {
   },
 };
 
+export const CASE_SEARCH_TOO_BROAD_ERROR = {
+  error: {
+    code: "VALIDATION_ERROR",
+    message:
+      "Case-law query is too broad. Please include specific terms such as program, issue, court, or citation.",
+    trace_id: "error-trace-case-broad",
+    policy_reason: "case_search_query_too_broad",
+  },
+};
+
 export const UNAUTHORIZED_ERROR = {
   error: {
     code: "UNAUTHORIZED",

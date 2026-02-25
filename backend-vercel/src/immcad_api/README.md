@@ -24,7 +24,7 @@ Endpoints:
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
 - `ENABLE_CASE_SEARCH` (optional, default `true`; set `false` for Gemini-only MVP to disable `/api/search/cases` and `/api/export/cases`)
 - `ENABLE_OFFICIAL_CASE_SOURCES` (optional; defaults to `false` in development and `true` in `production`/`prod`/`ci`; enables SCC/FC/FCA public-feed search without CanLII)
-- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS` (optional, default `false`; when `true`, `/api/search/cases` filters out results that are not export-eligible under source policy and host checks)
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS` (optional, default `true` in `production`/`prod`/`ci` and `false` in development; when `true`, `/api/search/cases` filters out results that are not export-eligible under source policy and host checks)
 - `OFFICIAL_CASE_CACHE_TTL_SECONDS` (optional, default `300`; fresh-cache window for official SCC/FC/FCA feed results)
 - `OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS` (optional, default `900`; stale-cache serve window; must be `>= OFFICIAL_CASE_CACHE_TTL_SECONDS`)
 - `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode, including aliases like `production-us-east`, `prod_blue`, `ci-smoke`)
@@ -32,7 +32,7 @@ Endpoints:
 - `IMMCAD_API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`; `API_BEARER_TOKEN` is accepted as a compatibility alias)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
-- `REDIS_URL` (optional, default `redis://localhost:6379/0`; used for distributed rate limiting when reachable)
+- `REDIS_URL` (optional; if unset the API uses in-memory rate limiting)
 - `OPENAI_MODEL` (optional, default `gpt-4o-mini`)
 - `GEMINI_MODEL` (default `gemini-2.5-flash-lite` in development; must be explicitly set in `production`/`prod`/`ci`)
 - `GEMINI_MODEL_FALLBACKS` (optional CSV, default `gemini-2.5-flash`; preview/experimental models are rejected in `production`/`prod`/`ci`)
@@ -60,9 +60,9 @@ Endpoints:
 - `POST /api/search/cases` returns export metadata (`source_id`, `document_url`, `export_allowed`, `export_policy_reason`) alongside each result.
 - `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` keeps `/api/search/cases` results limited to export-eligible official sources, which avoids dead-end export attempts in production UX.
 - `source_id` values are registry-driven (`data/sources/canada-immigration/registry.json`) and export eligibility is enforced by source policy.
-- `POST /api/export/cases` requires explicit per-request consent (`user_approved=true`) before any download is attempted.
+- `POST /api/export/cases` requires explicit per-request consent and a signed approval token issued by `POST /api/export/cases/approval` before any download is attempted.
 - `POST /api/export/cases` rejects missing or `false` approval with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
-- `POST /api/export/cases` enforces exact source-host matching for `document_url` (subdomain aliases are rejected).
+- `POST /api/export/cases` enforces trusted source-host matching for `document_url` (exact host or dot-bounded subdomain such as `www.<source-host>`).
 - `POST /api/export/cases` rejects non-PDF upstream responses with `422 VALIDATION_ERROR` and `policy_reason=source_export_non_pdf_payload` when `format=pdf`.
 - successful `POST /api/export/cases` responses stream binary content and include `x-trace-id`, `x-export-policy-reason`, and `content-disposition` headers.
 - `/ops/metrics` includes `request_metrics.export.audit_recent` with per-export consent/audit events (trace ID, client ID, source/case, host, approval flag, outcome, policy reason).

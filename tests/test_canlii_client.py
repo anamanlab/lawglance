@@ -111,7 +111,7 @@ def test_canlii_parses_success_payload(monkeypatch) -> None:
     )
 
     client = CanLIIClient(api_key="test-key")
-    request = CaseSearchRequest(query="express entry", jurisdiction="ca", court="fct", limit=2)
+    request = CaseSearchRequest(query="case", jurisdiction="ca", court="fct", limit=2)
     response = client.search_cases(request)
 
     assert len(response.results) == 2
@@ -141,7 +141,7 @@ def test_canlii_handles_invalid_date(monkeypatch) -> None:
     )
 
     client = CanLIIClient(api_key="test-key")
-    request = CaseSearchRequest(query="inadmissibility", jurisdiction="ca", court="fct", limit=1)
+    request = CaseSearchRequest(query="case", jurisdiction="ca", court="fct", limit=1)
     response = client.search_cases(request)
 
     assert len(response.results) == 1
@@ -183,7 +183,7 @@ def test_canlii_uses_api_key_query_parameter(monkeypatch) -> None:
     )
 
     client = CanLIIClient(api_key="test-key")
-    request = CaseSearchRequest(query="express entry", jurisdiction="ca", court="fct", limit=1)
+    request = CaseSearchRequest(query="case", jurisdiction="ca", court="fct", limit=1)
     response = client.search_cases(request)
 
     assert len(response.results) == 1
@@ -191,6 +191,61 @@ def test_canlii_uses_api_key_query_parameter(monkeypatch) -> None:
     used_client = _FakeClient.created_clients[-1]
     assert used_client.last_get_kwargs.get("params", {}).get("api_key") == "test-key"
     assert "Authorization" not in (used_client.init_kwargs.get("headers") or {})
+
+
+def test_canlii_returns_empty_results_when_query_tokens_do_not_match(monkeypatch) -> None:
+    _FakeClient.reset()
+    payload = {
+        "cases": [
+            {
+                "caseId": "c1",
+                "title": "Cadogan v Canada (Citizenship and Immigration)",
+                "citation": "2025 FC 1125",
+                "decisionDate": "2025-06-23",
+                "url": "https://www.canlii.org/c1",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(payload=payload),
+    )
+
+    client = CanLIIClient(api_key="test-key")
+    request = CaseSearchRequest(query="oi", jurisdiction="ca", court="fct", limit=5)
+    response = client.search_cases(request)
+
+    assert response.results == []
+
+
+def test_canlii_returns_empty_results_for_long_unmatched_query(monkeypatch) -> None:
+    _FakeClient.reset()
+    payload = {
+        "cases": [
+            {
+                "caseId": "c1",
+                "title": "Cadogan v Canada (Citizenship and Immigration)",
+                "citation": "2025 FC 1125",
+                "decisionDate": "2025-06-23",
+                "url": "https://www.canlii.org/c1",
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(payload=payload),
+    )
+
+    client = CanLIIClient(api_key="test-key")
+    request = CaseSearchRequest(
+        query="completely unrelated maritime insurance dispute",
+        jurisdiction="ca",
+        court="fct",
+        limit=5,
+    )
+    response = client.search_cases(request)
+
+    assert response.results == []
 
 
 def test_canlii_returns_rate_limited_when_daily_limit_hit() -> None:

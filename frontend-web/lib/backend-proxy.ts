@@ -21,6 +21,8 @@ const FORWARDED_RESPONSE_HEADERS = [
   "x-export-policy-reason",
 ] as const;
 
+type ProxyErrorCode = "PROVIDER_ERROR" | "SOURCE_UNAVAILABLE";
+
 function buildUpstreamUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -30,12 +32,13 @@ function buildUpstreamUrl(baseUrl: string, path: string): string {
 function buildProxyErrorResponse(
   status: number,
   message: string,
-  traceId = randomUUID()
+  traceId = randomUUID(),
+  code: ProxyErrorCode = "PROVIDER_ERROR"
 ): NextResponse {
   return NextResponse.json(
     {
       error: {
-        code: "PROVIDER_ERROR",
+        code,
         message,
         trace_id: traceId,
       },
@@ -107,44 +110,6 @@ function buildScaffoldChatResponse(rawBody: string, traceId: string): NextRespon
   );
 }
 
-function buildScaffoldCasesResponse(rawBody: string, traceId: string): NextResponse {
-  const payload = parseRequestPayload(rawBody);
-  const query = payload?.query;
-  if (typeof query !== "string" || query.trim().length < 2) {
-    return buildValidationErrorResponse(traceId);
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const cleanedQuery = query.trim();
-  return NextResponse.json(
-    {
-      results: [
-        {
-          case_id: "FCT-2026-1",
-          title: `Scaffold Case 1: ${cleanedQuery}`,
-          citation: "FCT 2026 1",
-          decision_date: today,
-          url: "https://www.canlii.org/en/ca/fct/",
-        },
-        {
-          case_id: "FCT-2026-2",
-          title: `Scaffold Case 2: ${cleanedQuery}`,
-          citation: "FCT 2026 2",
-          decision_date: today,
-          url: "https://www.canlii.org/en/ca/fct/",
-        },
-      ],
-    },
-    {
-      status: 200,
-      headers: {
-        "x-trace-id": traceId,
-        "x-immcad-fallback": "scaffold",
-      },
-    }
-  );
-}
-
 function buildScaffoldFallbackResponse(
   upstreamPath: string,
   rawBody: string,
@@ -153,13 +118,13 @@ function buildScaffoldFallbackResponse(
   if (upstreamPath === "/api/chat") {
     return buildScaffoldChatResponse(rawBody, traceId);
   }
-  if (upstreamPath === "/api/search/cases") {
-    return buildScaffoldCasesResponse(rawBody, traceId);
-  }
   return null;
 }
 
-function buildForwardedResponseHeaders(upstreamResponse: Response): Headers {
+function buildForwardedResponseHeaders(
+  upstreamResponse: Response,
+  fallbackTraceId: string
+): Headers {
   const responseHeaders = new Headers();
   for (const headerName of FORWARDED_RESPONSE_HEADERS) {
     const headerValue = upstreamResponse.headers.get(headerName);
@@ -167,19 +132,40 @@ function buildForwardedResponseHeaders(upstreamResponse: Response): Headers {
       responseHeaders.set(headerName, headerValue);
     }
   }
-  const traceId = upstreamResponse.headers.get("x-trace-id");
-  if (traceId) {
-    responseHeaders.set("x-trace-id", traceId);
-  }
+  const traceId = upstreamResponse.headers.get("x-trace-id") ?? fallbackTraceId;
+  responseHeaders.set("x-trace-id", traceId);
   return responseHeaders;
+}
+
+function parseBooleanEnvironmentValue(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return (
+    normalized === "1" ||
+    normalized === "true" ||
+    normalized === "yes" ||
+    normalized === "on"
+  );
 }
 
 function isScaffoldFallbackAllowed(): boolean {
   try {
+    const explicitFallbackOptIn = parseBooleanEnvironmentValue(
+      process.env.IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK
+    );
+    if (!explicitFallbackOptIn) {
+      return false;
+    }
     return !isHardenedRuntimeEnvironment();
   } catch {
     return false;
   }
+}
+
+function resolveProxyErrorCode(upstreamPath: string): ProxyErrorCode {
+  if (upstreamPath === "/api/search/cases" || upstreamPath.startsWith("/api/export/cases")) {
+    return "SOURCE_UNAVAILABLE";
+  }
+  return "PROVIDER_ERROR";
 }
 
 export async function forwardPostRequest(
@@ -201,10 +187,12 @@ export async function forwardPostRequest(
         return scaffoldResponse;
       }
     }
+    const errorCode = resolveProxyErrorCode(upstreamPath);
     return buildProxyErrorResponse(
       503,
       "IMMCAD backend configuration is missing for this deployment. Set IMMCAD_API_BASE_URL (https://...) and IMMCAD_API_BEARER_TOKEN (or API_BEARER_TOKEN compatibility alias).",
-      traceId
+      traceId,
+      errorCode
     );
   }
 
@@ -228,7 +216,7 @@ export async function forwardPostRequest(
     const payload = await upstreamResponse.arrayBuffer();
     const response = new NextResponse(payload, {
       status: upstreamResponse.status,
-      headers: buildForwardedResponseHeaders(upstreamResponse),
+      headers: buildForwardedResponseHeaders(upstreamResponse, traceId),
     });
     if (!response.headers.get("content-type")) {
       response.headers.set("content-type", "application/octet-stream");
@@ -241,10 +229,12 @@ export async function forwardPostRequest(
         return scaffoldResponse;
       }
     }
+    const errorCode = resolveProxyErrorCode(upstreamPath);
     return buildProxyErrorResponse(
       502,
       "Unable to reach the IMMCAD backend service.",
-      traceId
+      traceId,
+      errorCode
     );
   }
 }

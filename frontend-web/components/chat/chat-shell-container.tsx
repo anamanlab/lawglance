@@ -52,6 +52,29 @@ function buildCaseExportUnavailableMessage(policyReason?: string | null): string
   }
 }
 
+function buildCaseSearchErrorStatusMessage(params: {
+  code: string;
+  message: string;
+  policyReason: string | null;
+  traceId: string | null;
+  showOperationalPanels: boolean;
+}): string {
+  const { code, message, policyReason, traceId, showOperationalPanels } = params;
+  if (code === "VALIDATION_ERROR" && policyReason === "case_search_query_too_broad") {
+    return "Case-law query is too broad. Add specific terms such as program, issue, court, or citation.";
+  }
+  if (showOperationalPanels) {
+    return `Unable to search related case law: ${message}${policyReason ? ` (Policy: ${policyReason})` : ""} (Trace ID: ${traceId ?? "Unavailable"})`;
+  }
+  if (code === "SOURCE_UNAVAILABLE") {
+    return "Case-law sources are temporarily unavailable. Please try again shortly.";
+  }
+  if (code === "RATE_LIMITED") {
+    return "Case-law search is temporarily rate limited. Please wait a moment and try again.";
+  }
+  return "Case-law search is temporarily unavailable. Please try again shortly.";
+}
+
 export function ChatShell({
   apiBaseUrl,
   legalDisclaimer,
@@ -69,7 +92,8 @@ export function ChatShell({
   const [supportContext, setSupportContext] = useState<SupportContext | null>(null);
   const [relatedCases, setRelatedCases] = useState<CaseSearchResult[]>([]);
   const [relatedCasesStatus, setRelatedCasesStatus] = useState("");
-  const [pendingCaseQuery, setPendingCaseQuery] = useState<string | null>(null);
+  const [caseSearchQuery, setCaseSearchQuery] = useState("");
+  const [lastCaseSearchQuery, setLastCaseSearchQuery] = useState<string | null>(null);
   const [exportingCaseId, setExportingCaseId] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
 
@@ -115,7 +139,7 @@ export function ChatShell({
       setRetryPrompt(null);
       setRelatedCases([]);
       setRelatedCasesStatus("");
-      setPendingCaseQuery(null);
+      setLastCaseSearchQuery(null);
       setExportingCaseId(null);
       setIsSubmitting(true);
       setSubmissionPhase("chat");
@@ -170,14 +194,13 @@ export function ChatShell({
         });
 
         if (isPolicyRefusal) {
-          setPendingCaseQuery(null);
           setRelatedCasesStatus(
-            "Case-law search is unavailable for this request. Ask a general immigration question to continue."
+            "This chat request was blocked by policy. You can still run case-law search with a specific Canadian immigration query."
           );
           return;
         }
 
-        setPendingCaseQuery(promptToSubmit);
+        setCaseSearchQuery(promptToSubmit);
         setRelatedCasesStatus("Ready to find related Canadian case law.");
       } finally {
         setIsSubmitting(false);
@@ -189,7 +212,8 @@ export function ChatShell({
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
-    if (isSubmitting || !pendingCaseQuery) {
+    const query = caseSearchQuery.trim();
+    if (isSubmitting || query.length < 2) {
       return;
     }
 
@@ -200,17 +224,19 @@ export function ChatShell({
 
     try {
       const caseSearchResult = await apiClient.searchCases({
-        query: pendingCaseQuery,
+        query,
         jurisdiction: "ca",
         limit: 5,
       });
 
       if (!caseSearchResult.ok) {
-        const errorCopy = ERROR_COPY[caseSearchResult.error.code];
-        const errorDetail = caseSearchResult.error.message || errorCopy.detail;
-        const statusMessage = showOperationalPanels
-          ? `${errorCopy.title}: ${errorDetail} (Trace ID: ${caseSearchResult.traceId ?? "Unavailable"})`
-          : "Case-law search is temporarily unavailable. Please try again shortly.";
+        const statusMessage = buildCaseSearchErrorStatusMessage({
+          code: caseSearchResult.error.code,
+          message: caseSearchResult.error.message,
+          policyReason: caseSearchResult.policyReason,
+          traceId: caseSearchResult.traceId,
+          showOperationalPanels,
+        });
         setRelatedCasesStatus(statusMessage);
         setSupportContext({
           endpoint: "/api/search/cases",
@@ -223,6 +249,7 @@ export function ChatShell({
       }
 
       setRelatedCases(caseSearchResult.data.results);
+      setLastCaseSearchQuery(query);
       setRelatedCasesStatus(
         caseSearchResult.data.results.length
           ? ""
@@ -238,7 +265,7 @@ export function ChatShell({
       setIsSubmitting(false);
       setSubmissionPhase("idle");
     }
-  }, [apiClient, isSubmitting, pendingCaseQuery, showOperationalPanels]);
+  }, [apiClient, caseSearchQuery, isSubmitting, showOperationalPanels]);
 
   const runCaseExport = useCallback(
     async (caseResult: CaseSearchResult): Promise<void> => {
@@ -277,12 +304,41 @@ export function ChatShell({
       setRelatedCasesStatus("Preparing case PDF export...");
 
       try {
+        const approvalResult = await apiClient.requestCaseExportApproval({
+          source_id: caseResult.source_id,
+          case_id: caseResult.case_id,
+          document_url: caseResult.document_url,
+          user_approved: true,
+        });
+
+        if (!approvalResult.ok) {
+          const errorCopy = ERROR_COPY[approvalResult.error.code];
+          const errorDetail = approvalResult.error.message || errorCopy.detail;
+          const policyReason = approvalResult.policyReason;
+          const statusMessage = showOperationalPanels
+            ? `${errorCopy.title}: ${errorDetail}${
+                policyReason ? ` (Policy: ${policyReason})` : ""
+              } (Trace ID: ${approvalResult.traceId ?? "Unavailable"})`
+            : "Case export approval is temporarily unavailable. Please try again shortly.";
+          setRelatedCasesStatus(statusMessage);
+          setSupportContext({
+            endpoint: "/api/export/cases/approval",
+            status: "error",
+            traceId: approvalResult.traceId,
+            code: approvalResult.error.code,
+            policyReason,
+            traceIdMismatch: approvalResult.traceIdMismatch,
+          });
+          return;
+        }
+
         const exportResult = await apiClient.exportCasePdf({
           source_id: caseResult.source_id,
           case_id: caseResult.case_id,
           document_url: caseResult.document_url,
           format: "pdf",
           user_approved: true,
+          approval_token: approvalResult.data.approval_token,
         });
 
         if (!exportResult.ok) {
@@ -376,6 +432,23 @@ export function ChatShell({
     [isSubmitting]
   );
 
+  const onCaseSearchQueryChange = useCallback(
+    (value: string): void => {
+      setCaseSearchQuery(value);
+      const nextQuery = value.trim().toLowerCase();
+      const previousQuery = (lastCaseSearchQuery ?? "").trim().toLowerCase();
+      if (!nextQuery || !previousQuery || relatedCases.length === 0) {
+        return;
+      }
+      if (nextQuery !== previousQuery) {
+        setRelatedCasesStatus(
+          "Case-search query updated. Click Find related cases to refresh results."
+        );
+      }
+    },
+    [lastCaseSearchQuery, relatedCases.length]
+  );
+
   const statusToneClass = useMemo(
     () => buildStatusTone(supportContext?.status ?? null),
     [supportContext]
@@ -419,10 +492,12 @@ export function ChatShell({
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <RelatedCasePanel
             isSubmitting={isSubmitting}
+            caseSearchQuery={caseSearchQuery}
+            lastCaseSearchQuery={lastCaseSearchQuery}
+            onCaseSearchQueryChange={onCaseSearchQueryChange}
             onSearch={() => {
               void runRelatedCaseSearch();
             }}
-            pendingCaseQuery={pendingCaseQuery}
             relatedCases={relatedCases}
             relatedCasesStatus={relatedCasesStatus}
             onExportCase={(caseResult) => {

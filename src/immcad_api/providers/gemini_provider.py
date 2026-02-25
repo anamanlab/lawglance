@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 
-from immcad_api.providers.error_mapping import map_provider_exception
 from immcad_api.providers.base import ProviderError, ProviderResult
+from immcad_api.providers.error_mapping import map_provider_exception
+from immcad_api.providers.prompt_builder import build_combined_runtime_prompt
 from immcad_api.schemas import Citation
 
 
@@ -41,11 +42,10 @@ class GeminiProvider:
             api_key=self.api_key,
             http_options=types.HttpOptions(timeout=timeout_millis),
         )
-        prompt = (
-            "You are an informational assistant for Canadian immigration law. "
-            "Do not provide legal representation advice. "
-            f"User locale: {locale}. "
-            f"Question: {message.strip()}"
+        prompt = build_combined_runtime_prompt(
+            message=message,
+            locale=locale,
+            citations=citations,
         )
 
         answer = ""

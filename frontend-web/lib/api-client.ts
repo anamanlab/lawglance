@@ -56,6 +56,7 @@ export type CaseExportRequestPayload = {
   document_url: string;
   format?: "pdf";
   user_approved: true;
+  approval_token?: string | null;
 };
 
 export type CaseExportResponsePayload = {
@@ -63,6 +64,18 @@ export type CaseExportResponsePayload = {
   filename: string | null;
   contentType: string;
   policyReason: string | null;
+};
+
+export type CaseExportApprovalRequestPayload = {
+  source_id: string;
+  case_id: string;
+  document_url: string;
+  user_approved: true;
+};
+
+export type CaseExportApprovalResponsePayload = {
+  approval_token: string;
+  expires_at_epoch: number;
 };
 
 export type ApiErrorCode =
@@ -115,6 +128,8 @@ const REQUEST_HEADERS: Record<string, string> = {
   "content-type": "application/json"
 };
 const PDF_ACCEPT_HEADER = "application/pdf, application/json";
+const NETWORK_RETRY_DELAY_MS = 150;
+const NETWORK_RETRY_ATTEMPTS = 2;
 
 function normalizeTraceId(value: string | null | undefined): string | null {
   const trimmedValue = value?.trim();
@@ -229,6 +244,74 @@ function buildFallbackError(status: number): ApiError {
   };
 }
 
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function buildClientTraceId(): string {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return `client-${globalThis.crypto.randomUUID()}`;
+  }
+  return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function postJsonWithRetry(
+  requestUrl: string,
+  headers: Record<string, string>,
+  payload: unknown
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NETWORK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < NETWORK_RETRY_ATTEMPTS) {
+        await delay(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
+async function postBinaryWithRetry(
+  requestUrl: string,
+  headers: Record<string, string>,
+  payload: unknown
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NETWORK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < NETWORK_RETRY_ATTEMPTS) {
+        await delay(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
 async function postJson<TPayload>(
   options: ApiClientOptions,
   path: string,
@@ -237,12 +320,11 @@ async function postJson<TPayload>(
   const requestUrl = buildApiUrl(options.apiBaseUrl, path);
 
   try {
-    const response = await fetch(requestUrl, {
-      method: "POST",
-      headers: buildRequestHeaders(options.bearerToken),
-      body: JSON.stringify(payload),
-      cache: "no-store",
-    });
+    const response = await postJsonWithRetry(
+      requestUrl,
+      buildRequestHeaders(options.bearerToken),
+      payload
+    );
     const headerTraceId = normalizeTraceId(response.headers.get("x-trace-id"));
     const responseBody = await parseResponseBody(response);
 
@@ -259,11 +341,12 @@ async function postJson<TPayload>(
     const bodyTraceId = parsedError?.traceId ?? null;
     const traceIdMismatch =
       Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
 
     return {
       ok: false,
       status: response.status,
-      traceId: headerTraceId ?? bodyTraceId,
+      traceId,
       traceIdMismatch,
       policyReason: parsedError?.policyReason ?? null,
       error: parsedError
@@ -277,7 +360,7 @@ async function postJson<TPayload>(
     return {
       ok: false,
       status: 0,
-      traceId: null,
+      traceId: buildClientTraceId(),
       traceIdMismatch: false,
       policyReason: null,
       error: {
@@ -336,14 +419,13 @@ async function postCaseExport(
 
   const requestUrl = buildApiUrl(options.apiBaseUrl, "/export/cases");
   try {
-    const response = await fetch(requestUrl, {
-      method: "POST",
-      headers: buildRequestHeadersWithOverrides(options.bearerToken, {
+    const response = await postBinaryWithRetry(
+      requestUrl,
+      buildRequestHeadersWithOverrides(options.bearerToken, {
         accept: PDF_ACCEPT_HEADER,
       }),
-      body: JSON.stringify(payload),
-      cache: "no-store",
-    });
+      payload
+    );
     const headerTraceId = normalizeTraceId(response.headers.get("x-trace-id"));
 
     if (response.ok) {
@@ -366,11 +448,12 @@ async function postCaseExport(
     const bodyTraceId = parsedError?.traceId ?? null;
     const traceIdMismatch =
       Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
 
     return {
       ok: false,
       status: response.status,
-      traceId: headerTraceId ?? bodyTraceId,
+      traceId,
       traceIdMismatch,
       policyReason: parsedError?.policyReason ?? null,
       error: parsedError
@@ -384,7 +467,7 @@ async function postCaseExport(
     return {
       ok: false,
       status: 0,
-      traceId: null,
+      traceId: buildClientTraceId(),
       traceIdMismatch: false,
       policyReason: null,
       error: {
@@ -393,6 +476,30 @@ async function postCaseExport(
       },
     };
   }
+}
+
+function postCaseExportApproval(
+  options: ApiClientOptions,
+  payload: CaseExportApprovalRequestPayload
+): Promise<ApiResult<CaseExportApprovalResponsePayload>> {
+  if (payload.user_approved !== true) {
+    return Promise.resolve({
+      ok: false,
+      status: 422,
+      traceId: null,
+      traceIdMismatch: false,
+      policyReason: "source_export_user_approval_required",
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Case export requires explicit user approval before download.",
+      },
+    });
+  }
+  return postJson<CaseExportApprovalResponsePayload>(
+    options,
+    "/export/cases/approval",
+    payload
+  );
 }
 
 export function createApiClient(options: ApiClientOptions) {
@@ -411,6 +518,11 @@ export function createApiClient(options: ApiClientOptions) {
       payload: CaseExportRequestPayload
     ): Promise<ApiResult<CaseExportResponsePayload>> {
       return postCaseExport(options, payload);
+    },
+    requestCaseExportApproval(
+      payload: CaseExportApprovalRequestPayload
+    ): Promise<ApiResult<CaseExportApprovalResponsePayload>> {
+      return postCaseExportApproval(options, payload);
     },
   };
 }

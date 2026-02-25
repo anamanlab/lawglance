@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import logging
 import re
+import time
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -10,6 +15,8 @@ from fastapi.responses import JSONResponse
 
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
 from immcad_api.schemas import (
+    CaseExportApprovalRequest,
+    CaseExportApprovalResponse,
     CaseExportRequest,
     CaseSearchRequest,
     CaseSearchResult,
@@ -26,6 +33,53 @@ class ExportTooLargeError(Exception):
 
 
 LOGGER = logging.getLogger(__name__)
+_APPROVAL_TOKEN_VERSION = 1
+_CASE_SEARCH_QUERY_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "be",
+        "by",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "it",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "was",
+        "what",
+        "when",
+        "where",
+        "who",
+        "why",
+        "with",
+    }
+)
+_CASE_SEARCH_SHORT_TOKEN_ALLOWLIST = frozenset(
+    {"fc", "fca", "scc", "irpa", "irpr", "pr", "ee", "pnp"}
+)
+
+
+def _is_specific_case_search_query(query: str) -> bool:
+    tokens = re.findall(r"[a-z0-9]+", query.lower())
+    if not tokens:
+        return False
+    meaningful_tokens = [
+        token
+        for token in tokens
+        if token not in _CASE_SEARCH_QUERY_STOPWORDS
+        and (len(token) >= 3 or token in _CASE_SEARCH_SHORT_TOKEN_ALLOWLIST)
+    ]
+    if not meaningful_tokens:
+        return False
+    return any(any(char.isalpha() for char in token) for token in meaningful_tokens)
 
 
 def _download_export_payload(
@@ -68,6 +122,116 @@ def _download_export_payload(
         return payload_bytes, media_type, final_url
 
 
+def _b64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64url_decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(f"{value}{padding}")
+
+
+def _normalize_token_url(raw_url: str) -> str:
+    parsed = urlparse(raw_url.strip())
+    return urlunparse(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path,
+            parsed.params,
+            parsed.query,
+            "",
+        )
+    )
+
+
+def _issue_export_approval_token(
+    *,
+    secret: str,
+    source_id: str,
+    case_id: str,
+    document_url: str,
+    issued_at_epoch: int,
+) -> str:
+    payload = {
+        "v": _APPROVAL_TOKEN_VERSION,
+        "sid": source_id,
+        "cid": case_id,
+        "url": _normalize_token_url(document_url),
+        "iat": issued_at_epoch,
+    }
+    payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).digest()
+    return f"{_b64url_encode(payload_bytes)}.{_b64url_encode(signature)}"
+
+
+def _has_valid_export_approval_token(
+    *,
+    token: str,
+    secret: str,
+    source_id: str,
+    case_id: str,
+    document_url: str,
+    ttl_seconds: int,
+    now_epoch: int,
+) -> bool:
+    parts = token.split(".", 1)
+    if len(parts) != 2:
+        return False
+    payload_part, signature_part = parts
+    try:
+        payload_bytes = _b64url_decode(payload_part)
+        received_signature = _b64url_decode(signature_part)
+    except Exception:
+        return False
+
+    expected_signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).digest()
+    if not hmac.compare_digest(expected_signature, received_signature):
+        return False
+
+    try:
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except Exception:
+        return False
+    if not isinstance(payload, dict):
+        return False
+
+    version = payload.get("v")
+    token_source_id = payload.get("sid")
+    token_case_id = payload.get("cid")
+    token_url = payload.get("url")
+    issued_at = payload.get("iat")
+    if (
+        version != _APPROVAL_TOKEN_VERSION
+        or not isinstance(token_source_id, str)
+        or not isinstance(token_case_id, str)
+        or not isinstance(token_url, str)
+        or not isinstance(issued_at, int)
+    ):
+        return False
+
+    if token_source_id != source_id or token_case_id != case_id:
+        return False
+    if token_url != _normalize_token_url(document_url):
+        return False
+    if issued_at < 0 or now_epoch < issued_at:
+        return False
+    if now_epoch - issued_at > ttl_seconds:
+        return False
+
+    return True
+
+
 def build_case_router(
     case_search_service: CaseSearchService,
     *,
@@ -77,7 +241,24 @@ def build_case_router(
     export_policy_gate_enabled: bool = False,
     export_max_download_bytes: int = 10 * 1024 * 1024,
     case_search_official_only_results: bool = False,
+    export_approval_token_secret: str | None = None,
+    export_approval_token_ttl_seconds: int = 600,
+    require_signed_export_approval: bool = False,
 ) -> APIRouter:
+    if export_approval_token_ttl_seconds < 60:
+        raise ValueError("export_approval_token_ttl_seconds must be >= 60")
+    if require_signed_export_approval and not (
+        export_approval_token_secret and export_approval_token_secret.strip()
+    ):
+        raise ValueError(
+            "export_approval_token_secret must be configured when signed export approval is required"
+        )
+    approval_token_secret = (
+        export_approval_token_secret.strip()
+        if export_approval_token_secret and export_approval_token_secret.strip()
+        else "dev-export-approval-secret"
+    )
+
     router = APIRouter(prefix="/api", tags=["cases"])
 
     def _record_export_metric(
@@ -175,7 +356,12 @@ def build_case_router(
         document_host = (urlparse(document_url).hostname or "").lower()
         if not document_host or not allowed_hosts:
             return False
-        return document_host in allowed_hosts
+        for allowed_host in allowed_hosts:
+            if document_host == allowed_host:
+                return True
+            if document_host.endswith(f".{allowed_host}"):
+                return True
+        return False
 
     def _safe_download_filename(*, source_id: str, case_id: str, fmt: str) -> str:
         safe_source = re.sub(r"[^A-Za-z0-9_.-]+", "-", source_id).strip("-") or "source"
@@ -238,15 +424,92 @@ def build_case_router(
         return CaseSearchResponse(results=filtered_results)
 
     @router.post("/search/cases", response_model=CaseSearchResponse)
-    def search_cases(
+    async def search_cases(
         payload: CaseSearchRequest, request: Request, response: Response
-    ) -> CaseSearchResponse:
+    ) -> CaseSearchResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
+        if not _is_specific_case_search_query(payload.query):
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message=(
+                    "Case-law query is too broad. Please include specific terms such as "
+                    "program, issue, court, or citation."
+                ),
+                policy_reason="case_search_query_too_broad",
+            )
         return _apply_case_search_export_policy(case_search_service.search(payload))
 
+    @router.post(
+        "/export/cases/approval", response_model=CaseExportApprovalResponse
+    )
+    async def approve_case_export(
+        payload: CaseExportApprovalRequest,
+        request: Request,
+        response: Response,
+    ) -> CaseExportApprovalResponse | JSONResponse:
+        trace_id = getattr(request.state, "trace_id", "")
+        response.headers["x-trace-id"] = trace_id
+        source_entry = source_registry.get_source(payload.source_id)
+        if source_entry is None:
+            return _error_response(
+                status_code=403,
+                trace_id=trace_id,
+                code="POLICY_BLOCKED",
+                message="Case export blocked by source policy (source_not_in_registry_for_export)",
+                policy_reason="source_not_in_registry_for_export",
+            )
+
+        if not payload.user_approved:
+            return _error_response(
+                status_code=403,
+                trace_id=trace_id,
+                code="POLICY_BLOCKED",
+                message="Case export requires explicit user approval before download",
+                policy_reason="source_export_user_approval_required",
+            )
+
+        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
+        if not _is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message="Case export URL host does not match the configured source host",
+                policy_reason="export_url_not_allowed_for_source",
+            )
+
+        if export_policy_gate_enabled:
+            export_allowed, policy_reason = is_source_export_allowed(
+                payload.source_id,
+                source_policy=source_policy,
+            )
+            if not export_allowed:
+                return _error_response(
+                    status_code=403,
+                    trace_id=trace_id,
+                    code="POLICY_BLOCKED",
+                    message=f"Case export blocked by source policy ({policy_reason})",
+                    policy_reason=policy_reason,
+                )
+
+        issued_at_epoch = int(time.time())
+        approval_token = _issue_export_approval_token(
+            secret=approval_token_secret,
+            source_id=payload.source_id,
+            case_id=payload.case_id,
+            document_url=str(payload.document_url),
+            issued_at_epoch=issued_at_epoch,
+        )
+        return CaseExportApprovalResponse(
+            approval_token=approval_token,
+            expires_at_epoch=issued_at_epoch + export_approval_token_ttl_seconds,
+        )
+
     @router.post("/export/cases", response_model=None)
-    def export_cases(
+    async def export_cases(
         payload: CaseExportRequest,
         request: Request,
     ) -> Response:
@@ -268,20 +531,6 @@ def build_case_router(
             )
 
         allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
-        if not payload.user_approved:
-            _record_export_event(
-                request=request,
-                payload=payload,
-                outcome="blocked",
-                policy_reason="source_export_user_approval_required",
-            )
-            return _error_response(
-                status_code=403,
-                trace_id=trace_id,
-                code="POLICY_BLOCKED",
-                message="Case export requires explicit user approval before download",
-                policy_reason="source_export_user_approval_required",
-            )
 
         policy_reason = "source_export_allowed_gate_disabled"
         if export_policy_gate_enabled:
@@ -317,6 +566,37 @@ def build_case_router(
                 code="VALIDATION_ERROR",
                 message="Case export URL host does not match the configured source host",
                 policy_reason="export_url_not_allowed_for_source",
+            )
+
+        has_valid_approval_token = False
+        if payload.approval_token:
+            has_valid_approval_token = _has_valid_export_approval_token(
+                token=payload.approval_token,
+                secret=approval_token_secret,
+                source_id=payload.source_id,
+                case_id=payload.case_id,
+                document_url=str(payload.document_url),
+                ttl_seconds=export_approval_token_ttl_seconds,
+                now_epoch=int(time.time()),
+            )
+
+        approval_satisfied = payload.user_approved or has_valid_approval_token
+        if require_signed_export_approval and not has_valid_approval_token:
+            approval_satisfied = False
+
+        if not approval_satisfied:
+            _record_export_event(
+                request=request,
+                payload=payload,
+                outcome="blocked",
+                policy_reason="source_export_user_approval_required",
+            )
+            return _error_response(
+                status_code=403,
+                trace_id=trace_id,
+                code="POLICY_BLOCKED",
+                message="Case export requires explicit user approval before download",
+                policy_reason="source_export_user_approval_required",
             )
 
         request_url = _build_source_scoped_request_url(
@@ -447,7 +727,7 @@ def build_case_router_disabled(
         )
 
     @router.post("/search/cases", response_model=None)
-    def search_cases_disabled(request: Request) -> JSONResponse:
+    async def search_cases_disabled(request: Request) -> JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         return _error_response(
             status_code=503,
@@ -457,13 +737,23 @@ def build_case_router_disabled(
         )
 
     @router.post("/export/cases", response_model=None)
-    def export_cases_disabled(request: Request) -> JSONResponse:
+    async def export_cases_disabled(request: Request) -> JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         return _error_response(
             status_code=503,
             trace_id=trace_id,
             code="SOURCE_UNAVAILABLE",
             message="Case export is disabled in this deployment.",
+        )
+
+    @router.post("/export/cases/approval", response_model=None)
+    async def export_cases_approval_disabled(request: Request) -> JSONResponse:
+        trace_id = getattr(request.state, "trace_id", "")
+        return _error_response(
+            status_code=503,
+            trace_id=trace_id,
+            code="SOURCE_UNAVAILABLE",
+            message="Case export approval is disabled in this deployment.",
         )
 
     return router

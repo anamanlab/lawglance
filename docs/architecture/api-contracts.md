@@ -183,7 +183,7 @@ Approval policy:
 
 - `user_approved` is required for explicit per-request consent.
 - Missing or `false` approval is blocked before download, with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
-- `document_url` host must match the exact source host configured for `source_id` (subdomain aliases are rejected) to prevent cross-domain export fetches.
+- `document_url` host must be trusted for the configured `source_id` (exact host or dot-bounded subdomain such as `www.<source-host>`) to prevent cross-domain export fetches.
 - `format="pdf"` responses are validated as PDF payloads; non-PDF upstream responses are rejected with `422 VALIDATION_ERROR` and `policy_reason=source_export_non_pdf_payload`.
 
 Missing approval example:

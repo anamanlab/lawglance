@@ -15,7 +15,7 @@ def build_chat_router(
     router = APIRouter(prefix="/api", tags=["chat"])
 
     @router.post("/chat", response_model=ChatResponse)
-    def chat(payload: ChatRequest, request: Request, response: Response) -> ChatResponse:
+    async def chat(payload: ChatRequest, request: Request, response: Response) -> ChatResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
         chat_response = chat_service.handle_chat(payload, trace_id=trace_id)

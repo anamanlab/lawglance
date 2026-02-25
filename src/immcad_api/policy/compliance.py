@@ -26,6 +26,9 @@ DEFAULT_TRUSTED_CITATION_DOMAINS: tuple[str, ...] = (
     "canada.ca",
     "ircc.canada.ca",
     "canlii.org",
+    "decisions.scc-csc.ca",
+    "decisions.fct-cf.gc.ca",
+    "decisions.fca-caf.gc.ca",
 )
 
 
@@ -133,10 +136,10 @@ def verify_grounded_citations(
         if not _is_well_formed_citation(citation, trusted_domains=normalized_trusted_domains):
             continue
         key = _citation_lookup_key(citation)
-        grounded = grounded_index.get(key)
-        if grounded is None or key in seen:
+        matched_grounded = grounded_index.get(key)
+        if matched_grounded is None or key in seen:
             continue
-        verified.append(grounded.model_copy(deep=True))
+        verified.append(matched_grounded.model_copy(deep=True))
         seen.add(key)
     return verified
 

@@ -207,7 +207,8 @@ class CanLIIClient:
             scored_cases.append((score, index, item))
 
         if not scored_cases:
-            return cases
+            # Avoid returning arbitrary metadata rows when query terms do not match.
+            return []
 
         scored_cases.sort(key=lambda value: (-value[0], value[1]))
         return [item for _, _, item in scored_cases]

@@ -1,17 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 import json
 import logging
 
 import pytest
 
-from immcad_api.errors import ProviderApiError
+from immcad_api.errors import ProviderApiError, SourceUnavailableError
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT
 from immcad_api.providers import ProviderError
 from immcad_api.providers.base import ProviderResult
 from immcad_api.providers.router import RoutingResult
-from immcad_api.schemas import ChatRequest, Citation
+from immcad_api.schemas import (
+    CaseSearchRequest,
+    CaseSearchResponse,
+    CaseSearchResult,
+    ChatRequest,
+    Citation,
+)
 from immcad_api.services.chat_service import ChatService
 from immcad_api.services.grounding import StaticGroundingAdapter, scaffold_grounded_citations
 
@@ -42,6 +49,19 @@ class _FailingRouter:
     def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
         del message, citations, locale
         raise ProviderError("openai", self.code, self.message)
+
+
+@dataclass
+class _RecordingCaseSearchTool:
+    response: CaseSearchResponse | None = None
+    error: Exception | None = None
+    requests: list[CaseSearchRequest] = field(default_factory=list)
+
+    def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return self.response or CaseSearchResponse(results=[])
 
 
 def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
@@ -179,6 +199,129 @@ def test_chat_service_returns_grounded_response_when_adapter_supplies_citations(
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
     assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_rejects_invalid_case_search_tool_limit() -> None:
+    with pytest.raises(ValueError, match="case_search_tool_limit must be >= 1"):
+        ChatService(_StaticRouter(citations=[]), case_search_tool_limit=0)
+
+
+def test_chat_service_uses_case_search_tool_for_case_law_queries(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    case_search_tool = _RecordingCaseSearchTool(
+        response=CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-101",
+                    title="Example v Canada (Citizenship and Immigration)",
+                    citation="2026 FC 101",
+                    decision_date=date(2026, 2, 1),
+                    url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc101/2026fc101.html",
+                    source_id="FC_DECISIONS",
+                    document_url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc101/2026fc101.html",
+                )
+            ]
+        )
+    )
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        case_search_tool=case_search_tool,
+        trusted_citation_domains=("canlii.org",),
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Find case law about inadmissibility decisions.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    with caplog.at_level(logging.INFO, logger="immcad_api.audit"):
+        response = service.handle_chat(payload, trace_id="trace-case-tool-001")
+
+    assert len(case_search_tool.requests) == 1
+    tool_request = case_search_tool.requests[0]
+    assert tool_request.query == payload.message
+    assert tool_request.jurisdiction == "ca"
+    assert tool_request.limit == 3
+    assert response.answer == "Scaffold response"
+    assert response.confidence == "medium"
+    assert len(response.citations) == 1
+    assert response.citations[0].source_id == "FC_DECISIONS"
+    assert response.citations[0].url.startswith("https://www.canlii.org/")
+    tool_events = [
+        event for event in _audit_events(caplog) if event.get("event_type") == "case_search_tool_used"
+    ]
+    assert len(tool_events) == 1
+    tool_event = tool_events[0]
+    assert tool_event["trace_id"] == "trace-case-tool-001"
+    assert tool_event["tool_name"] == "case_search"
+    assert tool_event["tool_result_count"] == 1
+    assert tool_event["candidate_citation_count"] == 1
+
+
+def test_chat_service_skips_case_search_tool_for_non_case_prompts() -> None:
+    case_search_tool = _RecordingCaseSearchTool(
+        response=CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-101",
+                    title="Example v Canada (Citizenship and Immigration)",
+                    citation="2026 FC 101",
+                    decision_date=date(2026, 2, 1),
+                    url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc101/2026fc101.html",
+                    source_id="FC_DECISIONS",
+                )
+            ]
+        )
+    )
+    service = ChatService(_StaticRouter(citations=[]), case_search_tool=case_search_tool)
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-case-tool-skip-001")
+
+    assert response.confidence == "low"
+    assert response.citations == []
+    assert case_search_tool.requests == []
+
+
+def test_chat_service_emits_case_search_tool_error_audit_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    case_search_tool = _RecordingCaseSearchTool(
+        error=SourceUnavailableError("Official and CanLII sources are unavailable")
+    )
+    service = ChatService(_StaticRouter(citations=[]), case_search_tool=case_search_tool)
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Show me a precedent on inadmissibility.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    with caplog.at_level(logging.INFO, logger="immcad_api.audit"):
+        response = service.handle_chat(payload, trace_id="trace-case-tool-error-001")
+
+    assert response.confidence == "low"
+    assert response.citations == []
+    tool_error_events = [
+        event for event in _audit_events(caplog) if event.get("event_type") == "case_search_tool_error"
+    ]
+    assert len(tool_error_events) == 1
+    tool_error_event = tool_error_events[0]
+    assert tool_error_event["trace_id"] == "trace-case-tool-error-001"
+    assert tool_error_event["tool_name"] == "case_search"
+    assert tool_error_event["tool_error_code"] == "SOURCE_UNAVAILABLE"
+    _assert_non_pii_audit_event(
+        event=tool_error_event,
+        raw_message=payload.message,
+        expected_event_type="case_search_tool_error",
+    )
 
 
 def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grounding() -> None:

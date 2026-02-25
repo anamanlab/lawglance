@@ -4,8 +4,9 @@ import time
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
 
-from immcad_api.providers.error_mapping import map_provider_exception
 from immcad_api.providers.base import ProviderError, ProviderResult
+from immcad_api.providers.error_mapping import map_provider_exception
+from immcad_api.providers.prompt_builder import build_runtime_prompts
 from immcad_api.schemas import Citation
 
 
@@ -34,11 +35,10 @@ class OpenAIProvider:
             raise ProviderError(self.name, "provider_error", "OPENAI_API_KEY not configured")
 
         client = OpenAI(api_key=self.api_key, timeout=self.timeout_seconds)
-        prompt = (
-            "You are an informational assistant for Canadian immigration law. "
-            "Use concise, plain language and do not provide legal representation advice. "
-            f"User locale: {locale}. "
-            f"Question: {message.strip()}"
+        system_prompt, prompt = build_runtime_prompts(
+            message=message,
+            citations=citations,
+            locale=locale,
         )
 
         answer = ""
@@ -51,10 +51,7 @@ class OpenAIProvider:
                     messages=[
                         {
                             "role": "system",
-                            "content": (
-                                "Provide informational guidance only. Avoid legal advice. "
-                                "Cite uncertainty clearly when necessary."
-                            ),
+                            "content": system_prompt,
                         },
                         {"role": "user", "content": prompt},
                     ],

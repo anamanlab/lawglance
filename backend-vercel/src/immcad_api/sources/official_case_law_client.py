@@ -346,6 +346,7 @@ class OfficialCaseLawClient:
         records: list[CourtDecisionRecord],
         query: str,
     ) -> list[CourtDecisionRecord]:
+        normalized_query = query.lower()
         raw_query_tokens = re.findall(r"[a-z0-9]+", query.lower())
         query_tokens = [
             token
@@ -353,7 +354,9 @@ class OfficialCaseLawClient:
             if token not in _QUERY_STOPWORDS and len(token) > 1
         ]
         compact_query = " ".join(query_tokens)
-        immigration_focused = any(token in _IMMIGRATION_TERMS for token in query_tokens)
+        immigration_focused = any(token in _IMMIGRATION_TERMS for token in query_tokens) or any(
+            pattern.search(normalized_query) for pattern in _IMMIGRATION_TEXT_PATTERNS
+        )
         if not query_tokens:
             return sorted(
                 records,
@@ -377,8 +380,12 @@ class OfficialCaseLawClient:
             immigration_signal_hits = sum(
                 1 for pattern in _IMMIGRATION_TEXT_PATTERNS if pattern.search(haystack)
             )
-            if token_hits == 0 and immigration_signal_hits == 0:
-                continue
+            if token_hits == 0:
+                # Do not return generic immigration records for unrelated/noise queries.
+                if not immigration_focused:
+                    continue
+                if immigration_signal_hits == 0:
+                    continue
 
             score = token_hits * 3
             if compact_query and compact_query in haystack:

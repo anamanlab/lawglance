@@ -159,7 +159,7 @@ def load_settings() -> Settings:
     )
     case_search_official_only_results = parse_bool_env(
         "CASE_SEARCH_OFFICIAL_ONLY_RESULTS",
-        False,
+        hardened_environment,
     )
     official_case_cache_ttl_seconds = parse_float_env(
         "OFFICIAL_CASE_CACHE_TTL_SECONDS",
@@ -228,6 +228,10 @@ def load_settings() -> Settings:
     if hardened_environment and enable_openai_provider and not openai_api_key:
         raise ValueError(
             "OPENAI_API_KEY is required when ENABLE_OPENAI_PROVIDER=true in production/prod/ci"
+        )
+    if hardened_environment and not case_search_official_only_results:
+        raise ValueError(
+            "CASE_SEARCH_OFFICIAL_ONLY_RESULTS must be true when ENVIRONMENT is production/prod/ci"
         )
     if hardened_environment and allow_scaffold_synthetic_citations:
         raise ValueError(
@@ -300,8 +304,7 @@ def load_settings() -> Settings:
         official_case_cache_ttl_seconds=official_case_cache_ttl_seconds,
         official_case_stale_cache_ttl_seconds=official_case_stale_cache_ttl_seconds,
         api_bearer_token=api_bearer_token,
-        redis_url=parse_str_env("REDIS_URL", "redis://localhost:6379/0")
-        or "redis://localhost:6379/0",
+        redis_url=parse_str_env("REDIS_URL") or "",
         openai_model=parse_str_env("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini",
         gemini_model=gemini_model,
         gemini_model_fallbacks=gemini_model_fallbacks,

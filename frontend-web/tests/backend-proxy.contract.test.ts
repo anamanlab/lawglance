@@ -27,6 +27,7 @@ describe("backend proxy scaffold fallback behavior", () => {
   });
 
   it("returns scaffold fallback in non-production when backend config is missing", async () => {
+    vi.stubEnv("IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK", "true");
     vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
       throw new Error("missing runtime config");
     });
@@ -38,6 +39,38 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-immcad-fallback")).toBe("scaffold");
     expect(body.answer).toContain("Scaffold response");
+  });
+
+  it("returns provider error in non-production when scaffold fallback opt-in is disabled", async () => {
+    vi.stubEnv("IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK", "false");
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
+      throw new Error("missing runtime config");
+    });
+    vi.mocked(isHardenedRuntimeEnvironment).mockReturnValue(false);
+
+    const response = await forwardPostRequest(buildRequest("/api/chat", { message: "hi" }), "/api/chat");
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-immcad-fallback")).toBeNull();
+    expect(body.error.code).toBe("PROVIDER_ERROR");
+  });
+
+  it("returns source-unavailable error for case search when backend config is missing", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
+      throw new Error("missing runtime config");
+    });
+    vi.mocked(isHardenedRuntimeEnvironment).mockReturnValue(false);
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/search/cases", { query: "express entry", jurisdiction: "ca" }),
+      "/api/search/cases"
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-immcad-fallback")).toBeNull();
+    expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
   });
 
   it("returns explicit provider error in production when backend config is missing", async () => {
@@ -134,5 +167,31 @@ describe("backend proxy scaffold fallback behavior", () => {
 
     const responseBytes = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(responseBytes)).toEqual(Array.from(pdfPayload));
+  });
+
+  it("adds a proxy trace header when upstream omits x-trace-id", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ answer: "ok" }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      })
+    );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/chat", { message: "hi" }),
+      "/api/chat"
+    );
+
+    expect(response.status).toBe(200);
+    const traceId = response.headers.get("x-trace-id");
+    expect(traceId).toBeTruthy();
+    expect(traceId?.length).toBeGreaterThan(10);
   });
 });

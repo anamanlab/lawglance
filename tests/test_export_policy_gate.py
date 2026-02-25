@@ -12,6 +12,23 @@ from immcad_api.api.routes import cases as cases_routes  # noqa: E402
 from immcad_api.main import create_app  # noqa: E402
 
 
+def _set_hardened_export_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production-us-east")
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
+    monkeypatch.setenv(
+        "CITATION_TRUSTED_DOMAINS",
+        "laws-lois.justice.gc.ca,canlii.org,decisions.scc-csc.ca,decisions.fct-cf.gc.ca,decisions.fca-caf.gc.ca",
+    )
+    monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     download_calls: list[tuple[str, int]] = []
@@ -52,6 +69,119 @@ def policy_gate_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return test_client
 
 
+def _issue_export_approval_token(
+    client: TestClient,
+    *,
+    source_id: str,
+    case_id: str,
+    document_url: str,
+    headers: dict[str, str] | None = None,
+) -> str:
+    response = client.post(
+        "/api/export/cases/approval",
+        headers=headers or {},
+        json={
+            "source_id": source_id,
+            "case_id": case_id,
+            "document_url": document_url,
+            "user_approved": True,
+        },
+    )
+    assert response.status_code == 200
+    return response.json()["approval_token"]
+
+
+def test_case_export_hardened_mode_requires_signed_approval_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    download_calls: list[tuple[str, int]] = []
+
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+        download_calls.append((request_url, max_download_bytes))
+        return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
+
+    monkeypatch.setattr(
+        cases_routes, "_download_export_payload", fake_download_export_payload
+    )
+    _set_hardened_export_env(monkeypatch)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/export/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+            "user_approved": True,
+        },
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"]["code"] == "POLICY_BLOCKED"
+    assert body["error"]["policy_reason"] == "source_export_user_approval_required"
+    assert download_calls == []
+
+
+def test_case_export_hardened_mode_allows_signed_approval_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    download_calls: list[tuple[str, int]] = []
+
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+        download_calls.append((request_url, max_download_bytes))
+        return (b"%PDF-1.7\nfake-pdf\n", "application/pdf", request_url)
+
+    monkeypatch.setattr(
+        cases_routes, "_download_export_payload", fake_download_export_payload
+    )
+    _set_hardened_export_env(monkeypatch)
+    client = TestClient(create_app())
+
+    approval_response = client.post(
+        "/api/export/cases/approval",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "user_approved": True,
+        },
+    )
+
+    assert approval_response.status_code == 200
+    approval_body = approval_response.json()
+    assert approval_body["approval_token"]
+    assert approval_body["expires_at_epoch"] > 0
+
+    export_response = client.post(
+        "/api/export/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+            "user_approved": True,
+            "approval_token": approval_body["approval_token"],
+        },
+    )
+
+    assert export_response.status_code == 200
+    assert export_response.content.startswith(b"%PDF-1.7")
+    assert (
+        export_response.headers.get("x-export-policy-reason") == "source_export_allowed"
+    )
+    assert download_calls == [
+        (
+            "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            10 * 1024 * 1024,
+        )
+    ]
+
+
 def test_case_export_policy_requires_explicit_user_approval(
     policy_gate_client: TestClient,
 ) -> None:
@@ -75,6 +205,12 @@ def test_case_export_policy_requires_explicit_user_approval(
 def test_case_export_policy_gate_disabled_downloads_document_even_for_blocked_source(
     client: TestClient,
 ) -> None:
+    approval_token = _issue_export_approval_token(
+        client,
+        source_id="CANLII_TERMS",
+        case_id="terms-reference",
+        document_url="https://www.canlii.org/en/ca/scc/doc/2024/2024scc3/2024scc3.html",
+    )
     response = client.post(
         "/api/export/cases",
         json={
@@ -83,6 +219,7 @@ def test_case_export_policy_gate_disabled_downloads_document_even_for_blocked_so
             "document_url": "https://www.canlii.org/en/ca/scc/doc/2024/2024scc3/2024scc3.html",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
 
@@ -108,6 +245,12 @@ def test_case_export_policy_gate_disabled_downloads_document_even_for_blocked_so
 def test_case_export_policy_allows_official_source_and_downloads_when_gate_enabled(
     policy_gate_client: TestClient,
 ) -> None:
+    approval_token = _issue_export_approval_token(
+        policy_gate_client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
     response = policy_gate_client.post(
         "/api/export/cases",
         json={
@@ -116,6 +259,7 @@ def test_case_export_policy_allows_official_source_and_downloads_when_gate_enabl
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
 
@@ -209,7 +353,39 @@ def test_case_export_policy_rejects_document_url_host_not_matching_source(
     assert getattr(policy_gate_client, "_download_calls") == []
 
 
-def test_case_export_policy_rejects_subdomain_host_not_in_source_allowlist(
+def test_case_export_policy_allows_www_subdomain_host_matching_source_domain(
+    policy_gate_client: TestClient,
+) -> None:
+    approval_token = _issue_export_approval_token(
+        policy_gate_client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://www.decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
+    response = policy_gate_client.post(
+        "/api/export/cases",
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://www.decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+            "user_approved": True,
+            "approval_token": approval_token,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF-1.7")
+    assert response.headers.get("x-export-policy-reason") == "source_export_allowed"
+    assert getattr(policy_gate_client, "_download_calls") == [
+        (
+            "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            10 * 1024 * 1024,
+        )
+    ]
+
+
+def test_case_export_policy_rejects_lookalike_host_outside_source_domain(
     policy_gate_client: TestClient,
 ) -> None:
     response = policy_gate_client.post(
@@ -217,7 +393,7 @@ def test_case_export_policy_rejects_subdomain_host_not_in_source_allowlist(
         json={
             "source_id": "SCC_DECISIONS",
             "case_id": "scc-2024-3",
-            "document_url": "https://sub.decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "document_url": "https://evildecisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
         },
@@ -250,6 +426,12 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
 
     client = TestClient(create_app())
+    approval_token = _issue_export_approval_token(
+        client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
     response = client.post(
         "/api/export/cases",
         json={
@@ -258,6 +440,7 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
 
@@ -267,6 +450,49 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
     assert (
         body["error"]["policy_reason"] == "export_redirect_url_not_allowed_for_source"
     )
+
+
+def test_case_export_policy_allows_redirect_to_source_subdomain_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_download_export_payload(*, request_url: str, max_download_bytes: int):
+        del request_url, max_download_bytes
+        return (
+            b"%PDF-1.7\nfake-pdf\n",
+            "application/pdf",
+            "https://www.decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/file.pdf",
+        )
+
+    monkeypatch.setattr(
+        cases_routes, "_download_export_payload", fake_download_export_payload
+    )
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
+
+    client = TestClient(create_app())
+    approval_token = _issue_export_approval_token(
+        client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
+    response = client.post(
+        "/api/export/cases",
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+            "user_approved": True,
+            "approval_token": approval_token,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"%PDF-1.7")
+    assert response.headers.get("x-export-policy-reason") == "source_export_allowed"
 
 
 def test_case_export_policy_rejects_oversized_document_payload(
@@ -287,6 +513,12 @@ def test_case_export_policy_rejects_oversized_document_payload(
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
 
     client = TestClient(create_app())
+    approval_token = _issue_export_approval_token(
+        client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
     response = client.post(
         "/api/export/cases",
         json={
@@ -295,6 +527,7 @@ def test_case_export_policy_rejects_oversized_document_payload(
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
 
@@ -324,6 +557,12 @@ def test_case_export_policy_rejects_non_pdf_payload(
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
 
     client = TestClient(create_app())
+    approval_token = _issue_export_approval_token(
+        client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+    )
     response = client.post(
         "/api/export/cases",
         json={
@@ -332,6 +571,7 @@ def test_case_export_policy_rejects_non_pdf_payload(
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
 
@@ -357,6 +597,13 @@ def test_case_export_metrics_include_allowed_and_blocked_outcomes(
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
     secured_client = TestClient(create_app())
     headers = {"Authorization": "Bearer secret-token"}
+    approval_token = _issue_export_approval_token(
+        secured_client,
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_url="https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+        headers=headers,
+    )
 
     blocked = secured_client.post(
         "/api/export/cases",
@@ -378,6 +625,7 @@ def test_case_export_metrics_include_allowed_and_blocked_outcomes(
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
             "user_approved": True,
+            "approval_token": approval_token,
         },
     )
     metrics = secured_client.get("/ops/metrics", headers=headers)

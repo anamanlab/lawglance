@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChatShell } from "@/components/chat-shell";
 import {
+  CASE_SEARCH_TOO_BROAD_ERROR,
   CASE_SEARCH_SUCCESS_RESPONSE,
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
@@ -108,6 +109,50 @@ describe("chat shell contract behavior", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("allows editing the case-search query before running related case lookup", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-case-success" },
+        })
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+
+    const caseQueryInput = screen.getByLabelText("Case search query");
+    await user.clear(caseQueryInput);
+    await user.type(caseQueryInput, "Federal Court inadmissibility decision");
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCall = fetchMock.mock.calls[1];
+    expect(secondCall).toBeDefined();
+    const secondCallInit = secondCall?.[1] as RequestInit | undefined;
+    const secondCallBody =
+      typeof secondCallInit?.body === "string" ? secondCallInit.body : "";
+    expect(secondCallBody).toContain("Federal Court inadmissibility decision");
+  });
+
   it("renders policy refusal UX without case-search request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse(CHAT_POLICY_REFUSAL_RESPONSE, {
@@ -133,7 +178,7 @@ describe("chat shell contract behavior", () => {
     expect(await screen.findByText("Policy refusal response")).toBeTruthy();
     expect(
       screen.getByText(
-        "Case-law search is unavailable for this request. Ask a general immigration question to continue."
+        "This chat request was blocked by policy. You can still run case-law search with a specific Canadian immigration query."
       )
     ).toBeTruthy();
     expect(screen.getAllByText("Trace ID: trace-policy-refusal").length).toBeGreaterThan(
@@ -141,6 +186,47 @@ describe("chat shell contract behavior", () => {
     );
     expect(screen.getByText("Last endpoint: /api/chat")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows actionable query guidance when case search query is too broad", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(CASE_SEARCH_TOO_BROAD_ERROR, {
+          status: 422,
+          headers: { "x-trace-id": "trace-case-broad" },
+        })
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find case law"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    const caseQueryInput = screen.getByLabelText("Case search query");
+    await user.clear(caseQueryInput);
+    await user.type(caseQueryInput, "to be");
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(
+      await screen.findByText(
+        "Case-law query is too broad. Add specific terms such as program, issue, court, or citation."
+      )
+    ).toBeTruthy();
   });
 
   it("renders structured error copy and mismatch warning when traces differ", async () => {
@@ -332,6 +418,17 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            approval_token: "approval-token-123",
+            expires_at_epoch: 1_900_000_000,
+          },
+          {
+            headers: { "x-trace-id": "trace-approval-success" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
         pdfResponse(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
           headers: {
             "x-trace-id": "trace-export-success",
@@ -380,12 +477,15 @@ describe("chat shell contract behavior", () => {
 
     await screen.findByText("Download started: case-export.pdf");
     expect(confirmSpy).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://api.immcad.test/api/export/cases");
-    expect(fetchMock.mock.calls[2]?.[1]).toEqual(
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(
+      "https://api.immcad.test/api/export/cases/approval"
+    );
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("https://api.immcad.test/api/export/cases");
+    expect(fetchMock.mock.calls[3]?.[1]).toEqual(
       expect.objectContaining({
         method: "POST",
-        body: expect.stringContaining('"user_approved":true'),
+        body: expect.stringContaining('"approval_token":"approval-token-123"'),
       })
     );
     expect(createObjectURLMock).toHaveBeenCalledTimes(1);
@@ -407,6 +507,17 @@ describe("chat shell contract behavior", () => {
         jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            approval_token: "approval-token-123",
+            expires_at_epoch: 1_900_000_000,
+          },
+          {
+            headers: { "x-trace-id": "trace-approval-success" },
+          }
+        )
       )
       .mockResolvedValueOnce(
         jsonResponse(EXPORT_POLICY_BLOCKED_ERROR, {

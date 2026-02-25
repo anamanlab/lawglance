@@ -69,6 +69,14 @@ def _trusted_forwarded_client_id(request: Request) -> str | None:
     return None
 
 
+def _cloudflare_proxy_client_id(request: Request) -> str | None:
+    # Cloudflare forwards the original client address via canonical headers.
+    cf_connecting_ip = _parse_ip(request.headers.get("cf-connecting-ip"))
+    if cf_connecting_ip:
+        return cf_connecting_ip
+    return _parse_ip(request.headers.get("true-client-ip"))
+
+
 def _resolve_rate_limit_client_id(request: Request) -> str | None:
     direct_host = request.client.host if request.client else None
     direct_ip = _parse_ip(direct_host)
@@ -83,7 +91,16 @@ def _resolve_rate_limit_client_id(request: Request) -> str | None:
     direct_host_id = _sanitize_client_host(direct_host)
     if direct_host_id:
         return direct_host_id
-    return _trusted_forwarded_client_id(request)
+    trusted_forwarded_id = _trusted_forwarded_client_id(request)
+    if trusted_forwarded_id:
+        return trusted_forwarded_id
+
+    cloudflare_client_id = _cloudflare_proxy_client_id(request)
+    if cloudflare_client_id:
+        return cloudflare_client_id
+
+    # Final fallback when request.client is unavailable (common in worker shims).
+    return _sanitize_client_host(request.headers.get("host"))
 
 
 def create_app() -> FastAPI:
@@ -139,11 +156,6 @@ def create_app() -> FastAPI:
         grounding_adapter = StaticGroundingAdapter(scaffold_grounded_citations())
     else:
         grounding_adapter = KeywordGroundingAdapter(official_grounding_catalog())
-    chat_service = ChatService(
-        provider_router,
-        grounding_adapter=grounding_adapter,
-        trusted_citation_domains=settings.citation_trusted_domains,
-    )
     hardened_environment = is_hardened_environment(settings.environment)
     case_search_service: CaseSearchService | None = None
     canlii_usage_limiter = None
@@ -183,6 +195,13 @@ def create_app() -> FastAPI:
                 if settings.enable_official_case_sources
                 else None,
             )
+
+    chat_service = ChatService(
+        provider_router,
+        grounding_adapter=grounding_adapter,
+        trusted_citation_domains=settings.citation_trusted_domains,
+        case_search_tool=case_search_service,
+    )
 
     has_api_bearer_token = bool(settings.api_bearer_token)
 
@@ -338,6 +357,9 @@ def create_app() -> FastAPI:
                 export_policy_gate_enabled=settings.export_policy_gate_enabled,
                 export_max_download_bytes=settings.export_max_download_bytes,
                 case_search_official_only_results=settings.case_search_official_only_results,
+                export_approval_token_secret=settings.api_bearer_token
+                or "dev-export-approval-secret",
+                require_signed_export_approval=True,
             )
         )
     else:
@@ -346,11 +368,11 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/healthz", tags=["health"])
-    def healthz() -> dict[str, str]:
+    async def healthz() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name}
 
     @app.get("/ops/metrics", tags=["ops"])
-    def ops_metrics() -> dict[str, object]:
+    async def ops_metrics() -> dict[str, object]:
         canlii_metrics_snapshot = (
             canlii_usage_limiter.snapshot()
             if canlii_usage_limiter and hasattr(canlii_usage_limiter, "snapshot")

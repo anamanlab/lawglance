@@ -376,6 +376,42 @@ def test_official_case_law_client_avoids_substring_token_false_positives(
     assert all("FC 96" not in result.citation for result in response.results)
 
 
+def test_official_case_law_client_filters_noise_query_without_token_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'>
+  <channel>
+    <item>
+      <title>Cadogan v Canada (Citizenship and Immigration), 2025 FC 1125</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/654321/index.do</link>
+      <description>Immigration judicial review record</description>
+      <pubDate>Mon, 23 Jun 2025 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    responses = {
+        "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do": fc_feed,
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="oi",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+        )
+    )
+
+    assert response.results == []
+
+
 def test_official_case_law_client_uses_fresh_cache_without_refetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

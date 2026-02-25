@@ -25,7 +25,11 @@ export type ChatShellProps = {
 export type SubmissionPhase = "idle" | "chat" | "cases" | "export";
 
 export type SupportContext = {
-  endpoint: "/api/chat" | "/api/search/cases" | "/api/export/cases";
+  endpoint:
+    | "/api/chat"
+    | "/api/search/cases"
+    | "/api/export/cases"
+    | "/api/export/cases/approval";
   status: "success" | "error";
   traceId: string | null;
   code?: ApiErrorCode;
@@ -54,9 +58,11 @@ export type RelatedCasePanelProps = {
   showDiagnostics?: boolean;
   isSubmitting: boolean;
   submissionPhase: SubmissionPhase;
-  pendingCaseQuery: string | null;
+  caseSearchQuery: string;
+  lastCaseSearchQuery: string | null;
   relatedCasesStatus: string;
   relatedCases: CaseSearchResult[];
+  onCaseSearchQueryChange: (value: string) => void;
   onSearch: () => void;
   onExportCase: (result: CaseSearchResult) => void;
   exportingCaseId: string | null;

@@ -70,6 +70,7 @@ class CaseExportRequest(BaseModel):
     document_url: HttpUrl
     format: Literal["pdf"] = "pdf"
     user_approved: bool = False
+    approval_token: str | None = Field(default=None, min_length=16, max_length=4096)
 
 
 class CaseExportResponse(BaseModel):
@@ -78,6 +79,18 @@ class CaseExportResponse(BaseModel):
     format: Literal["pdf"]
     export_allowed: bool
     policy_reason: str | None = None
+
+
+class CaseExportApprovalRequest(BaseModel):
+    source_id: str = Field(min_length=2, max_length=128)
+    case_id: str = Field(min_length=1, max_length=256)
+    document_url: HttpUrl
+    user_approved: bool = False
+
+
+class CaseExportApprovalResponse(BaseModel):
+    approval_token: str
+    expires_at_epoch: int = Field(ge=1)
 
 
 class ErrorBody(BaseModel):

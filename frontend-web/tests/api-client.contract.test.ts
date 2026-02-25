@@ -152,6 +152,72 @@ describe("api client chat contract", () => {
     expect(result.policyReason).toBeNull();
   });
 
+  it("generates a client trace id when error responses omit trace metadata", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("upstream html error", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      })
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(500);
+    expect(result.error.code).toBe("UNKNOWN_ERROR");
+    expect(result.traceId?.startsWith("client-")).toBe(true);
+  });
+
+  it("retries once on transient network failures before returning success", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("network down"))
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-after-retry" },
+        })
+      );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.traceId).toBe("trace-after-retry");
+    expect(result.data.answer).toBe(CHAT_SUCCESS_RESPONSE.answer);
+  });
+
+  it("returns provider error with client trace id when network fails after retry", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new TypeError("network down"));
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(0);
+    expect(result.error.code).toBe("PROVIDER_ERROR");
+    expect(result.traceId?.startsWith("client-")).toBe(true);
+  });
+
   it("parses export policy reason from error envelopes", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(EXPORT_POLICY_BLOCKED_ERROR, {
@@ -226,6 +292,76 @@ describe("api client chat contract", () => {
       ...CASE_EXPORT_PAYLOAD,
       user_approved: false,
     } as unknown as CaseExportRequestPayload);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(422);
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+    expect(result.policyReason).toBe("source_export_user_approval_required");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts export approval requests and returns signed approval metadata", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          approval_token: "signed-approval-token",
+          expires_at_epoch: 1_900_000_000,
+        },
+        {
+          headers: { "x-trace-id": "trace-approval-success" },
+        }
+      )
+    );
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+      bearerToken: "token-123",
+    });
+
+    const result = await client.requestCaseExportApproval({
+      source_id: "SCC_DECISIONS",
+      case_id: "case-1",
+      document_url: "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      user_approved: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.traceId).toBe("trace-approval-success");
+    expect(result.data.approval_token).toBe("signed-approval-token");
+    expect(result.data.expires_at_epoch).toBe(1_900_000_000);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.immcad.test/api/export/cases/approval",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer token-123",
+        }),
+      })
+    );
+  });
+
+  it("fails fast when export approval payload is not explicitly user-approved", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+
+    const result = await client.requestCaseExportApproval({
+      source_id: "SCC_DECISIONS",
+      case_id: "case-1",
+      document_url: "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      user_approved: false,
+    } as unknown as {
+      source_id: string;
+      case_id: string;
+      document_url: string;
+      user_approved: true;
+    });
 
     expect(result.ok).toBe(false);
     if (result.ok) {

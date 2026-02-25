@@ -83,6 +83,69 @@ def test_case_search_contract_shape() -> None:
     assert "export_policy_reason" in body["results"][0]
 
 
+def test_case_search_rejects_broad_stopword_query() -> None:
+    response = client.post(
+        "/api/search/cases",
+        json={
+            "query": "to be",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "case_search_query_too_broad"
+    assert "specific terms" in body["error"]["message"]
+
+
+def test_chat_case_law_query_uses_case_search_tool_citations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import date
+
+    from immcad_api.schemas import CaseSearchResponse, CaseSearchResult
+
+    def _mock_case_search(self, request):
+        del self, request
+        return CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-101",
+                    title="Example v Canada (Citizenship and Immigration)",
+                    citation="2026 FC 101",
+                    decision_date=date(2026, 2, 1),
+                    url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc101/2026fc101.html",
+                    source_id="FC_DECISIONS",
+                    document_url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc101/2026fc101.html",
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_case_search,
+    )
+    chat_client = TestClient(create_app())
+
+    response = chat_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Find case law about inadmissibility decisions.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert any(citation["source_id"] == "FC_DECISIONS" for citation in body["citations"])
+    assert body["confidence"] == "medium"
+
+
 def test_case_search_disabled_returns_structured_unavailable_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -96,6 +159,29 @@ def test_case_search_disabled_returns_structured_unavailable_response(
             "jurisdiction": "ca",
             "court": "fct",
             "limit": 2,
+        },
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["policy_reason"] == "case_search_disabled"
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_case_export_approval_disabled_returns_structured_unavailable_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_CASE_SEARCH", "false")
+    disabled_client = TestClient(create_app())
+
+    response = disabled_client.post(
+        "/api/export/cases/approval",
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "user_approved": True,
         },
     )
 
@@ -461,6 +547,26 @@ def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
     )
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_rate_limit_client_id_uses_cloudflare_connecting_ip_when_direct_host_missing() -> None:
+    from immcad_api.main import _resolve_rate_limit_client_id
+
+    class _Request:
+        client = None
+        headers = {"cf-connecting-ip": "203.0.113.10"}
+
+    assert _resolve_rate_limit_client_id(_Request()) == "203.0.113.10"
+
+
+def test_rate_limit_client_id_falls_back_to_host_header_when_proxy_headers_missing() -> None:
+    from immcad_api.main import _resolve_rate_limit_client_id
+
+    class _Request:
+        client = None
+        headers = {"host": "api.immcad.example"}
+
+    assert _resolve_rate_limit_client_id(_Request()) == "host:api.immcad.example"
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])

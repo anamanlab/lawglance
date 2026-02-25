@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -173,3 +174,62 @@ def test_validate_relative_link_returns_issue_when_base_file_unreadable(tmp_path
     assert issue is not None
     assert issue.category == "link"
     assert "File read error" in issue.message
+
+
+def test_analyze_markdown_file_handles_git_timeout_without_failing_analysis(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "docs" / "sample.md"
+    file_path.parent.mkdir()
+    file_path.write_text("# Title\n\nSufficient prose for audit.\n", encoding="utf-8")
+
+    def _raise_timeout(*args, **kwargs):  # noqa: ANN002, ANN003
+        raise subprocess.TimeoutExpired(cmd="git log", timeout=10)
+
+    monkeypatch.setattr("audit.subprocess.run", _raise_timeout)
+
+    config = {"quality_thresholds": {"min_word_count": 1, "max_freshness_days": 3650}}
+    audit = analyze_markdown_file(file_path, tmp_path, config)
+
+    assert audit.last_commit_iso is None
+    assert audit.age_days is None
+    assert all(issue.category != "read" for issue in audit.issues)
+
+
+def test_inject_toc_is_idempotent_after_first_rewrite() -> None:
+    content = "# Doc\n\n## Alpha\n\n### Beta\n\n## Gamma\n"
+
+    first = inject_toc(content, min_headings=2)
+    second = inject_toc(first.updated_content, min_headings=2)
+
+    assert first.changed is True
+    assert second.changed is False
+    assert second.updated_content == first.updated_content
+
+
+def test_validate_relative_link_reports_cross_file_anchor_read_error(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    source_file = docs_dir / "index.md"
+    target_file = docs_dir / "target.md"
+    source_file.write_text("# Index\n", encoding="utf-8")
+    target_file.write_text("# Target\n\n## Intro\n", encoding="utf-8")
+
+    original_read_text = Path.read_text
+
+    def _patched_read_text(self: Path, *args, **kwargs):  # noqa: ANN002, ANN003
+        if self.resolve() == target_file.resolve():
+            raise OSError("permission denied")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _patched_read_text)
+
+    issue = validate_relative_link(source_file, "target.md#intro", tmp_path)
+
+    assert issue is not None
+    assert issue.category == "link"
+    assert "File read error while validating heading anchor" in issue.message

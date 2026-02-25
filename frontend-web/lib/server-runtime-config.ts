@@ -30,7 +30,13 @@ function resolveRuntimeEnvironment(): string {
 
   const vercelEnvironment = normalizeValue(process.env.VERCEL_ENV)?.toLowerCase();
   const nodeEnvironment = normalizeValue(process.env.NODE_ENV)?.toLowerCase();
-  if (vercelEnvironment === "production" || nodeEnvironment === "production") {
+  if (vercelEnvironment === "production") {
+    return "production";
+  }
+  if (vercelEnvironment === "preview") {
+    return "development";
+  }
+  if (nodeEnvironment === "production") {
     return "production";
   }
   return "development";
@@ -85,9 +91,7 @@ function ensureProductionBearerTokenConfigured(
 }
 
 export function getServerRuntimeConfig(): ServerRuntimeConfig {
-  const configuredBackendBaseUrl =
-    normalizeValue(process.env.IMMCAD_API_BASE_URL) ??
-    normalizeValue(process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL);
+  const configuredBackendBaseUrl = normalizeValue(process.env.IMMCAD_API_BASE_URL);
   const backendBaseUrl = configuredBackendBaseUrl ?? DEV_DEFAULT_BACKEND_BASE_URL;
   const hardenedEnvironment = isHardenedRuntimeEnvironment();
   ensureHardenedSafeBackendUrl(backendBaseUrl, hardenedEnvironment);

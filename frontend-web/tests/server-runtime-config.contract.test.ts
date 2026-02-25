@@ -33,6 +33,7 @@ describe("server runtime config token resolution", () => {
   });
 
   it("enforces bearer token presence in production", () => {
+    delete process.env.VERCEL_ENV;
     vi.stubEnv("NODE_ENV", "production");
     process.env.IMMCAD_API_BASE_URL = "https://api.example.com";
     delete process.env.IMMCAD_API_BEARER_TOKEN;
@@ -41,6 +42,28 @@ describe("server runtime config token resolution", () => {
     expect(() => getServerRuntimeConfig()).toThrow(
       "IMMCAD_API_BEARER_TOKEN is required in hardened environments"
     );
+  });
+
+  it("treats VERCEL preview as non-hardened even when NODE_ENV is production", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.IMMCAD_API_BASE_URL = "http://127.0.0.1:8000";
+    delete process.env.IMMCAD_API_BEARER_TOKEN;
+    delete process.env.API_BEARER_TOKEN;
+
+    const config = getServerRuntimeConfig();
+
+    expect(config.backendBaseUrl).toBe("http://127.0.0.1:8000");
+    expect(config.backendBearerToken).toBeNull();
+  });
+
+  it("does not use NEXT_PUBLIC_IMMCAD_API_BASE_URL for server runtime config", () => {
+    delete process.env.IMMCAD_API_BASE_URL;
+    process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL = "https://public.example.com";
+
+    const config = getServerRuntimeConfig();
+
+    expect(config.backendBaseUrl).toBe("http://127.0.0.1:8000");
   });
 
   it("enforces hardened requirements when ENVIRONMENT is production", () => {

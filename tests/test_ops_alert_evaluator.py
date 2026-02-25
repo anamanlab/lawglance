@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -33,8 +34,8 @@ def test_build_metrics_url_strips_api_suffix() -> None:
 def test_evaluate_alert_rules_marks_threshold_breaches() -> None:
     rules = load_alert_rules(THRESHOLDS_PATH)
     metrics_payload = {
-        "request_metrics": {
-            "requests": {"total": 100},
+            "request_metrics": {
+            "requests": {"total": 100, "rate_per_minute": 10},
             "errors": {"rate": 0.06},
             "fallback": {"rate": 0.01},
             "refusal": {"rate": 0.1},
@@ -119,6 +120,62 @@ def test_evaluate_alert_rules_warns_when_request_volume_is_below_minimum() -> No
     assert report.failing_checks == 0
     assert report.warning_checks == len(rules)
     assert all(check.status == "warn" for check in checks)
+
+
+def test_load_alert_rules_supports_warn_breach_status_and_derived_cloudflare_rule() -> None:
+    rules = load_alert_rules(THRESHOLDS_PATH)
+    warn_rules = [rule for rule in rules if rule.breach_status == "warn"]
+    assert warn_rules
+    assert any(
+        rule.metric_path
+        == "derived.cloudflare_free_plan.api_projected_requests_per_day_utilization"
+        for rule in warn_rules
+    )
+
+
+def test_evaluate_alert_rules_can_emit_warn_on_breach_for_warn_rule() -> None:
+    rule = AlertRule(
+        name="cloudflare_budget_warn",
+        metric_path="derived.cloudflare_free_plan.api_projected_requests_per_day_utilization",
+        comparison="gt",
+        threshold=0.7,
+        duration_minutes=15,
+        breach_status="warn",
+    )
+    checks = evaluate_alert_rules(
+        metrics_payload={"request_metrics": {"requests": {"rate_per_minute": 60.0}}},
+        rules=[rule],
+    )
+
+    assert len(checks) == 1
+    assert checks[0].status == "warn"
+    assert checks[0].current_value is not None
+    assert checks[0].current_value > 0.7
+    assert "Threshold breached (warn)" in checks[0].message
+
+
+def test_load_alert_rules_rejects_invalid_breach_status(tmp_path: Path) -> None:
+    thresholds_path = tmp_path / "ops-alert-thresholds.json"
+    thresholds_path.write_text(
+        json.dumps(
+            {
+                "rules": [
+                    {
+                        "name": "bad_status",
+                        "metric_path": "request_metrics.errors.rate",
+                        "comparison": "gt",
+                        "threshold": 0.05,
+                        "duration_minutes": 10,
+                        "breach_status": "page-me",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Invalid breach_status"):
+        load_alert_rules(thresholds_path)
 
 
 def test_build_metrics_url_rejects_empty_base_after_normalization() -> None:

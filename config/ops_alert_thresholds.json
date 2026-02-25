@@ -1,5 +1,5 @@
 {
-  "version": "2026-02-24",
+  "version": "2026-02-25",
   "rules": [
     {
       "name": "error_rate",
@@ -32,6 +32,24 @@
       "threshold": 8000,
       "duration_minutes": 10,
       "min_request_count": 20
+    },
+    {
+      "name": "cloudflare_free_api_projected_daily_request_utilization_warn",
+      "metric_path": "derived.cloudflare_free_plan.api_projected_requests_per_day_utilization",
+      "comparison": "gt",
+      "threshold": 0.7,
+      "duration_minutes": 15,
+      "min_request_count": 20,
+      "breach_status": "warn"
+    },
+    {
+      "name": "cloudflare_free_api_projected_daily_request_utilization_fail",
+      "metric_path": "derived.cloudflare_free_plan.api_projected_requests_per_day_utilization",
+      "comparison": "gt",
+      "threshold": 0.9,
+      "duration_minutes": 15,
+      "min_request_count": 20,
+      "breach_status": "fail"
     }
   ]
 }

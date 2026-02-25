@@ -10,6 +10,8 @@ import httpx
 
 
 VALID_COMPARISONS = {"gt", "gte"}
+VALID_BREACH_STATUSES = {"fail", "warn"}
+CLOUDFLARE_FREE_PLAN_API_REQUESTS_PER_DAY_LIMIT = 100_000.0
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,7 @@ class AlertRule:
     threshold: float
     duration_minutes: int
     min_request_count: int = 0
+    breach_status: str = "fail"
 
 
 @dataclass(frozen=True)
@@ -80,6 +83,12 @@ def load_alert_rules(path: str | Path) -> list[AlertRule]:
             raise ValueError(
                 f"Invalid comparison '{comparison}'. Allowed values: {', '.join(sorted(VALID_COMPARISONS))}"
             )
+        breach_status = str(raw.get("breach_status", "fail")).strip().lower()
+        if breach_status not in VALID_BREACH_STATUSES:
+            raise ValueError(
+                "Invalid breach_status "
+                f"'{breach_status}'. Allowed values: {', '.join(sorted(VALID_BREACH_STATUSES))}"
+            )
         rules.append(
             AlertRule(
                 name=str(raw["name"]),
@@ -88,6 +97,7 @@ def load_alert_rules(path: str | Path) -> list[AlertRule]:
                 threshold=float(raw["threshold"]),
                 duration_minutes=int(raw["duration_minutes"]),
                 min_request_count=max(0, int(raw.get("min_request_count", 0))),
+                breach_status=breach_status,
             )
         )
     return rules
@@ -111,7 +121,7 @@ def fetch_ops_metrics(
     return payload
 
 
-def _get_numeric_value(payload: dict[str, Any], metric_path: str) -> float | None:
+def _get_nested_numeric_value(payload: dict[str, Any], metric_path: str) -> float | None:
     current: Any = payload
     for key in metric_path.split("."):
         if not isinstance(current, dict) or key not in current:
@@ -122,6 +132,30 @@ def _get_numeric_value(payload: dict[str, Any], metric_path: str) -> float | Non
     if isinstance(current, (int, float)):
         return float(current)
     return None
+
+
+def _get_derived_numeric_value(payload: dict[str, Any], metric_path: str) -> float | None:
+    if metric_path == "cloudflare_free_plan.api_requests_per_day_limit":
+        return CLOUDFLARE_FREE_PLAN_API_REQUESTS_PER_DAY_LIMIT
+
+    request_rate_per_minute = _get_nested_numeric_value(
+        payload, "request_metrics.requests.rate_per_minute"
+    )
+    if request_rate_per_minute is None:
+        return None
+
+    projected_requests_per_day = request_rate_per_minute * 60.0 * 24.0
+    if metric_path == "cloudflare_free_plan.api_projected_requests_per_day":
+        return projected_requests_per_day
+    if metric_path == "cloudflare_free_plan.api_projected_requests_per_day_utilization":
+        return projected_requests_per_day / CLOUDFLARE_FREE_PLAN_API_REQUESTS_PER_DAY_LIMIT
+    return None
+
+
+def _get_numeric_value(payload: dict[str, Any], metric_path: str) -> float | None:
+    if metric_path.startswith("derived."):
+        return _get_derived_numeric_value(payload, metric_path.removeprefix("derived."))
+    return _get_nested_numeric_value(payload, metric_path)
 
 
 def evaluate_alert_rules(
@@ -198,9 +232,9 @@ def evaluate_alert_rules(
             raise ValueError(
                 f"Unsupported comparison operator: {rule.comparison!r} for rule {rule.name!r}"
             )
-        status = "fail" if breached else "pass"
+        status = rule.breach_status if breached else "pass"
         message = (
-            f"Threshold breached: {current_value} {comparator} {rule.threshold}"
+            f"Threshold breached ({rule.breach_status}): {current_value} {comparator} {rule.threshold}"
             if breached
             else f"Threshold healthy: {current_value} {healthy_relation} threshold {rule.threshold}"
         )

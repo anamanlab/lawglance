@@ -24,6 +24,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         cases_routes, "_download_export_payload", fake_download_export_payload
     )
     monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("EXPORT_POLICY_GATE_ENABLED", raising=False)
     test_client = TestClient(create_app())
@@ -43,11 +44,32 @@ def policy_gate_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         cases_routes, "_download_export_payload", fake_download_export_payload
     )
     monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
     test_client = TestClient(create_app())
     test_client._download_calls = download_calls  # type: ignore[attr-defined]
     return test_client
+
+
+def test_case_export_policy_requires_explicit_user_approval(
+    policy_gate_client: TestClient,
+) -> None:
+    response = policy_gate_client.post(
+        "/api/export/cases",
+        json={
+            "source_id": "SCC_DECISIONS",
+            "case_id": "scc-2024-3",
+            "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+            "format": "pdf",
+        },
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"]["code"] == "POLICY_BLOCKED"
+    assert body["error"]["policy_reason"] == "source_export_user_approval_required"
+    assert getattr(policy_gate_client, "_download_calls") == []
 
 
 def test_case_export_policy_gate_disabled_downloads_document_even_for_blocked_source(
@@ -60,6 +82,7 @@ def test_case_export_policy_gate_disabled_downloads_document_even_for_blocked_so
             "case_id": "terms-reference",
             "document_url": "https://www.canlii.org/en/ca/scc/doc/2024/2024scc3/2024scc3.html",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -92,6 +115,7 @@ def test_case_export_policy_allows_official_source_and_downloads_when_gate_enabl
             "case_id": "scc-2024-3",
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -120,6 +144,7 @@ def test_case_export_policy_blocks_source_when_export_disallowed(
             "case_id": "terms-reference",
             "document_url": "https://www.canlii.org/en/ca/scc/doc/2024/2024scc3/2024scc3.html",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -146,6 +171,7 @@ def test_case_export_policy_blocks_unknown_source_with_policy_reason(
             "case_id": "doc-123",
             "document_url": "https://example.com/file.pdf",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -172,6 +198,7 @@ def test_case_export_policy_rejects_document_url_host_not_matching_source(
             "case_id": "scc-2024-3",
             "document_url": "https://example.com/file.pdf",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -197,6 +224,7 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
         cases_routes, "_download_export_payload", fake_download_export_payload
     )
     monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
 
@@ -208,6 +236,7 @@ def test_case_export_policy_rejects_redirected_document_host_not_matching_source
             "case_id": "scc-2024-3",
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -232,6 +261,7 @@ def test_case_export_policy_rejects_oversized_document_payload(
         cases_routes, "_download_export_payload", fake_download_export_payload
     )
     monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
 
@@ -243,6 +273,7 @@ def test_case_export_policy_rejects_oversized_document_payload(
             "case_id": "scc-2024-3",
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
+            "user_approved": True,
         },
     )
 
@@ -263,6 +294,7 @@ def test_case_export_metrics_include_allowed_and_blocked_outcomes(
         cases_routes, "_download_export_payload", fake_download_export_payload
     )
     monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
     secured_client = TestClient(create_app())
@@ -276,6 +308,7 @@ def test_case_export_metrics_include_allowed_and_blocked_outcomes(
             "case_id": "terms-reference",
             "document_url": "https://www.canlii.org/en/ca/scc/doc/2024/2024scc3/2024scc3.html",
             "format": "pdf",
+            "user_approved": True,
         },
     )
     allowed = secured_client.post(
@@ -286,6 +319,7 @@ def test_case_export_metrics_include_allowed_and_blocked_outcomes(
             "case_id": "scc-2024-3",
             "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
             "format": "pdf",
+            "user_approved": True,
         },
     )
     metrics = secured_client.get("/ops/metrics", headers=headers)

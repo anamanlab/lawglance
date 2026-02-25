@@ -303,6 +303,8 @@ def test_chat_service_rejects_citations_from_untrusted_domains(
     assert response.answer.startswith("I do not have enough grounded legal context")
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
+    assert response.fallback_used.provider is None
+    assert response.fallback_used.reason is None
     assert payload.message not in response.model_dump_json()
     events = _audit_events(caplog)
     assert events
@@ -313,6 +315,13 @@ def test_chat_service_rejects_citations_from_untrusted_domains(
     assert event["candidate_citation_count"] == 1
     assert event["provider_citation_count"] == 1
     assert event["rejected_citation_urls"] == ["https://evil.example/legal"]
+    _assert_non_pii_audit_event(
+        event=event,
+        raw_message=payload.message,
+        expected_event_type="grounding_validation_failed",
+    )
+    for record in caplog.records:
+        assert payload.message not in record.getMessage()
 
 
 def test_chat_service_accepts_citations_from_configured_trusted_domains() -> None:
@@ -342,4 +351,8 @@ def test_chat_service_accepts_citations_from_configured_trusted_domains() -> Non
     assert response.citations[0].url == "https://trusted.example/legal"
     assert response.confidence == "medium"
     assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is False
+    assert response.fallback_used.provider is None
+    assert response.fallback_used.reason is None
+    assert payload.message not in response.answer
     assert payload.message not in response.model_dump_json()

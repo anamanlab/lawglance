@@ -174,7 +174,11 @@ def create_app() -> FastAPI:
                     allow_scaffold_fallback=allow_canlii_scaffold_fallback,
                     usage_limiter=canlii_usage_limiter,
                 ),
-                official_client=OfficialCaseLawClient(source_registry=source_registry)
+                official_client=OfficialCaseLawClient(
+                    source_registry=source_registry,
+                    cache_ttl_seconds=settings.official_case_cache_ttl_seconds,
+                    stale_cache_ttl_seconds=settings.official_case_stale_cache_ttl_seconds,
+                )
                 if settings.enable_official_case_sources
                 else None,
             )
@@ -212,7 +216,7 @@ def create_app() -> FastAPI:
                     error = ErrorEnvelope(
                         error={
                             "code": "UNAUTHORIZED",
-                            "message": "API_BEARER_TOKEN must be configured to access ops endpoints",
+                            "message": "IMMCAD_API_BEARER_TOKEN must be configured to access ops endpoints (API_BEARER_TOKEN is supported as a compatibility alias)",
                             "trace_id": request.state.trace_id,
                         }
                     )

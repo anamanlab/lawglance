@@ -25,6 +25,8 @@ class Settings:
     canlii_base_url: str
     enable_case_search: bool
     enable_official_case_sources: bool
+    official_case_cache_ttl_seconds: float
+    official_case_stale_cache_ttl_seconds: float
     api_bearer_token: str | None
     redis_url: str
     openai_model: str
@@ -95,13 +97,38 @@ def is_unstable_model_name(model_name: str) -> bool:
     return any(token in normalized for token in _UNSTABLE_MODEL_TOKENS)
 
 
+def parse_api_bearer_token() -> str | None:
+    canonical_token = parse_str_env("IMMCAD_API_BEARER_TOKEN")
+    compatibility_token = parse_str_env("API_BEARER_TOKEN")
+    if (
+        canonical_token
+        and compatibility_token
+        and canonical_token != compatibility_token
+    ):
+        raise ValueError(
+            "IMMCAD_API_BEARER_TOKEN and API_BEARER_TOKEN must match when both are set"
+        )
+    return canonical_token or compatibility_token
+
+
+def resolve_runtime_environment() -> str:
+    explicit_environment = parse_str_env("ENVIRONMENT")
+    if explicit_environment:
+        return explicit_environment
+
+    vercel_environment = (parse_str_env("VERCEL_ENV") or "").lower()
+    node_environment = (parse_str_env("NODE_ENV") or "").lower()
+    if vercel_environment == "production" or node_environment == "production":
+        return "production"
+
+    return "development"
+
+
 def load_settings() -> Settings:
-    vercel_environment = parse_str_env("VERCEL_ENV")
-    default_environment = "production" if vercel_environment == "production" else "development"
-    environment = parse_str_env("ENVIRONMENT", default_environment) or default_environment
+    environment = resolve_runtime_environment()
     environment_normalized = environment.lower()
     hardened_environment = environment_normalized in {"production", "prod", "ci"}
-    api_bearer_token = parse_str_env("API_BEARER_TOKEN")
+    api_bearer_token = parse_api_bearer_token()
     openai_api_key = parse_str_env("OPENAI_API_KEY")
     gemini_api_key = parse_str_env("GEMINI_API_KEY")
     canlii_api_key = parse_str_env("CANLII_API_KEY")
@@ -110,6 +137,20 @@ def load_settings() -> Settings:
         "ENABLE_OFFICIAL_CASE_SOURCES",
         hardened_environment,
     )
+    official_case_cache_ttl_seconds = parse_float_env(
+        "OFFICIAL_CASE_CACHE_TTL_SECONDS",
+        300.0,
+    )
+    official_case_stale_cache_ttl_seconds = parse_float_env(
+        "OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS",
+        900.0,
+    )
+    if official_case_cache_ttl_seconds <= 0:
+        raise ValueError("OFFICIAL_CASE_CACHE_TTL_SECONDS must be > 0")
+    if official_case_stale_cache_ttl_seconds < official_case_cache_ttl_seconds:
+        raise ValueError(
+            "OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS must be >= OFFICIAL_CASE_CACHE_TTL_SECONDS"
+        )
     enable_scaffold_provider = parse_bool_env("ENABLE_SCAFFOLD_PROVIDER", True)
     enable_openai_provider = parse_bool_env("ENABLE_OPENAI_PROVIDER", True)
     primary_provider = parse_str_env("PRIMARY_PROVIDER", "openai") or "openai"
@@ -137,7 +178,7 @@ def load_settings() -> Settings:
 
     if hardened_environment and not api_bearer_token:
         raise ValueError(
-            "API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci"
+            "IMMCAD_API_BEARER_TOKEN is required when ENVIRONMENT is production/prod/ci (API_BEARER_TOKEN is supported as a compatibility alias)"
         )
     if hardened_environment and enable_scaffold_provider:
         raise ValueError(
@@ -231,6 +272,8 @@ def load_settings() -> Settings:
         or "https://api.canlii.org/v1",
         enable_case_search=enable_case_search,
         enable_official_case_sources=enable_official_case_sources,
+        official_case_cache_ttl_seconds=official_case_cache_ttl_seconds,
+        official_case_stale_cache_ttl_seconds=official_case_stale_cache_ttl_seconds,
         api_bearer_token=api_bearer_token,
         redis_url=parse_str_env("REDIS_URL", "redis://localhost:6379/0")
         or "redis://localhost:6379/0",

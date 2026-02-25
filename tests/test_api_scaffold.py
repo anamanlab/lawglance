@@ -139,6 +139,7 @@ def test_chat_validation_error_for_unsupported_locale_and_mode() -> None:
 
 
 def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     secured_client = TestClient(create_app())
 
@@ -176,6 +177,7 @@ def test_bearer_auth_enforced_for_production_modes(
     environment: str,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
@@ -445,6 +447,7 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
         unavailable_case_search,
     )
     monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
@@ -503,6 +506,7 @@ def test_case_search_uses_official_sources_without_canlii_key(
         official_search,
     )
     monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "true")
@@ -535,6 +539,7 @@ def test_case_search_uses_official_sources_without_canlii_key(
 def test_ops_metrics_endpoint_exposes_observability_baseline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     metrics_client = TestClient(create_app())
     auth_headers = {"Authorization": "Bearer secret-token"}
@@ -590,6 +595,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
 def test_ops_metrics_requires_auth_when_bearer_token_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     secured_client = TestClient(create_app())
 
@@ -610,6 +616,7 @@ def test_ops_metrics_requires_auth_when_bearer_token_configured(
 def test_ops_metrics_requires_bearer_token_configuration_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
     open_client = TestClient(create_app())
 

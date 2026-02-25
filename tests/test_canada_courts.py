@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from immcad_api.sources.canada_courts import (
     parse_decisia_rss_feed,
     parse_scc_json_feed,
@@ -107,6 +109,57 @@ def test_parse_scc_json_feed_handles_jsonfeed_root_items() -> None:
     assert records[0].decision_date.isoformat() == "2017-06-16"
 
 
+def test_parse_scc_json_feed_extracts_nested_scalar_fields() -> None:
+    payload = {
+        "rss": {
+            "channel": {
+                "item": [
+                    {
+                        "id": {"value": 9001},
+                        "title": {"en": {"#text": "Nested v Canada, 2024 SCC 9"}},
+                        "link": {
+                            "href": {
+                                "#text": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/9001/index.do"
+                            }
+                        },
+                        "pubDate": {"value": "Tue, 20 Feb 2024 10:00:00 GMT"},
+                    }
+                ]
+            }
+        }
+    }
+
+    records = parse_scc_json_feed(json.dumps(payload).encode("utf-8"))
+
+    assert len(records) == 1
+    assert records[0].case_id == "9001"
+    assert records[0].citation == "2024 SCC 9"
+    assert records[0].court_code == "SCC"
+
+
+def test_parse_scc_json_feed_deduplicates_recursive_item_matches() -> None:
+    duplicate_item = {
+        "id": 16693,
+        "title": "R. v. Cody - 2017 SCC 31",
+        "url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/16693/index.do",
+        "date_published": "2017-06-16",
+        "_neutral_citation": "2017 SCC 31",
+    }
+    payload = {
+        "rss": {
+            "channel": {
+                "item": [duplicate_item],
+                "mirrors": [{"item": [duplicate_item]}],
+            }
+        }
+    }
+
+    records = parse_scc_json_feed(json.dumps(payload).encode("utf-8"))
+
+    assert len(records) == 1
+    assert records[0].case_id == "16693"
+
+
 def test_validate_court_source_payload_accepts_fca_caf_citation() -> None:
     rss = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -197,5 +250,26 @@ def test_validate_court_source_payload_handles_malformed_fc_xml_without_raising(
     assert summary.records_total == 0
     assert summary.records_invalid == 0
     assert summary.records_valid == 0
+    assert summary.errors
+    assert "payload_parse_error" in summary.errors[0]
+
+
+def test_validate_court_source_payload_handles_unexpected_parser_type_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_type_error(_payload: bytes) -> list[object]:
+        raise TypeError("unexpected parse shape")
+
+    monkeypatch.setattr(
+        "immcad_api.sources.canada_courts.parse_scc_json_feed",
+        _raise_type_error,
+    )
+
+    summary = validate_court_source_payload("SCC_DECISIONS", b"{}")
+
+    assert summary is not None
+    assert summary.records_total == 0
+    assert summary.records_valid == 0
+    assert summary.records_invalid == 0
     assert summary.errors
     assert "payload_parse_error" in summary.errors[0]

@@ -45,7 +45,7 @@ This matrix is the human-readable counterpart to `config/source_policy.yaml`.
 2. Unknown/unlisted sources must be blocked in production.
 3. Full-text export must be denied for any source with `export_fulltext_allowed = false`.
 4. All blocked actions must emit a structured audit event with source ID and policy reason.
-5. Production responses must suppress citations when `citation_in_answers = false` (for example `CANLII_TERMS`) and emit a structured audit event with source ID and suppression reason.
+5. Production responses must suppress citations when `answer_citation_allowed = false` (for example `CANLII_TERMS`) and emit a structured audit event with source ID and suppression reason.
 
 ### Citation requirements for SCC/FC/FCA
 

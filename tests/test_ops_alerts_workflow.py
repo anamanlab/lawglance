@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -15,11 +16,19 @@ def workflow_text() -> str:
 
 def test_ops_alerts_workflow_has_schedule_and_dispatch(workflow_text: str) -> None:
     assert "workflow_dispatch" in workflow_text
-    assert "*/15 * * * *" in workflow_text
+    cron_match = re.search(
+        r'cron:\s*["\']\*/15 \* \* \* \*["\']',
+        workflow_text,
+    )
+    assert cron_match is not None
 
 
 def test_ops_alerts_workflow_runs_alert_evaluator_with_threshold_config(workflow_text: str) -> None:
-    assert "scripts/evaluate_ops_alerts.py" in workflow_text
+    script_match = re.search(
+        r"\bpython\s+scripts/evaluate_ops_alerts\.py\b",
+        workflow_text,
+    )
+    assert script_match is not None
     assert "config/ops_alert_thresholds.json" in workflow_text
     assert "artifacts/ops/ops-alert-eval.json" in workflow_text
 

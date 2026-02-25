@@ -103,7 +103,7 @@
     {
       "source_id": "SCC_DECISIONS",
       "source_type": "case_law",
-      "instrument": "Supreme Court of Canada decisions JSON feed",
+      "instrument": "Supreme Court of Canada decisions feed",
       "url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/json/rss.do",
       "update_cadence": "scheduled_incremental"
     },
@@ -117,7 +117,7 @@
     {
       "source_id": "FCA_DECISIONS",
       "source_type": "case_law",
-      "instrument": "Federal Court of Appeal recent decisions listing",
+      "instrument": "Federal Court of Appeal decisions feed",
       "url": "https://decisions.fca-caf.gc.ca/fca-caf/en/nav.do?iframe=true",
       "update_cadence": "scheduled_incremental"
     },

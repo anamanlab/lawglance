@@ -10,3 +10,4 @@ if str(SRC_DIR) not in sys.path:
 
 from immcad_api.main import app  # noqa: E402
 
+__all__ = ["app"]

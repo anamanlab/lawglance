@@ -104,34 +104,58 @@ def _extract_citation(text: str, *, court_code: CourtCode) -> str:
 
 
 def _dict_text(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
     if isinstance(value, str):
         normalized = value.strip()
         return normalized or None
     if isinstance(value, dict):
-        for key in ("#text", "text", "value", "en"):
-            candidate = value.get(key)
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate.strip()
+        for key in ("#text", "text", "value", "en", "fr", "href", "url", "id"):
+            if key not in value:
+                continue
+            candidate_text = _dict_text(value.get(key))
+            if candidate_text:
+                return candidate_text
         for candidate in value.values():
-            if isinstance(candidate, str) and candidate.strip():
-                return candidate.strip()
-    if value is None:
+            candidate_text = _dict_text(candidate)
+            if candidate_text:
+                return candidate_text
+        return None
+    if isinstance(value, list):
+        for candidate in value:
+            candidate_text = _dict_text(candidate)
+            if candidate_text:
+                return candidate_text
         return None
     normalized = str(value).strip()
     return normalized or None
 
 
 def _iter_json_item_dicts(node: object) -> list[dict[str, Any]]:
-    if isinstance(node, list):
-        results: list[dict[str, Any]] = []
-        for item in node:
-            results.extend(_iter_json_item_dicts(item))
-        return results
-    if isinstance(node, dict):
-        results: list[dict[str, Any]] = []
-        has_link = any(key in node for key in ("link", "url"))
+    results: list[dict[str, Any]] = []
+    seen_node_ids: set[int] = set()
+    seen_fingerprints: set[tuple[str, ...]] = set()
+
+    def _walk(current: object) -> None:
+        if isinstance(current, list):
+            for item in current:
+                _walk(item)
+            return
+        if not isinstance(current, dict):
+            return
+
+        node_id = id(current)
+        if node_id in seen_node_ids:
+            return
+        seen_node_ids.add(node_id)
+
+        has_link = any(key in current for key in ("link", "url"))
         has_item_metadata = any(
-            key in node
+            key in current
             for key in (
                 "title",
                 "id",
@@ -143,12 +167,28 @@ def _iter_json_item_dicts(node: object) -> list[dict[str, Any]]:
             )
         )
         if has_link and has_item_metadata:
-            results.append(node)
-            return results
-        for value in node.values():
-            results.extend(_iter_json_item_dicts(value))
-        return results
-    return []
+            fingerprint = (
+                _dict_text(current.get("id")) or "",
+                _dict_text(current.get("itemId")) or "",
+                _dict_text(current.get("caseId")) or "",
+                _dict_text(current.get("link")) or _dict_text(current.get("url")) or "",
+                _dict_text(current.get("title")) or "",
+                _dict_text(current.get("pubDate"))
+                or _dict_text(current.get("date"))
+                or _dict_text(current.get("decisionDate"))
+                or _dict_text(current.get("date_published"))
+                or _dict_text(current.get("date_modified"))
+                or "",
+            )
+            if fingerprint not in seen_fingerprints:
+                seen_fingerprints.add(fingerprint)
+                results.append(current)
+
+        for value in current.values():
+            _walk(value)
+
+    _walk(node)
+    return results
 
 
 def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
@@ -343,7 +383,13 @@ def validate_court_source_payload(
                 records = parse_fca_decisions_html_feed(payload)
         else:  # pragma: no cover
             return None
-    except (json.JSONDecodeError, ET.ParseError, UnicodeDecodeError) as exc:
+    except (
+        json.JSONDecodeError,
+        ET.ParseError,
+        UnicodeDecodeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         LOGGER.warning("Court payload parse failed for %s", source_id, exc_info=exc)
         return CourtPayloadValidation(
             source_id=source_id,

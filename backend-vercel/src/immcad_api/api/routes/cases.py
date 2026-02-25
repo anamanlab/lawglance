@@ -161,6 +161,19 @@ def build_case_router(
                 policy_reason="source_not_in_registry_for_export",
             )
 
+        if not payload.user_approved:
+            _record_export_metric(
+                outcome="blocked",
+                policy_reason="source_export_user_approval_required",
+            )
+            return _error_response(
+                status_code=403,
+                trace_id=trace_id,
+                code="POLICY_BLOCKED",
+                message="Case export requires explicit user approval before download",
+                policy_reason="source_export_user_approval_required",
+            )
+
         policy_reason = "source_export_allowed_gate_disabled"
         if export_policy_gate_enabled:
             export_allowed, policy_reason = is_source_export_allowed(

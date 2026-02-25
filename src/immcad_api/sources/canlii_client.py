@@ -15,6 +15,8 @@ from immcad_api.sources.canlii_usage_limiter import (
     build_canlii_usage_limiter,
 )
 
+_CANLII_SOURCE_ID = "CANLII_CASE_BROWSE"
+
 
 @dataclass
 class CanLIIClient:
@@ -76,19 +78,22 @@ class CanLIIClient:
             case_id = self._extract_case_id(item.get("caseId"), item.get("databaseId"))
             title = self._coerce_string(item.get("title")) or "Untitled"
             citation = self._coerce_string(item.get("citation")) or ""
+            decision_url = self._extract_case_url(
+                item=item,
+                database_id=database_id,
+                case_id=case_id,
+                title=title,
+                citation=citation,
+            )
             results.append(
                 CaseSearchResult(
                     case_id=case_id,
                     title=title,
                     citation=citation,
                     decision_date=decision_date,
-                    url=self._extract_case_url(
-                        item=item,
-                        database_id=database_id,
-                        case_id=case_id,
-                        title=title,
-                        citation=citation,
-                    ),
+                    url=decision_url,
+                    source_id=_CANLII_SOURCE_ID,
+                    document_url=decision_url,
                 )
             )
 
@@ -107,6 +112,8 @@ class CanLIIClient:
                     citation=f"{court.upper()} {date.today().year} {index}",
                     decision_date=date.today(),
                     url=f"https://www.canlii.org/en/ca/{court}/doc/{date.today().year}/{slug}-{index}.html",
+                    source_id=_CANLII_SOURCE_ID,
+                    document_url=f"https://www.canlii.org/en/ca/{court}/doc/{date.today().year}/{slug}-{index}.html",
                 )
             )
 

@@ -10,8 +10,9 @@ Endpoints:
 
 - `POST /api/chat`
 - `POST /api/search/cases`
+- `POST /api/export/cases`
 - `GET /healthz`
-- `GET /ops/metrics` (requires bearer auth when `API_BEARER_TOKEN` is configured)
+- `GET /ops/metrics` (requires bearer auth when `IMMCAD_API_BEARER_TOKEN` is configured; `API_BEARER_TOKEN` is accepted as a compatibility alias)
 
 ## Environment Variables
 
@@ -23,8 +24,10 @@ Endpoints:
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
 - `ENABLE_CASE_SEARCH` (optional, default `true`; set `false` for Gemini-only MVP to disable `/api/search/cases` and `/api/export/cases`)
 - `ENABLE_OFFICIAL_CASE_SOURCES` (optional; defaults to `false` in development and `true` in `production`/`prod`/`ci`; enables SCC/FC/FCA public-feed search without CanLII)
+- `OFFICIAL_CASE_CACHE_TTL_SECONDS` (optional, default `300`; fresh-cache window for official SCC/FC/FCA feed results)
+- `OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS` (optional, default `900`; stale-cache serve window; must be `>= OFFICIAL_CASE_CACHE_TTL_SECONDS`)
 - `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
-- `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
+- `IMMCAD_API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`; `API_BEARER_TOKEN` is accepted as a compatibility alias)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
 - `REDIS_URL` (optional, default `redis://localhost:6379/0`; used for distributed rate limiting when reachable)
@@ -51,9 +54,14 @@ Endpoints:
 - Case-law fallback behavior is environment-sensitive:
   - `development` (and non-prod environments): official-feed search is disabled by default and CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: official SCC/FC/FCA feeds are enabled by default; when all configured case sources are unavailable, the API returns a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`.
+- Official feeds are always the primary case-search source; CanLII is queried as a non-blocking fallback when official feeds are unavailable or return no matches.
+- `POST /api/search/cases` returns export-friendly metadata (`source_id`, `document_url`) alongside each result.
+- `POST /api/export/cases` requires explicit per-request consent (`user_approved=true`) before any download is attempted.
+- `POST /api/export/cases` rejects missing or `false` approval with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
+- Official SCC/FC/FCA search uses in-process cache with stale-while-refresh behavior to reduce tail latency and temporary upstream feed outages.
 - CanLII integration uses metadata endpoints only and enforces plan limits (`5000/day`, `2 req/s`, `1 in-flight request`).
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
-- `/ops/metrics` is treated as an operational endpoint and is protected by bearer auth whenever `API_BEARER_TOKEN` is set.
+- `/ops/metrics` is treated as an operational endpoint and is protected by bearer auth whenever `IMMCAD_API_BEARER_TOKEN` (or `API_BEARER_TOKEN`) is set.
 - Store all production tokens/keys in a secrets manager and rotate on a regular schedule.
 - Provider routing has circuit-breaker safeguards for repeated provider failures.
 

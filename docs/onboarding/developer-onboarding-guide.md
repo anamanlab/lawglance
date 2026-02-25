@@ -114,8 +114,10 @@ REDIS_URL=redis://localhost:6379/0
 
 Production/CI hardening notes:
 
-- `IMMCAD_API_BEARER_TOKEN` is required in `ENVIRONMENT=production|prod|ci` (`API_BEARER_TOKEN` is accepted as a compatibility alias)
+- `IMMCAD_API_BEARER_TOKEN` is required in hardened environments (`ENVIRONMENT=production|prod|ci` and aliases like `production-us-east`, `prod_blue`, `ci-smoke`; `API_BEARER_TOKEN` is accepted as a compatibility alias)
+- `IMMCAD_ENVIRONMENT` is a compatibility alias for `ENVIRONMENT`; if both are set they must match
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` must be disabled in hardened modes
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` is recommended in hardened modes to keep related-case results export-ready
 - Never commit `.env` files
 
 ### Frontend environment (production path)

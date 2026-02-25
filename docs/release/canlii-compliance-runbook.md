@@ -18,6 +18,9 @@ Use this runbook for production key onboarding, runtime enforcement checks, and 
   - concurrent guard (`1 in-flight`)
 - Production frontend path disables scaffold fallback responses when backend is unavailable.
 - Case search in UI is explicit user-triggered action (not auto-fired per chat request).
+- CanLII PDF export is policy-blocked unless explicitly enabled by approved source policy updates.
+- If the team plans to enable CanLII PDF export, follow:
+  - `docs/release/canlii-pdf-export-rollout-plan.md`
 
 ## Key Onboarding Checklist
 

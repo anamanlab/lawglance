@@ -24,9 +24,11 @@ Endpoints:
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
 - `ENABLE_CASE_SEARCH` (optional, default `true`; set `false` for Gemini-only MVP to disable `/api/search/cases` and `/api/export/cases`)
 - `ENABLE_OFFICIAL_CASE_SOURCES` (optional; defaults to `false` in development and `true` in `production`/`prod`/`ci`; enables SCC/FC/FCA public-feed search without CanLII)
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS` (optional, default `false`; when `true`, `/api/search/cases` filters out results that are not export-eligible under source policy and host checks)
 - `OFFICIAL_CASE_CACHE_TTL_SECONDS` (optional, default `300`; fresh-cache window for official SCC/FC/FCA feed results)
 - `OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS` (optional, default `900`; stale-cache serve window; must be `>= OFFICIAL_CASE_CACHE_TTL_SECONDS`)
-- `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
+- `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode, including aliases like `production-us-east`, `prod_blue`, `ci-smoke`)
+- `IMMCAD_ENVIRONMENT` (optional compatibility alias for `ENVIRONMENT`; if both are set they must match)
 - `IMMCAD_API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`; `API_BEARER_TOKEN` is accepted as a compatibility alias)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
 - `CORS_ALLOWED_ORIGINS` (optional CSV, default `http://127.0.0.1:3000,http://localhost:3000`)
@@ -55,7 +57,8 @@ Endpoints:
   - `development` (and non-prod environments): official-feed search is disabled by default and CanLII failures can return deterministic scaffold case data for integration continuity.
   - `production`/`prod`/`ci`: official SCC/FC/FCA feeds are enabled by default; when all configured case sources are unavailable, the API returns a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`.
 - Official feeds are always the primary case-search source; CanLII is queried as a non-blocking fallback when official feeds are unavailable or return no matches.
-- `POST /api/search/cases` returns export-friendly metadata (`source_id`, `document_url`) alongside each result.
+- `POST /api/search/cases` returns export metadata (`source_id`, `document_url`, `export_allowed`, `export_policy_reason`) alongside each result.
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` keeps `/api/search/cases` results limited to export-eligible official sources, which avoids dead-end export attempts in production UX.
 - `source_id` values are registry-driven (`data/sources/canada-immigration/registry.json`) and export eligibility is enforced by source policy.
 - `POST /api/export/cases` requires explicit per-request consent (`user_approved=true`) before any download is attempted.
 - `POST /api/export/cases` rejects missing or `false` approval with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.

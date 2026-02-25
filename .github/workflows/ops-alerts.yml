@@ -13,10 +13,10 @@ jobs:
       issues: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
         with:
           python-version: "3.11"
 
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload ops alert report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ops-alert-eval-report
           if-no-files-found: error
@@ -88,7 +88,7 @@ jobs:
       - name: Create incident issue
         if: ${{ steps.eval-report.outputs.breached == 'true' }}
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const title = `Ops metrics breach detected (${context.runId})`;

@@ -207,7 +207,7 @@ Production safety notes:
 - `NEXT_PUBLIC_IMMCAD_API_BASE_URL` should remain `/api` so browser calls stay on the same origin.
 - `IMMCAD_API_BASE_URL` must use `https://` in `NODE_ENV=production`.
 - Keep `IMMCAD_API_BEARER_TOKEN` server-only; do not publish it via `NEXT_PUBLIC_*`.
-- If using `git-secret` for encrypted repo-stored env bundles, follow `docs/release/git-secret-runbook.md` and keep production runtime secrets in GitHub/Vercel secret managers.
+- If using `git-secret` for encrypted repo-stored env bundles, follow `docs/release/git-secret-runbook.md` and keep production runtime secrets in GitHub/Cloudflare secret managers.
 
 ### Legacy Streamlit UI (`app.py`) - dev-only
 

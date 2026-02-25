@@ -50,6 +50,33 @@ export type CaseSearchResponsePayload = {
   results: CaseSearchResult[];
 };
 
+export type LawyerCaseResearchRequestPayload = {
+  session_id: string;
+  matter_summary: string;
+  jurisdiction?: string;
+  court?: string;
+  limit?: number;
+};
+
+export type LawyerCaseSupport = {
+  case_id: string;
+  title: string;
+  citation: string;
+  court?: string | null;
+  decision_date: string;
+  url: string;
+  document_url?: string | null;
+  pdf_status: "available" | "unavailable";
+  relevance_reason: string;
+  summary?: string | null;
+};
+
+export type LawyerCaseResearchResponsePayload = {
+  matter_profile: Record<string, string | string[] | null>;
+  cases: LawyerCaseSupport[];
+  source_status: Record<string, string>;
+};
+
 export type CaseExportRequestPayload = {
   source_id: string;
   case_id: string;
@@ -513,6 +540,15 @@ export function createApiClient(options: ApiClientOptions) {
       payload: CaseSearchRequestPayload
     ): Promise<ApiResult<CaseSearchResponsePayload>> {
       return postJson<CaseSearchResponsePayload>(options, "/search/cases", payload);
+    },
+    researchLawyerCases(
+      payload: LawyerCaseResearchRequestPayload
+    ): Promise<ApiResult<LawyerCaseResearchResponsePayload>> {
+      return postJson<LawyerCaseResearchResponsePayload>(
+        options,
+        "/research/lawyer-cases",
+        payload
+      );
     },
     exportCasePdf(
       payload: CaseExportRequestPayload

@@ -4,6 +4,7 @@ import {
   createApiClient,
   type CaseExportRequestPayload,
   type ChatRequestPayload,
+  type LawyerCaseResearchRequestPayload,
 } from "@/lib/api-client";
 import {
   CHAT_POLICY_REFUSAL_RESPONSE,
@@ -44,6 +45,15 @@ const CASE_EXPORT_PAYLOAD: CaseExportRequestPayload = {
   document_url: "https://example.test/cases/1/document.pdf",
   format: "pdf",
   user_approved: true,
+};
+
+const LAWYER_RESEARCH_PAYLOAD: LawyerCaseResearchRequestPayload = {
+  session_id: "session-1",
+  matter_summary:
+    "Federal Court appeal on procedural fairness and inadmissibility findings.",
+  jurisdiction: "ca",
+  court: "fc",
+  limit: 5,
 };
 
 describe("api client chat contract", () => {
@@ -371,5 +381,67 @@ describe("api client chat contract", () => {
     expect(result.error.code).toBe("VALIDATION_ERROR");
     expect(result.policyReason).toBe("source_export_user_approval_required");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts lawyer research requests and returns structured case support payload", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          matter_profile: {
+            issue_tags: ["procedural_fairness", "inadmissibility"],
+            target_court: "fc",
+          },
+          cases: [
+            {
+              case_id: "2026-FC-101",
+              title: "Example v Canada",
+              citation: "2026 FC 101",
+              court: "FC",
+              decision_date: "2026-02-01",
+              url: "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/101/index.do",
+              document_url:
+                "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/101/1/document.do",
+              pdf_status: "available",
+              relevance_reason:
+                "Addresses procedural fairness in immigration refusal reasons.",
+              summary:
+                "The court set aside a refusal due to inadequate decision reasons.",
+            },
+          ],
+          source_status: {
+            official: "ok",
+            canlii: "not_used",
+          },
+        },
+        {
+          headers: { "x-trace-id": "trace-lawyer-research" },
+        }
+      )
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+      bearerToken: "token-123",
+    });
+    const result = await client.researchLawyerCases(LAWYER_RESEARCH_PAYLOAD);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.traceId).toBe("trace-lawyer-research");
+    expect(result.data.cases).toHaveLength(1);
+    expect(result.data.cases[0].pdf_status).toBe("available");
+    expect(result.data.source_status.official).toBe("ok");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.immcad.test/api/research/lawyer-cases",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          authorization: "Bearer token-123",
+        }),
+        body: JSON.stringify(LAWYER_RESEARCH_PAYLOAD),
+      })
+    );
   });
 });

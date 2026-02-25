@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - Main app entrypoint: `app.py` (Streamlit chat UI).
 - Core orchestration and RAG flow: `src/immcad_api/` (legacy local-RAG modules archived under `legacy/local_rag/`).
-- Configuration and prompts: `config/prompts.yaml`, `.env`, `.env.example`.
+- Configuration and prompts: runtime prompts in `src/immcad_api/policy/prompts.py` (legacy compatibility prompt file: `config/prompts.yaml`), plus `.env`, `.env.example`.
 - Data/index artifacts: `chroma_db_legal_bot_part1/` (local Chroma store).
 - Docs and onboarding: `README.md`, `docs/` (see `docs/development-environment.md`).
 - Task planning/lessons artifacts: `tasks/` (repo-root `tasks/todo.md` for plans/TODOs and `tasks/lessons.md` for user-correction patterns and working rules).

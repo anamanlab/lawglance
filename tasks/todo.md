@@ -1,3 +1,368 @@
+# Task Plan - 2026-02-25 - Cloudflare Migration (Vercel Exit Path)
+
+## Current Focus
+- Execute a production-safe Cloudflare migration plan with frontend-first rollout and explicit backend architecture gate.
+
+## Plan
+- [ ] Phase 0 decision gate: confirm Workers paid-tier production target and environment mapping (`dev/staging/prod`).
+- [x] Phase 1 frontend migration: move `frontend-web` to Cloudflare Workers via OpenNext adapter and validate runtime parity.
+- [x] Phase 2 backend architecture spike: run POC for Cloudflare Containers vs Python Worker FastAPI path and choose one using measured criteria.
+  - [x] Transitional edge step implemented: Cloudflare backend proxy scaffold + workflow (`backend-cloudflare/*`, `.github/workflows/cloudflare-backend-proxy-deploy.yml`).
+  - [x] Native backend runtime decision recorded: proceed with Python Workers path for next implementation phase (Containers remain optional fallback path).
+- [ ] Phase 3 backend implementation: ship chosen backend path with secrets/auth/policy parity and canary rollout.
+- [ ] Phase 4 CI/CD migration: add Cloudflare deploy workflows with deterministic pre-deploy quality gates and rollback command.
+  - [x] Frontend workflow added (`.github/workflows/cloudflare-frontend-deploy.yml`) with typecheck/test/build-before-deploy gate.
+  - [x] Backend transitional proxy workflow added (`.github/workflows/cloudflare-backend-proxy-deploy.yml`) for edge ingress migration.
+  - [ ] Backend native-runtime deploy workflow pending architecture decision (Containers vs Python Worker).
+- [ ] Phase 5 production cutover: staged DNS/traffic migration with 24h and 72h observation windows and rollback criteria.
+- [ ] Evidence and signoff: document results in release artifacts and update known-issues register.
+
+## Review
+- Phase 1 frontend migration executed for `frontend-web`:
+  - Added Cloudflare OpenNext tooling: `@opennextjs/cloudflare@1.14.2` (pinned for Next.js `14.2.26` compatibility) and `wrangler`.
+  - Added Cloudflare config artifacts: `frontend-web/open-next.config.ts`, `frontend-web/wrangler.jsonc`, `frontend-web/.dev.vars.example`.
+  - Added Cloudflare scripts to `frontend-web/package.json`: `cf:build`, `cf:preview`, `cf:deploy`, `cf:upload`.
+  - Updated `frontend-web/next.config.mjs` with `initOpenNextCloudflareForDev()` for local runtime parity.
+  - Updated `frontend-web/.gitignore` for Cloudflare build/runtime artifacts (`.open-next/`, `.wrangler/`, `.dev.vars*`).
+  - Updated `frontend-web/README.md` with Cloudflare local preview/deploy flow.
+- Verification evidence:
+  - `npm run typecheck` -> pass.
+  - `npm run test` -> pass (`61 passed`).
+  - `npm run build` -> pass.
+  - `npm run cf:build` -> pass (OpenNext bundle generated at `.open-next/worker.js`).
+  - `timeout 40s npm run cf:preview` -> reached Wrangler ready state (`Ready on http://localhost:8787`) before timeout stop.
+  - `uv run pytest -q tests/test_cloudflare_backend_proxy_deploy_workflow.py tests/test_cloudflare_backend_migration_artifacts.py tests/test_cloudflare_frontend_deploy_workflow.py tests/test_workflow_action_pinning.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> pass (`30 passed`).
+  - `npx --yes wrangler@4.68.1 deploy --config backend-cloudflare/wrangler.backend-proxy.jsonc --dry-run` -> pass (Worker bundles and bindings resolve).
+  - `docker build -f backend-cloudflare/Dockerfile -t immcad-backend-spike:local .` -> pass.
+- CI/CD migration progress:
+  - Added Cloudflare frontend deploy workflow with pinned actions + explicit secret checks.
+  - Added Cloudflare backend proxy deploy workflow with pinned actions + explicit secret checks.
+  - Added Makefile Cloudflare frontend targets (`frontend-cf-build`, `frontend-cf-preview`, `frontend-cf-deploy`).
+  - Added Makefile backend Cloudflare targets (`backend-cf-spike-build`, `backend-cf-proxy-deploy`).
+  - Updated env/docs to reflect Cloudflare-first frontend deploy path.
+  - Added backend Cloudflare migration scaffold (`backend-cloudflare/`) and contract tests.
+- Additional stability fix discovered during verification:
+  - Resolved existing lint-blocking JSX quote escaping in `frontend-web/components/chat/related-case-panel.tsx`.
+- Phase 2 backend spike + compatibility hardening executed:
+  - Python Workers local spikes showed `healthz` recovery when handlers are async and surfaced strict client-ID failure in middleware.
+  - Implemented worker-safe backend updates in both runtime paths:
+    - Cloudflare-aware client ID resolution (`cf-connecting-ip` / `true-client-ip`) with host-header fallback when `request.client` is unavailable.
+    - Converted API route handlers + health/ops endpoints to `async def` to avoid sync-handler runtime failures under worker shims.
+    - Set Redis behavior to explicit opt-in (`REDIS_URL` required); default is now in-memory limiter.
+  - Verification evidence:
+    - `uv run pytest -q tests/test_settings.py tests/test_api_scaffold.py tests/test_rate_limiters.py` -> pass (`130 passed`).
+    - `uv run ruff check ...` (changed backend/runtime files + tests) -> pass.
+    - `make backend-vercel-sync-validate` -> pass.
+
+## References
+- Detailed plan: `docs/plans/2026-02-25-cloudflare-migration-plan.md`
+
+---
+
+# Task Plan - 2026-02-25 - Production Readiness Closure (Case Law)
+
+## Current Focus
+- Close remaining production blockers for case-law research reliability, security posture, and release evidence.
+
+## Plan
+- [ ] P0 deploy evidence: run source-based backend/frontend production deploy when Vercel quota resets; capture deployment IDs + timestamps in `docs/release/known-issues.md`.
+- [x] P1 retrieval precision: block stopword-only queries from returning latest unrelated decisions and enforce minimum semantic query quality server-side.
+- [x] P1 CanLII relevance fallback: remove broad unranked return path (`return cases`) when token matching fails; return empty or source-unavailable with reason.
+- [x] P1 export approval hardening: require signed approval tokens for export in all environments (remove non-hardened compatibility bypass).
+- [x] P2 UX/API contract alignment: enforce `maxLength=300` on case query input and replace policy-refusal copy that incorrectly implies case search is unavailable globally.
+- [x] P1 frontend fallback control: require explicit env opt-in for chat scaffold proxy fallback in non-hardened environments (`IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK=true`).
+- [x] P1 provider response guardrails: strengthen Gemini/OpenAI prompt instructions to prevent model/vendor identity drift and include grounded citation context in generation prompts.
+- [x] Verification gate: re-run backend/ frontend tests + smoke checks and update issue statuses to closed/open with explicit evidence.
+
+## Review
+- Implemented case-search query specificity validation with structured `VALIDATION_ERROR` (`policy_reason=case_search_query_too_broad`) for broad/noise requests.
+- Removed CanLII unranked no-match fallback path and added regression tests for short/no-match and long/no-match queries.
+- Enforced signed export approval tokens in all environments and reordered export checks so policy/host failures still return precise reasons without reaching download logic.
+- Set hardened defaults/guards for `CASE_SEARCH_OFFICIAL_ONLY_RESULTS` and updated settings + docs/tests accordingly.
+- Updated frontend case-search UX constraints (`maxLength=300`) and policy-refusal messaging clarity.
+- Disabled implicit frontend chat scaffold fallback by default; fallback now requires explicit server opt-in (`IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK=true`) and remains disabled in hardened environments.
+- Improved case-search validation UX so broad-query policy failures return actionable guidance instead of generic temporary-unavailable copy.
+- Hardened provider prompts to enforce IMMCAD identity/scope rules and include grounded citation context for both Gemini and OpenAI generation calls.
+- Improved case-research workflow UX in the right panel: explicit 3-step flow, Enter-to-search support, stale-result query-change guidance, and visible "results for query" context to reduce confusion between chat and case-search services.
+- Updated known-issues register with newly closed items; only deployment quota evidence remains as the P0 blocker.
+- Re-attempted source-based production deploys (`backend-vercel`, `frontend-web`) at `2026-02-25 20:57 UTC`; both remained blocked by Vercel quota (`api-deployments-free-per-day`, retry window ~14 minutes).
+
+---
+
+# Task Plan - 2026-02-25 - Case Law Search Reliability Fix
+
+## Current Focus
+- Stabilize case-law research UX and retrieval relevance so case search behaves as an independent service and avoids misleading synthetic/noise results.
+
+## Plan
+- [x] Remove synthetic scaffold fallback for `/api/search/cases` and `/api/export/cases*` proxy failures.
+- [x] Add independent editable case-search query input in UI (prefilled from last successful chat question).
+- [x] Tighten backend ranking to avoid false positives for short/noise queries (e.g., `oi`).
+- [x] Add regression tests for proxy fallback semantics, editable case query flow, and ranking noise filtering.
+- [x] Validate frontend contracts/build + targeted backend case-search suites + source sync parity.
+
+## Review
+- Frontend proxy now only scaffold-falls back for chat; case-search/export failures return structured `SOURCE_UNAVAILABLE` with trace IDs (`frontend-web/lib/backend-proxy.ts`).
+- Related case panel now exposes explicit `Case search query` input and search runs against that value, not an implicit hidden chat-only state (`frontend-web/components/chat/related-case-panel.tsx`, `frontend-web/components/chat/chat-shell-container.tsx`).
+- Backend ranking updated to suppress irrelevant short/noise-query matches while preserving normal broad-query behavior:
+  - `src/immcad_api/sources/official_case_law_client.py`
+  - `src/immcad_api/sources/canlii_client.py`
+  - mirrored in `backend-vercel/src/immcad_api/sources/*`.
+- Added regression coverage:
+  - `frontend-web/tests/backend-proxy.contract.test.ts`
+  - `frontend-web/tests/chat-shell.contract.test.tsx`
+  - `tests/test_official_case_law_client.py`
+  - `tests/test_canlii_client.py`
+- Verification evidence:
+  - `npm run test --prefix frontend-web` -> pass (`59 passed`)
+  - `npm run build --prefix frontend-web` -> pass
+  - `npm run typecheck --prefix frontend-web` -> pass
+  - `uv run pytest -q tests/test_canlii_client.py tests/test_official_case_law_client.py tests/test_case_search_service.py` -> pass (`26 passed`)
+  - `uv run pytest -q tests/test_api_scaffold.py -k 'case_search or canlii'` -> pass (`13 passed, 19 deselected`)
+  - `make backend-vercel-sync-validate` -> pass
+  - live smoke: `/api/search/cases` now returns `{"results":[]}` for `query="oi"` and real official results for targeted immigration queries.
+
+---
+
+# Task Plan - 2026-02-25 - Frontend E2E Setup (Playwright)
+
+## Current Focus
+- Establish a production-oriented browser E2E suite for `frontend-web` with deterministic local and CI execution.
+
+## Plan
+- [x] Choose and configure the E2E framework with environment-aware defaults.
+- [x] Add Page Object + fixture structure for maintainable test authoring.
+- [x] Implement baseline user-journey specs (chat send + related case search) with network stubbing.
+- [x] Add cross-browser/mobile project matrix and CI workflow integration.
+- [x] Document local usage/debug flow and capture verification evidence.
+
+## Review
+- Added Playwright framework in `frontend-web`:
+  - `frontend-web/playwright.config.ts` with environment-aware web server boot, project matrix, retries/reporting, and artifact output.
+  - New scripts in `frontend-web/package.json` (`test:e2e*`) plus root Makefile wrappers (`frontend-e2e*`).
+- Added maintainable E2E structure:
+  - Fixtures: `frontend-web/e2e/fixtures/chat-data.ts`, `frontend-web/e2e/fixtures/test-fixtures.ts`.
+  - Page object: `frontend-web/e2e/pages/chat-shell.page.ts`.
+  - Network stubs: `frontend-web/e2e/support/network-stubs.ts`.
+  - Specs:
+    - `frontend-web/e2e/specs/chat-flow.spec.ts`
+    - `frontend-web/e2e/specs/chat-policy-refusal.spec.ts`
+    - `frontend-web/e2e/specs/chat-export.spec.ts`
+    - `frontend-web/e2e/specs/chat-accessibility-visual.spec.ts`
+  - Docs: `frontend-web/e2e/README.md` + `frontend-web/README.md` script/usage updates.
+- CI integration:
+  - Added `.github/workflows/frontend-e2e.yml` with pinned actions and matrix execution for `chromium`, `firefox`, and `webkit`.
+  - Uploads Playwright HTML/JUnit/test-result artifacts per browser job.
+- Headless-server hardening:
+  - Local default Playwright projects now run `chromium`, `firefox`, and `Mobile Chrome` only.
+  - `webkit` / `Mobile Safari` are explicit opt-in scripts for environments with required system libraries.
+  - Browser install scripts split into default (`chromium+firefox`) and explicit WebKit install commands.
+- Verification evidence:
+  - `npm run typecheck` (`frontend-web`) -> pass.
+  - `npm run lint` (`frontend-web`) -> pass.
+  - `npm run test` (`frontend-web`) -> pass (`59 tests`).
+  - `npm run test:e2e` (`frontend-web`) -> pass (`18 passed`, `0 skipped`).
+  - `npm run test:e2e:cross-browser` (`frontend-web`) -> pass (`chromium+firefox`, `6 tests`).
+  - `npm run test:e2e:mobile` (`frontend-web`) -> pass (`Mobile Chrome`, `3 tests`).
+  - `npx playwright test` (`frontend-web`) -> pass (`chromium+firefox+Mobile Chrome` with visual/a11y/export coverage).
+  - `npx playwright test e2e/specs/chat-accessibility-visual.spec.ts --project=chromium --update-snapshots` -> pass; baseline snapshot generated.
+  - `npx playwright test --project=webkit` (`frontend-web`) -> fails locally due missing Linux WebKit shared libs in this workstation (expected on this host).
+  - `uv run pytest -q tests/test_workflow_action_pinning.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> pass (`18 tests`).
+
+---
+
+# Task Plan - 2026-02-25 - Readiness Hardening Continuation (Code-Only)
+
+## Current Focus
+- Execute remaining production-readiness code improvements that are deploy-independent, with verification evidence.
+
+## Plan
+- [x] Close CI determinism risk by enforcing frontend workflow order (`build -> typecheck -> test`) in release-critical workflows.
+- [x] Add workflow regression tests that assert frontend step order in both quality and release gates.
+- [x] Expand `mypy` quality gate scope from two files to production-critical backend/runtime modules + core tests.
+- [x] Fix blocking type issues surfaced by expanded `mypy` scope.
+- [x] Run targeted verification for changed files and then re-run `make quality`.
+- [x] Update readiness artifacts (`docs/release/known-issues.md`, `tasks/todo.md`) with closed/open status and evidence.
+
+## Review
+- `./scripts/venv_exec.sh mypy` -> pass (`17 source files`), expanded from prior 2-file scope.
+- Typing defects fixed to enable expanded gate:
+  - `src/immcad_api/services/chat_service.py` (`raw_url` typed as `object | None` in citation extraction),
+  - `src/immcad_api/policy/compliance.py` (removed incompatible variable re-assignment in grounded citation verification).
+- Backend mirror parity preserved after runtime typing fixes:
+  - `make backend-vercel-sync-validate` -> pass.
+- Workflow determinism evidence:
+  - frontend order remains `build -> typecheck -> test` and backend `mypy` now runs in both `.github/workflows/quality-gates.yml` and `.github/workflows/release-gates.yml`,
+  - `./scripts/venv_exec.sh pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> `17 passed`.
+- Runtime safety regression checks:
+  - `./scripts/venv_exec.sh pytest -q tests/test_chat_service.py tests/test_export_policy_gate.py tests/test_settings.py tests/test_api_scaffold.py` -> `145 passed`.
+- Full quality gate:
+  - `make quality` -> pass (`374 passed`, mypy gate green, source sync green, policy/hygiene/eval checks green).
+- Issue tracker updates:
+  - Closed typing/quality issue as `KI-2026-02-25-C07`.
+  - Remaining blockers are operational or policy scope decisions (`KI-2026-02-25-01`, `KI-2026-02-25-03`, `KI-2026-02-25-04`, `KI-2026-02-25-05`).
+
+---
+
+# Task Plan - 2026-02-25 - Deep Production Readiness Audit (Pre-Deploy)
+
+## Current Focus
+- Perform a deep pre-deploy audit so the next backend/frontend deployment can run end-to-end without new blockers.
+
+## Plan
+- [x] Phase 0: Baseline snapshot (repo state, PR state, active deployments, known blockers).
+- [x] Phase 1: Backend deep audit (API contracts, auth/hardening, export policy, source controls).
+- [x] Phase 2: Frontend deep audit (proxy contracts, chat/case/export UX, runtime config/fallbacks).
+- [x] Phase 3: Security and compliance audit (secrets/artifacts hygiene, Canada-only policy checks).
+- [x] Phase 4: CI/CD and deploy process audit (quality gates, deploy config, deterministic redeploy checklist).
+- [x] Phase 5: Operations and recovery audit (metrics/alerts, incident/rollback runbooks, smoke readiness).
+- [x] Consolidate findings with severity (`P0-P3`), owner, and target date in `docs/release/known-issues.md`.
+- [x] Produce final go/no-go readiness summary + command sheet for the next deploy window.
+
+## References
+- Detailed audit execution plan: `docs/plans/2026-02-25-pre-deploy-deep-audit-plan.md`
+- Supporting summary plan: `docs/plans/2026-02-25-deep-production-readiness-audit-plan.md`
+- Existing go-live plan baseline: `docs/plans/2026-02-25-production-finalization-go-live-plan.md`
+- Current known issues register: `docs/release/known-issues.md`
+
+## Review
+- Baseline snapshot executed (`2026-02-25 19:08:56 UTC`) on `main` (`0c35b05`); no open PRs and latest merged PR is `#33`.
+- Production alias snapshot confirmed:
+  - Backend alias -> READY `dpl_7q6JDuNMy8wefcBVxns76VV4hbho` (latest backend attempt still ERROR `dpl_G7S9EGK8p2DgXv7jscjqYvynwFxc`).
+  - Frontend alias -> READY `dpl_9YbaotuCWvMXptmWS3x4TPo6tTn8`.
+- Full verification matrix executed:
+  - `make quality` -> pass (`370 passed` + architecture/docs validators + source registry + backend mirror sync + legal suite + hygiene).
+  - `make source-registry-validate` -> pass.
+  - `uv run pytest -q tests/test_api_scaffold.py tests/test_export_policy_gate.py tests/test_source_policy.py tests/test_settings.py tests/test_case_search_service.py tests/test_official_case_law_client.py` -> pass (`162 passed`).
+  - `npm run build --prefix frontend-web` -> pass.
+  - `npm run typecheck --prefix frontend-web` -> pass (after Next type generation); `npm run test --prefix frontend-web` -> pass (`50 passed`).
+  - `uv run python scripts/scan_domain_leaks.py` -> pass.
+  - `bash scripts/check_repository_hygiene.sh` -> pass.
+  - workflow/ops gate tests: `uv run pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_ops_alerts_workflow.py tests/test_backend_vercel_deploy_config.py tests/test_staging_smoke_workflow.py tests/test_ops_alert_evaluator.py` -> pass.
+- Critical blocker found and fixed during audit:
+  - `scripts/validate_backend_vercel_source_sync.py` initially failed due mirror drift (`api/routes/cases.py`, `main.py`, `schemas.py`).
+  - Executed repo-prescribed mirror sync (`rsync ... src/immcad_api/ -> backend-vercel/src/immcad_api/`), then `make backend-vercel-sync-validate` passed.
+- Production smoke validation executed on active backend alias:
+  - `/healthz` -> `200` (`{\"status\":\"ok\",\"service\":\"IMMCAD API\"}`).
+  - `/ops/metrics` and `/api/chat` without token -> `401 UNAUTHORIZED` (expected for protected config).
+- Deliverables produced:
+  - Deep audit plans: `docs/plans/2026-02-25-pre-deploy-deep-audit-plan.md`, `docs/plans/2026-02-25-deep-production-readiness-audit-plan.md`.
+  - Command sheet: `docs/release/pre-deploy-command-sheet-2026-02-25.md`.
+  - Updated issue tracker: `docs/release/known-issues.md`.
+- Continuation verification (`2026-02-25 19:14:57 UTC`):
+  - Baseline re-check confirmed `main` at `0c35b05`, still no open PRs, latest merged PR remains `#33`.
+  - Deployment aliases remain READY (`backend`: `dpl_7q6JDuNMy8wefcBVxns76VV4hbho`, `frontend`: `dpl_9YbaotuCWvMXptmWS3x4TPo6tTn8`).
+  - `make backend-vercel-sync-validate` and `make quality` re-ran successfully (`370 passed`).
+  - Unauthenticated direct `curl` smoke checks are now blocked by Vercel Authentication for this environment; authenticated smoke must use protection bypass flow in the next deploy window.
+- Final continuation pass (`2026-02-25 19:27:37 UTC`):
+  - Source-based deploy retries were attempted for both backend and frontend:
+    - `vercel --cwd backend-vercel deploy --prod --yes` -> blocked by `api-deployments-free-per-day`.
+    - `vercel --cwd frontend-web deploy --prod --yes` -> blocked by `api-deployments-free-per-day`.
+  - CI determinism hardening completed:
+    - workflow order updated to `build -> typecheck -> test` in both quality and release gates.
+    - workflow contract tests now pass with order assertions (`20 passed`).
+  - Deploy-window execution evidence captured: `artifacts/release/deploy-window-execution-2026-02-25.md`.
+
+---
+
+# Task Plan - 2026-02-25 - Production Finalization Audit + Deploy Recovery
+
+## Current Focus
+- Finalize production readiness for IMMCAD frontend + backend with verified deploy-safe configuration, Canada-domain migration guardrails, and explicit post-deploy validation steps.
+
+## Plan
+- [x] Review lessons, current plan backlog, and repo state before touching deploy/runtime config.
+- [x] Audit latest frontend/backend production deployments and identify current backend deploy failure root cause.
+- [x] Verify user-facing readiness (case search, related-case review flow, export-policy gates, AI API routes).
+- [x] Verify local quality gates (`make lint`, `make test`, `make verify`, `make quality`) and frontend build/test/typecheck.
+- [x] Identify India->Canada migration residue and determine whether it is runtime-impacting.
+- [x] Harden backend Vercel deploy config:
+- [x] Pin a supported Vercel Python runtime via `backend-vercel/.python-version` (not `vercel.json` runtime override).
+- [x] Add `.vercelignore` protections to block local `.env*` and stale `.vercel/output` artifacts from deploy context.
+- [x] Add repository hygiene guard to fail when a backend prebuilt artifact references local `.env` files.
+- [x] Add/extend tests for backend deploy hardening and hygiene checks.
+- [x] Expand default domain-leak scanning to include `config/`.
+- [x] Replace stale India-domain content in unused compatibility file `config/prompts.yaml` with Canada-safe prompts.
+- [x] Re-run targeted verification for changed files + impacted scripts/tests.
+- [x] Re-run full production verification batch (backend + frontend + policy/conformance checks).
+- [ ] Redeploy backend from source (not stale `--prebuilt`) and verify Vercel build succeeds with supported Python runtime.
+- [ ] Redeploy frontend (if desired for same release SHA) and record deployment IDs/timestamps.
+- [x] Run production smoke checks on active deployment endpoints (`/healthz`, `/ops/metrics`, frontend UI) and capture evidence.
+- [x] Decide whether to widen `mypy` gate scope now or explicitly defer with a documented production rationale.
+
+## Review
+- Lead-engineering audit + decision log captured in:
+  - `docs/release/lead-engineering-readiness-audit-2026-02-25.md`
+  - `docs/release/known-issues.md`
+- Deployment audit (2026-02-25 UTC):
+  - Frontend latest production deployment: READY (`dpl_9YbaotuCWvMXptmWS3x4TPo6tTn8`) at `2026-02-25 01:29:16 UTC`.
+  - Backend latest production deployment: ERROR (`dpl_G7S9EGK8p2DgXv7jscjqYvynwFxc`) at `2026-02-25 01:32:31 UTC`.
+  - Vercel build logs reported invalid serverless runtime `index (python3.11)`.
+  - Local prebuilt manifest `backend-vercel/.vercel/output/functions/index.func/.vc-config.json` confirmed `"runtime": "python3.11"` and `.env.production.*` file references in `filePathMap`.
+  - Latest READY backend production deployment remains `dpl_7q6JDuNMy8wefcBVxns76VV4hbho` at `2026-02-25 00:41:36 UTC`.
+  - Source-based backend redeploy attempt (`vercel --cwd backend-vercel deploy --prod --yes`) was blocked by Vercel quota: `api-deployments-free-per-day`.
+- User-facing capability audit:
+  - Frontend supports chat + "Find related cases" review flow via `frontend-web/components/chat/chat-shell-container.tsx` and related-case panel components.
+  - Backend exposes `/api/chat`, `/api/search/cases`, `/api/export/cases`, `/ops/metrics`, `/healthz`.
+  - Export/download path enforces user approval + source-policy/trusted-domain checks.
+- Local verification (pre-change audit batch):
+  - `make lint` -> pass
+  - `make test` -> pass (`355 passed`)
+  - `make verify` -> pass (warnings only; optional tools/env absent)
+  - `make quality` -> pass
+  - `npm run typecheck --prefix frontend-web` -> pass
+  - `npm run test --prefix frontend-web` -> pass
+  - `npm run build --prefix frontend-web` -> pass
+  - `scripts/validate_source_registry.py` -> pass
+  - `scripts/scan_domain_leaks.py` -> pass (before `config/` was included in defaults)
+  - `scripts/check_repository_hygiene.sh` -> pass
+  - `scripts/run_case_law_conformance.py --strict` -> pass (`fail=0`, warning-only output)
+- Local verification (post-change re-run, 2026-02-25):
+  - `make quality` -> pass (`363 passed`)
+  - `make verify` -> pass (warnings only: missing `.env`, `redis-cli`, optional `git-secret`)
+  - `npm run typecheck --prefix frontend-web` -> pass
+  - `npm run test --prefix frontend-web` -> pass (`50 passed`)
+  - `npm run build --prefix frontend-web` -> pass
+  - `pytest -q tests/test_backend_vercel_deploy_config.py tests/test_repository_hygiene_script.py tests/test_domain_leak_scanner.py tests/test_export_policy_gate.py` -> pass (`31 passed`)
+  - `bash -n scripts/check_repository_hygiene.sh` -> pass
+  - `ruff check scripts/scan_domain_leaks.py tests/test_backend_vercel_deploy_config.py tests/test_repository_hygiene_script.py tests/test_domain_leak_scanner.py` -> pass
+- Migration residue audit:
+  - `config/prompts.yaml` has been rewritten to Canada-safe compatibility text.
+  - Active runtime prompts are Canada-safe in `src/immcad_api/policy/prompts.py` and mirrored backend path.
+  - Runtime scan excluding evaluation modules found no India-domain term leaks in `src/immcad_api` and `backend-vercel/src/immcad_api`.
+  - Residual India-domain terms remain in tests/evaluation guardrails, migration docs, and historical notebook artifacts only.
+- PR / release state:
+  - Open PRs currently: none (`gh pr list --state open` returned no rows).
+  - Latest merged PR is `#33` (`MERGED`, created `2026-02-25T14:31:11Z`) and it is now on `main`.
+- Production smoke checks (active deployments):
+  - `GET https://backend-vercel-eight-sigma.vercel.app/healthz` -> `200`.
+  - `GET https://backend-vercel-eight-sigma.vercel.app/ops/metrics` -> `401` (expected: bearer token required).
+  - `GET https://frontend-web-plum-five.vercel.app/` -> `200` (scope notice and chat shell render).
+  - Direct backend `/api/chat` and `/api/search/cases` without token -> `401` (expected in protected production config).
+- Decision log (go/no-go):
+  - Adopted Vercel-documented Python pinning via `backend-vercel/.python-version` (`3.12`), not `functions.runtime` override for official Python runtime.
+  - Initial decision deferred full-repo `mypy src tests` expansion due unrelated backlog; later continuation pass expanded the scoped release gate from 2 to 17 production-critical files (see top 2026-02-25 continuation section).
+  - Deployment completion is currently blocked by Vercel free-plan daily deployment quota, not by failing quality gates.
+- Deployment state snapshot (2026-02-25 UTC):
+  - Backend active alias resolves to READY deployment `dpl_7q6JDuNMy8wefcBVxns76VV4hbho` (`2026-02-25 00:41:36 UTC`).
+  - Latest backend deployment attempt remains ERROR `dpl_G7S9EGK8p2DgXv7jscjqYvynwFxc` (`2026-02-25 01:32:31 UTC`).
+  - Frontend active alias resolves to READY deployment `dpl_9YbaotuCWvMXptmWS3x4TPo6tTn8` (`2026-02-25 01:29:16 UTC`).
+  - Backend + frontend redeploy attempts during this run were blocked by quota (`api-deployments-free-per-day`).
+- Backend + frontend redeploy checklist (next operator steps after config/test re-verification):
+  - Backend:
+    - Ensure latest Vercel CLI and linked `backend-vercel` project.
+    - Prefer source-based deploy (avoid stale `--prebuilt` output).
+    - Confirm no local `.env.production.*` files are in deploy context (guard + `.vercelignore` now enforce this).
+    - Record deployment ID, status, and timestamp.
+  - Frontend:
+    - Deploy `frontend-web` for same release SHA if required.
+    - Record deployment ID, status, and timestamp.
+  - Smoke:
+    - Validate `/healthz`, `/api/chat`, `/api/search/cases`, `/ops/metrics`.
+    - Validate frontend related-case flow and export confirmation behavior against production backend.
+
+---
+
 # Task Plan - 2026-02-24 - Senior Lead MVP Next Steps
 
 ## Current Focus
@@ -736,3 +1101,43 @@
 - Archive refs were created for all at-risk local/gone-upstream branches to prevent work loss.
 - `feature/source-registry-loader` content is functionally superseded by current `main` (core loader/tests already present and evolved).
 - `feature-api-scaffold` does not merge cleanly into current `main`; must be handled via selective extraction, not branch merge.
+
+---
+
+# Task Plan - 2026-02-25 - Case-Law Tooling Hardening + Runtime Alignment
+
+## Current Focus
+- Execute step-by-step production hardening for case-law chat retrieval: wire case-search tool orchestration, keep backend/backend-vercel parity, and close hardened-env policy mismatches with verification.
+
+## Plan
+- [x] Wire `ChatService` to `CaseSearchService` in `src/immcad_api/main.py` after case-search initialization.
+- [x] Mirror chat-service wiring and implementation parity in `backend-vercel/src/immcad_api/main.py` and `backend-vercel/src/immcad_api/services/chat_service.py`.
+- [x] Add/extend backend tests for chat tool invocation, skip logic, and tool-error auditing.
+- [x] Add integration proof that `/api/chat` now uses case-search citations for case-law prompts.
+- [x] Expand default trusted citation domains to include official court domains used by official feeds, including backend-vercel mirror.
+- [x] Run focused verification on touched backend and frontend runtime-hardening tests.
+
+## Review
+- Completed wiring so chat orchestration now passes `case_search_service` into `ChatService` (`src` + `backend-vercel`).
+- Added deterministic tests for:
+  - tool usage on case-law prompts,
+  - non-case prompt bypass,
+  - tool error audit events,
+  - chat API integration path (case-search citation appears in `/api/chat` response).
+- Added official court hosts to default trusted citation domains:
+  - `decisions.scc-csc.ca`
+  - `decisions.fct-cf.gc.ca`
+  - `decisions.fca-caf.gc.ca`
+- Added signed export-approval handshake:
+  - new backend endpoint `/api/export/cases/approval` issues short-lived signed tokens,
+  - hardened environments now require a valid signed approval token for `/api/export/cases`,
+  - frontend now requests approval token after explicit confirmation and sends it with export.
+- Verification evidence:
+  - `uv run ruff check src/immcad_api/main.py src/immcad_api/services/chat_service.py src/immcad_api/policy/compliance.py tests/test_chat_service.py tests/test_api_scaffold.py tests/test_settings.py` -> pass
+  - `PYTHONPATH=.:src uv run pytest -q tests/test_chat_service.py tests/test_api_scaffold.py tests/test_settings.py` -> `129 passed`
+  - `npm run test -- tests/server-runtime-config.contract.test.ts tests/backend-proxy.contract.test.ts` (in `frontend-web/`) -> `19 passed`
+  - `PYTHONPATH=.:src uv run pytest -q tests/test_export_policy_gate.py tests/test_api_scaffold.py` -> `46 passed`
+  - `npm run test -- tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts tests/export-cases-route.contract.test.ts` (in `frontend-web/`) -> `18 passed`
+  - `make quality` -> pass (`370 passed`)
+  - `npm run test` (in `frontend-web/`) -> pass (`52 passed`)
+  - `npm run typecheck` (in `frontend-web/`) -> pass

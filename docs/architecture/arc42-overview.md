@@ -22,7 +22,7 @@ IMMCAD delivers citation-aware, policy-constrained informational responses for C
 ## 2. Constraints
 
 - Python 3.11 backend and existing package layout must be preserved.
-- Hardened environments require strict runtime controls (`API_BEARER_TOKEN`, trusted citation domains, synthetic citation toggle off).
+- Hardened environments require strict runtime controls (`IMMCAD_API_BEARER_TOKEN` with `API_BEARER_TOKEN` alias support, trusted citation domains, synthetic citation toggle off).
 - Legal/compliance controls are release gating requirements, not optional checks.
 
 ## 3. Context and Scope

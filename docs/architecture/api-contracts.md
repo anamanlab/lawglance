@@ -5,12 +5,8 @@
 - [Table of Contents](#table-of-contents)
 - [`POST /api/chat`](#`post-/api/chat`)
 - [`POST /api/search/cases`](#`post-/api/search/cases`)
+- [`POST /api/export/cases`](#`post-/api/export/cases`)
 - [`GET /ops/metrics`](#`get-/ops/metrics`)
-- [Error Envelope](#error-envelope)
-- [Interface Rules](#interface-rules)
-
-- [`POST /api/chat`](#`post-/api/chat`)
-- [`POST /api/search/cases`](#`post-/api/search/cases`)
 - [Error Envelope](#error-envelope)
 - [Interface Rules](#interface-rules)
 
@@ -19,7 +15,7 @@
 Headers:
 
 ```text
-Authorization: Bearer <token>   # required when API_BEARER_TOKEN is configured
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
 ```
 
 Request:
@@ -118,7 +114,7 @@ Auth/rate-limit/validation/provider error (4xx/5xx):
 Headers:
 
 ```text
-Authorization: Bearer <token>   # required when API_BEARER_TOKEN is configured
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
 ```
 
 Request:
@@ -142,17 +138,63 @@ Response:
       "title": "string",
       "citation": "string",
       "decision_date": "YYYY-MM-DD",
-      "url": "https://canlii.org/..."
+      "url": "https://canlii.org/...",
+      "source_id": "SCC_DECISIONS|FC_DECISIONS|FCA_DECISIONS|CANLII_CASE_BROWSE",
+      "document_url": "https://..."
     }
   ]
 }
 ```
+
+Case-source behavior:
+
+- Official SCC/FC/FCA feeds are the primary search backend when enabled.
+- CanLII metadata search is queried as fallback when official feeds are unavailable or return no matches.
+- Each result includes `source_id` and `document_url` so `/api/export/cases` can enforce source-scoped export policy.
 
 CanLII compliance notes:
 
 - The backend uses CanLII metadata endpoints only; it does not fetch or index document text from CanLII.
 - Query matching is performed on returned metadata fields in IMMCAD.
 - Service-level guardrails enforce CanLII plan limits: `5000/day`, `2 requests/second`, and `1 in-flight request`.
+
+## `POST /api/export/cases`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+```
+
+Request:
+
+```json
+{
+  "source_id": "SCC_DECISIONS",
+  "case_id": "2024-scc-3",
+  "document_url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+  "format": "pdf",
+  "user_approved": true
+}
+```
+
+Approval policy:
+
+- `user_approved` is required for explicit per-request consent.
+- Missing or `false` approval is blocked before download, with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
+
+Missing approval example:
+
+```json
+{
+  "error": {
+    "code": "POLICY_BLOCKED",
+    "message": "Case export requires explicit user approval before download",
+    "trace_id": "7f9a4b0d18f24cbe",
+    "policy_reason": "source_export_user_approval_required"
+  }
+}
+```
 
 ## `GET /ops/metrics`
 
@@ -226,9 +268,10 @@ Response:
 ```json
 {
   "error": {
-    "code": "VALIDATION_ERROR|PROVIDER_ERROR|POLICY_BLOCKED|RATE_LIMITED|UNAUTHORIZED",
+    "code": "VALIDATION_ERROR|PROVIDER_ERROR|SOURCE_UNAVAILABLE|POLICY_BLOCKED|RATE_LIMITED|UNAUTHORIZED",
     "message": "string",
-    "trace_id": "string"
+    "trace_id": "string",
+    "policy_reason": "string|null"
   }
 }
 ```

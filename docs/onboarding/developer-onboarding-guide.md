@@ -114,7 +114,7 @@ REDIS_URL=redis://localhost:6379/0
 
 Production/CI hardening notes:
 
-- `API_BEARER_TOKEN` is required in `ENVIRONMENT=production|prod|ci`
+- `IMMCAD_API_BEARER_TOKEN` is required in `ENVIRONMENT=production|prod|ci` (`API_BEARER_TOKEN` is accepted as a compatibility alias)
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` must be disabled in hardened modes
 - Never commit `.env` files
 
@@ -401,7 +401,7 @@ Steps:
 
 - Never commit secrets (`.env`, API tokens, service credentials)
 - Use `.env.example` as the template only
-- Treat `API_BEARER_TOKEN` as sensitive server-side config
+- Treat `IMMCAD_API_BEARER_TOKEN` (and `API_BEARER_TOKEN` alias) as sensitive server-side config
 - Follow `.editorconfig` and repo lint/test rules before PR
 
 ### Legal/compliance rules (important)
@@ -531,4 +531,3 @@ Review cadence:
 - [ ] First PR scope reviewed for risk/compliance impact
 - [ ] Feedback captured and doc improvements filed
 ```
-

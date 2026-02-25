@@ -1183,3 +1183,32 @@
   - `./scripts/venv_exec.sh pytest -q tests/test_repository_hygiene_script.py` -> `3 passed`
   - `./scripts/venv_exec.sh ruff check tests/test_repository_hygiene_script.py` -> pass
   - `./scripts/venv_exec.sh pytest -q` -> `314 passed`
+
+---
+
+# Task Plan - 2026-02-25 - Git-Secret Adoption Planning (Repo-Scoped)
+
+## Current Focus
+- Define a production-safe `git-secret` adoption plan for IMMCAD that supports encrypted env bundles in git without replacing GitHub/Vercel platform-managed runtime secrets.
+
+## Plan
+- [x] Crawl `https://sobolevn.me/git-secret/` and extract setup/CI/CD workflow + operational caveats (GPG key management, `hide`/`reveal`, CI import flow, GPG version compatibility).
+- [x] Review IMMCAD secret-handling constraints (`.gitignore`, `scripts/check_repository_hygiene.sh`, `scripts/vercel_env_sync.py`, docs, workflows/tests) to scope integration safely.
+- [x] Create detailed implementation plan doc: `docs/plans/2026-02-25-git-secret-adoption-plan.md`.
+- [ ] Review/approve rollout scope decision:
+- [ ] `git-secret` for encrypted local/team env bundles only (recommended), while production runtime secrets remain in GitHub/Vercel secrets managers.
+- [ ] Choose pilot target (recommended: `backend-vercel/.env.preview` -> `backend-vercel/.env.preview.secret`).
+- [ ] Execute implementation plan in a dedicated branch/worktree with verification evidence per task.
+
+## Review
+- Planning only in this entry; no runtime/workflow code or secret-handling behavior was changed.
+- Output created:
+  - `docs/plans/2026-02-25-git-secret-adoption-plan.md`
+- Post-review plan corrections applied:
+  - replaced invalid/unsupported `git-secret-status` target suggestion with `git-secret-list` / `git-secret-changes`
+  - added explicit requirement to exclude tracked `*.secret` blobs from regex plaintext secret scans to avoid false positives in `scripts/check_repository_hygiene.sh`
+  - tightened CI install guidance to avoid deprecated `apt-key` snippets and to log `git-secret`/`gpg` versions for interoperability debugging
+- Plan is tailored to current IMMCAD constraints:
+  - preserves platform-managed production secrets policy,
+  - integrates with existing repository hygiene checks and Vercel env sync workflows,
+  - includes optional (gated) CI `git-secret reveal` support only if needed.

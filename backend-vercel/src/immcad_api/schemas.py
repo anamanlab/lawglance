@@ -56,6 +56,8 @@ class CaseSearchResult(BaseModel):
     url: str
     source_id: str | None = None
     document_url: str | None = None
+    export_allowed: bool | None = None
+    export_policy_reason: str | None = None
 
 
 class CaseSearchResponse(BaseModel):

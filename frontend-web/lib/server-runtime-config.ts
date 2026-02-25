@@ -1,4 +1,5 @@
 const DEV_DEFAULT_BACKEND_BASE_URL = "http://127.0.0.1:8000";
+const HARDENED_ENVIRONMENT_PATTERN = /^(production|prod|ci)(?:[-_].+)?$/;
 
 export type ServerRuntimeConfig = {
   backendBaseUrl: string;
@@ -11,11 +12,20 @@ function normalizeValue(value: string | undefined): string | undefined {
 }
 
 function resolveRuntimeEnvironment(): string {
-  const explicitEnvironment =
-    normalizeValue(process.env.IMMCAD_ENVIRONMENT) ??
-    normalizeValue(process.env.ENVIRONMENT);
-  if (explicitEnvironment) {
-    return explicitEnvironment.toLowerCase();
+  const explicitEnvironment = normalizeValue(process.env.IMMCAD_ENVIRONMENT);
+  const compatibilityEnvironment = normalizeValue(process.env.ENVIRONMENT);
+  if (
+    explicitEnvironment &&
+    compatibilityEnvironment &&
+    explicitEnvironment.toLowerCase() !== compatibilityEnvironment.toLowerCase()
+  ) {
+    throw new Error(
+      "IMMCAD_ENVIRONMENT and ENVIRONMENT must match when both are set."
+    );
+  }
+  const resolvedEnvironment = explicitEnvironment ?? compatibilityEnvironment;
+  if (resolvedEnvironment) {
+    return resolvedEnvironment.toLowerCase();
   }
 
   const vercelEnvironment = normalizeValue(process.env.VERCEL_ENV)?.toLowerCase();
@@ -27,7 +37,8 @@ function resolveRuntimeEnvironment(): string {
 }
 
 export function isHardenedRuntimeEnvironment(): boolean {
-  return ["production", "prod", "ci"].includes(resolveRuntimeEnvironment());
+  const environment = resolveRuntimeEnvironment();
+  return HARDENED_ENVIRONMENT_PATTERN.test(environment);
 }
 
 function ensureHardenedSafeBackendUrl(

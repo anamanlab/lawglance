@@ -79,6 +79,8 @@ def test_case_search_contract_shape() -> None:
     assert len(body["results"]) == 2
     assert "case_id" in body["results"][0]
     assert "url" in body["results"][0]
+    assert "export_allowed" in body["results"][0]
+    assert "export_policy_reason" in body["results"][0]
 
 
 def test_case_search_disabled_returns_structured_unavailable_response(
@@ -507,6 +509,62 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
+@pytest.mark.parametrize("environment", ["production-us-east", "prod_blue", "ci-smoke"])
+def test_case_search_disables_canlii_scaffold_fallback_for_hardened_environment_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    class _FailingCanLIIHttpClient:
+        def __init__(self, *args, **kwargs) -> None:
+            del args, kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            del exc_type, exc, tb
+            return False
+
+        def get(self, *args, **kwargs):
+            del args, kwargs
+            raise RuntimeError("canlii unavailable")
+
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        _FailingCanLIIHttpClient,
+    )
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
+    monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "false")
+    hardened_alias_client = TestClient(create_app())
+
+    response = hardened_alias_client.post(
+        "/api/search/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "query": "express entry inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])
 def test_case_search_uses_official_sources_without_canlii_key(
     monkeypatch: pytest.MonkeyPatch,
@@ -526,6 +584,8 @@ def test_case_search_uses_official_sources_without_canlii_key(
                     citation="2026 FC 101",
                     decision_date=date(2026, 2, 1),
                     url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/123456/index.do",
+                    source_id="FC_DECISIONS",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/123456/index.do",
                 )
             ]
         )
@@ -562,7 +622,34 @@ def test_case_search_uses_official_sources_without_canlii_key(
     assert response.status_code == 200
     body = response.json()
     assert body["results"]
-    assert body["results"][0]["citation"] == "2026 FC 101"
+    assert body["results"][0]["export_allowed"] is True
+    assert body["results"][0]["export_policy_reason"] == "source_export_allowed"
+
+
+def test_case_search_official_only_mode_filters_non_exportable_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.setenv("CASE_SEARCH_OFFICIAL_ONLY_RESULTS", "true")
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "false")
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/search/cases",
+        json={
+            "query": "citizenship",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 5,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"] == []
 
 
 def test_ops_metrics_endpoint_exposes_observability_baseline(

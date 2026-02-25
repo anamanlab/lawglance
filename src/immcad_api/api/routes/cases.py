@@ -12,6 +12,7 @@ from immcad_api.policy import SourcePolicy, is_source_export_allowed
 from immcad_api.schemas import (
     CaseExportRequest,
     CaseSearchRequest,
+    CaseSearchResult,
     CaseSearchResponse,
     ErrorEnvelope,
 )
@@ -75,6 +76,7 @@ def build_case_router(
     request_metrics: RequestMetrics | None = None,
     export_policy_gate_enabled: bool = False,
     export_max_download_bytes: int = 10 * 1024 * 1024,
+    case_search_official_only_results: bool = False,
 ) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["cases"])
 
@@ -202,13 +204,46 @@ def build_case_router(
             return True
         return normalized_media_type == "application/pdf"
 
+    def _resolve_case_search_export_status(
+        result: CaseSearchResult,
+    ) -> tuple[bool, str]:
+        if not result.source_id or not result.document_url:
+            return False, "source_export_metadata_missing"
+        source_entry = source_registry.get_source(result.source_id)
+        if source_entry is None:
+            return False, "source_not_in_registry_for_export"
+        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
+        if not _is_url_allowed_for_source(str(result.document_url), allowed_hosts):
+            return False, "export_url_not_allowed_for_source"
+        return is_source_export_allowed(
+            result.source_id,
+            source_policy=source_policy,
+        )
+
+    def _apply_case_search_export_policy(
+        search_response: CaseSearchResponse,
+    ) -> CaseSearchResponse:
+        filtered_results: list[CaseSearchResult] = []
+        for result in search_response.results:
+            export_allowed, policy_reason = _resolve_case_search_export_status(result)
+            enriched_result = result.model_copy(
+                update={
+                    "export_allowed": export_allowed,
+                    "export_policy_reason": policy_reason,
+                }
+            )
+            if case_search_official_only_results and not export_allowed:
+                continue
+            filtered_results.append(enriched_result)
+        return CaseSearchResponse(results=filtered_results)
+
     @router.post("/search/cases", response_model=CaseSearchResponse)
     def search_cases(
         payload: CaseSearchRequest, request: Request, response: Response
     ) -> CaseSearchResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
-        return case_search_service.search(payload)
+        return _apply_case_search_export_policy(case_search_service.search(payload))
 
     @router.post("/export/cases", response_model=None)
     def export_cases(

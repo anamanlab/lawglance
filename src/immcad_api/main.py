@@ -144,6 +144,7 @@ def create_app() -> FastAPI:
         grounding_adapter=grounding_adapter,
         trusted_citation_domains=settings.citation_trusted_domains,
     )
+    hardened_environment = is_hardened_environment(settings.environment)
     case_search_service: CaseSearchService | None = None
     canlii_usage_limiter = None
     source_policy = None
@@ -153,7 +154,7 @@ def create_app() -> FastAPI:
             source_registry = load_source_registry()
             source_policy = load_source_policy()
         except FileNotFoundError as exc:
-            if is_hardened_environment(settings.environment):
+            if hardened_environment:
                 raise ValueError(
                     "Case-search assets are required in hardened environments; missing source registry or source policy files"
                 ) from exc
@@ -162,11 +163,7 @@ def create_app() -> FastAPI:
                 exc_info=exc,
             )
         else:
-            allow_canlii_scaffold_fallback = settings.environment.lower() not in {
-                "production",
-                "prod",
-                "ci",
-            }
+            allow_canlii_scaffold_fallback = not hardened_environment
             canlii_usage_limiter = build_canlii_usage_limiter(
                 redis_url=settings.redis_url,
                 lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
@@ -340,6 +337,7 @@ def create_app() -> FastAPI:
                 request_metrics=request_metrics,
                 export_policy_gate_enabled=settings.export_policy_gate_enabled,
                 export_max_download_bytes=settings.export_max_download_bytes,
+                case_search_official_only_results=settings.case_search_official_only_results,
             )
         )
     else:

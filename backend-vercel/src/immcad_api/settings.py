@@ -27,6 +27,7 @@ class Settings:
     canlii_base_url: str
     enable_case_search: bool
     enable_official_case_sources: bool
+    case_search_official_only_results: bool
     official_case_cache_ttl_seconds: float
     official_case_stale_cache_ttl_seconds: float
     api_bearer_token: str | None
@@ -115,8 +116,19 @@ def parse_api_bearer_token() -> str | None:
 
 def resolve_runtime_environment() -> str:
     explicit_environment = parse_str_env("ENVIRONMENT")
+    compatibility_environment = parse_str_env("IMMCAD_ENVIRONMENT")
+    if (
+        explicit_environment
+        and compatibility_environment
+        and explicit_environment.lower() != compatibility_environment.lower()
+    ):
+        raise ValueError(
+            "ENVIRONMENT and IMMCAD_ENVIRONMENT must match when both are set"
+        )
     if explicit_environment:
         return explicit_environment
+    if compatibility_environment:
+        return compatibility_environment
 
     vercel_environment = (parse_str_env("VERCEL_ENV") or "").lower()
     node_environment = (parse_str_env("NODE_ENV") or "").lower()
@@ -144,6 +156,10 @@ def load_settings() -> Settings:
     enable_official_case_sources = parse_bool_env(
         "ENABLE_OFFICIAL_CASE_SOURCES",
         hardened_environment,
+    )
+    case_search_official_only_results = parse_bool_env(
+        "CASE_SEARCH_OFFICIAL_ONLY_RESULTS",
+        False,
     )
     official_case_cache_ttl_seconds = parse_float_env(
         "OFFICIAL_CASE_CACHE_TTL_SECONDS",
@@ -280,6 +296,7 @@ def load_settings() -> Settings:
         or "https://api.canlii.org/v1",
         enable_case_search=enable_case_search,
         enable_official_case_sources=enable_official_case_sources,
+        case_search_official_only_results=case_search_official_only_results,
         official_case_cache_ttl_seconds=official_case_cache_ttl_seconds,
         official_case_stale_cache_ttl_seconds=official_case_stale_cache_ttl_seconds,
         api_bearer_token=api_bearer_token,

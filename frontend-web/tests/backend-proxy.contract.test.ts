@@ -54,6 +54,22 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(body.error.code).toBe("PROVIDER_ERROR");
   });
 
+  it("returns explicit provider error when hardened detection itself fails", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
+      throw new Error("missing runtime config");
+    });
+    vi.mocked(isHardenedRuntimeEnvironment).mockImplementation(() => {
+      throw new Error("environment mismatch");
+    });
+
+    const response = await forwardPostRequest(buildRequest("/api/chat", { message: "hi" }), "/api/chat");
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-immcad-fallback")).toBeNull();
+    expect(body.error.code).toBe("PROVIDER_ERROR");
+  });
+
   it("forwards authorization header when runtime bearer token is configured", async () => {
     vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
       backendBaseUrl: "https://api.example.com",

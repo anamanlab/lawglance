@@ -130,7 +130,14 @@ def test_run_ingestion_jobs_uses_checkpoint_conditional_context(tmp_path: Path) 
     assert second_report.results[0].bytes_fetched == 0
 
 
-def test_run_ingestion_jobs_blocks_source_by_policy_in_production(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "environment",
+    ["production", "prod", "ci", "production-us-east", "prod_blue", "ci-smoke"],
+)
+def test_run_ingestion_jobs_blocks_source_by_policy_in_production(
+    tmp_path: Path,
+    environment: str,
+) -> None:
     registry_path = tmp_path / "registry.json"
     registry_payload = {
         "version": "2026-02-24",
@@ -152,7 +159,7 @@ def test_run_ingestion_jobs_blocks_source_by_policy_in_production(tmp_path: Path
 
     report = run_ingestion_jobs(
         registry_path=registry_path,
-        environment="production",
+        environment=environment,
         fetcher=fetcher,
     )
 

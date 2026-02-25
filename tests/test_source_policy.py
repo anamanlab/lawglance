@@ -136,7 +136,10 @@ def test_source_policy_restricted_source_flags(
     [
         ("production", "production"),
         ("prod", "production"),
-        ("ci", "internal"),
+        ("ci", "production"),
+        ("production-us-east", "production"),
+        ("prod_blue", "production"),
+        ("ci-smoke", "production"),
         ("staging", "internal"),
         ("development", "internal"),
         (None, "internal"),

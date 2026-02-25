@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -15,6 +16,7 @@ DEFAULT_SOURCE_POLICY_RELATIVE_PATH = Path("config/source_policy.yaml")
 DEFAULT_SOURCE_POLICY_REPO_PATH = (
     Path(__file__).resolve().parents[3] / DEFAULT_SOURCE_POLICY_RELATIVE_PATH
 )
+_HARDENED_ENVIRONMENT_PATTERN = re.compile(r"^(production|prod|ci)(?:[-_].+)?$")
 
 
 class SourcePolicyEntry(BaseModel):
@@ -86,7 +88,7 @@ def load_source_policy(path: str | Path | None = None) -> SourcePolicy:
 
 def normalize_runtime_environment(environment: str | None) -> RuntimeEnvironment:
     normalized = (environment or "development").strip().lower()
-    if normalized in {"production", "prod"}:
+    if _HARDENED_ENVIRONMENT_PATTERN.fullmatch(normalized):
         return "production"
     return "internal"
 

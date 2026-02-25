@@ -175,7 +175,11 @@ function buildForwardedResponseHeaders(upstreamResponse: Response): Headers {
 }
 
 function isScaffoldFallbackAllowed(): boolean {
-  return !isHardenedRuntimeEnvironment();
+  try {
+    return !isHardenedRuntimeEnvironment();
+  } catch {
+    return false;
+  }
 }
 
 export async function forwardPostRequest(

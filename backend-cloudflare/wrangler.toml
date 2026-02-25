@@ -1,0 +1,9 @@
+"$schema" = "../node_modules/wrangler/config-schema.json"
+name = "immcad-backend-native-python"
+main = "src/entry.py"
+compatibility_date = "2026-02-25"
+compatibility_flags = ["python_workers"]
+workers_dev = true
+
+[observability]
+enabled = true

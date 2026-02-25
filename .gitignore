@@ -18,7 +18,9 @@ scripts/ralph/archive/
 scripts/ralph/.last-branch
 frontend-web/node_modules/
 frontend-web/.next/
+frontend-web/.next.bak.*/
 frontend-web/out/
 frontend-web/coverage/
+.wrangler/
 .worktrees/
 .ai/

@@ -81,6 +81,29 @@ def test_case_search_contract_shape() -> None:
     assert "url" in body["results"][0]
 
 
+def test_case_search_disabled_returns_structured_unavailable_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_CASE_SEARCH", "false")
+    disabled_client = TestClient(create_app())
+
+    response = disabled_client.post(
+        "/api/search/cases",
+        json={
+            "query": "express entry inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["policy_reason"] == "case_search_disabled"
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
 def test_validation_error_uses_error_envelope() -> None:
     response = client.post(
         "/api/chat",
@@ -157,6 +180,8 @@ def test_bearer_auth_enforced_for_production_modes(
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
     monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
@@ -422,6 +447,8 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
     monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")

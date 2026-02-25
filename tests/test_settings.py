@@ -17,6 +17,8 @@ def _set_hardened_env(
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
 
 
 def _set_hardened_env_without_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -28,6 +30,8 @@ def _set_hardened_env_without_environment(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])
@@ -214,7 +218,7 @@ def test_load_settings_uses_latest_gemini_default_with_stable_fallback(
     monkeypatch.delenv("GEMINI_MODEL_FALLBACKS", raising=False)
 
     settings = load_settings()
-    assert settings.gemini_model == "gemini-3-flash-preview"
+    assert settings.gemini_model == "gemini-2.5-flash-lite"
     assert settings.gemini_model_fallbacks == ("gemini-2.5-flash",)
 
 
@@ -222,17 +226,54 @@ def test_load_settings_excludes_primary_model_from_fallbacks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-3-flash-preview")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
     monkeypatch.setenv(
         "GEMINI_MODEL_FALLBACKS",
-        "gemini-3-flash-preview, gemini-2.5-flash, gemini-2.5-flash-lite",
+        "gemini-2.5-flash, gemini-2.5-flash-lite",
     )
 
     settings = load_settings()
-    assert settings.gemini_model_fallbacks == (
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-    )
+    assert settings.gemini_model_fallbacks == ("gemini-2.5-flash-lite",)
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_explicit_gemini_model_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+
+    with pytest.raises(ValueError, match="GEMINI_MODEL must be explicitly set"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_unstable_gemini_model_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3-flash-preview")
+
+    with pytest.raises(ValueError, match="GEMINI_MODEL must use a stable Gemini model"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_unstable_gemini_fallback_models_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-3-flash-preview")
+
+    with pytest.raises(
+        ValueError,
+        match="GEMINI_MODEL_FALLBACKS must use stable Gemini models",
+    ):
+        load_settings()
 
 
 def test_load_settings_primary_provider_defaults(

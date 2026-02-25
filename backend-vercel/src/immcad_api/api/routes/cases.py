@@ -259,3 +259,53 @@ def build_case_router(
         )
 
     return router
+
+
+def build_case_router_disabled(
+    *,
+    policy_reason: str = "case_search_disabled",
+) -> APIRouter:
+    router = APIRouter(prefix="/api", tags=["cases"])
+
+    def _error_response(
+        *,
+        status_code: int,
+        trace_id: str,
+        code: str,
+        message: str,
+    ) -> JSONResponse:
+        error = ErrorEnvelope(
+            error={
+                "code": code,
+                "message": message,
+                "trace_id": trace_id,
+                "policy_reason": policy_reason,
+            }
+        )
+        return JSONResponse(
+            status_code=status_code,
+            content=error.model_dump(mode="json"),
+            headers={"x-trace-id": trace_id},
+        )
+
+    @router.post("/search/cases", response_model=None)
+    def search_cases_disabled(request: Request) -> JSONResponse:
+        trace_id = getattr(request.state, "trace_id", "")
+        return _error_response(
+            status_code=503,
+            trace_id=trace_id,
+            code="SOURCE_UNAVAILABLE",
+            message="Case-law search is disabled in this deployment.",
+        )
+
+    @router.post("/export/cases", response_model=None)
+    def export_cases_disabled(request: Request) -> JSONResponse:
+        trace_id = getattr(request.state, "trace_id", "")
+        return _error_response(
+            status_code=503,
+            trace_id=trace_id,
+            code="SOURCE_UNAVAILABLE",
+            message="Case export is disabled in this deployment.",
+        )
+
+    return router

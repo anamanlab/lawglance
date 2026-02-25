@@ -10,7 +10,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from immcad_api.errors import AuthError, ProviderApiError
-from immcad_api.api.routes import build_case_router, build_chat_router
+from immcad_api.api.routes import (
+    build_case_router,
+    build_case_router_disabled,
+    build_chat_router,
+)
 from immcad_api.middleware.rate_limit import build_rate_limiter
 from immcad_api.policy import load_source_policy
 from immcad_api.providers import GeminiProvider, OpenAIProvider, ProviderRouter, ScaffoldProvider
@@ -312,6 +316,10 @@ def create_app() -> FastAPI:
                 export_policy_gate_enabled=settings.export_policy_gate_enabled,
                 export_max_download_bytes=settings.export_max_download_bytes,
             )
+        )
+    else:
+        app.include_router(
+            build_case_router_disabled(policy_reason="case_search_disabled")
         )
 
     @app.get("/healthz", tags=["health"])

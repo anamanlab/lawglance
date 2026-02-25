@@ -9,6 +9,9 @@ from immcad_api.policy.compliance import (
 )
 
 
+_UNSTABLE_MODEL_TOKENS = ("preview", "experimental", "exp")
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
@@ -84,6 +87,11 @@ def parse_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     if not values:
         return default
     return values
+
+
+def is_unstable_model_name(model_name: str) -> bool:
+    normalized = model_name.strip().lower()
+    return any(token in normalized for token in _UNSTABLE_MODEL_TOKENS)
 
 
 def load_settings() -> Settings:
@@ -174,15 +182,31 @@ def load_settings() -> Settings:
     if export_max_download_bytes < 1:
         raise ValueError("EXPORT_MAX_DOWNLOAD_BYTES must be >= 1")
 
-    gemini_model = (
-        parse_str_env("GEMINI_MODEL", "gemini-3-flash-preview")
-        or "gemini-3-flash-preview"
-    )
+    raw_gemini_model = parse_str_env("GEMINI_MODEL")
+    gemini_model = raw_gemini_model or "gemini-2.5-flash-lite"
     gemini_model_fallbacks = tuple(
         model
-        for model in parse_csv_env("GEMINI_MODEL_FALLBACKS", ("gemini-2.5-flash",))
+        for model in parse_csv_env(
+            "GEMINI_MODEL_FALLBACKS",
+            ("gemini-2.5-flash",),
+        )
         if model != gemini_model
     )
+
+    if hardened_environment and not raw_gemini_model:
+        raise ValueError(
+            "GEMINI_MODEL must be explicitly set when ENVIRONMENT is production/prod/ci"
+        )
+    if hardened_environment and is_unstable_model_name(gemini_model):
+        raise ValueError(
+            "GEMINI_MODEL must use a stable Gemini model in production/prod/ci"
+        )
+    if hardened_environment and any(
+        is_unstable_model_name(model) for model in gemini_model_fallbacks
+    ):
+        raise ValueError(
+            "GEMINI_MODEL_FALLBACKS must use stable Gemini models in production/prod/ci"
+        )
 
     return Settings(
         app_name=parse_str_env("API_APP_NAME", "IMMCAD API") or "IMMCAD API",

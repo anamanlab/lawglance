@@ -33,12 +33,12 @@ export function MessageComposer({
   const statusId = "chat-input-status";
   const formRef = useRef<HTMLFormElement | null>(null);
   const countToneClass =
-    remainingCharacters <= 200 ? "text-amber-700" : "text-slate-500";
+    remainingCharacters <= 200 ? "text-warning" : "text-muted";
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
+    <section className="rounded-xl border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.94)] p-3 shadow-[0_10px_28px_rgba(20,20,19,0.06)]">
       <form className="space-y-3" onSubmit={onSubmit} ref={formRef}>
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="chat-input">
+        <label className="block text-sm font-semibold text-ink" htmlFor="chat-input">
           Ask a Canadian immigration question
         </label>
 
@@ -50,7 +50,7 @@ export function MessageComposer({
 
         <textarea
           aria-describedby={`${hintId} ${countId}${isSubmitting ? ` ${statusId}` : ""}`}
-          className="h-28 w-full resize-y rounded-xl border border-slate-300 px-3 py-2 text-base leading-7 text-ink shadow-sm transition duration-200 ease-out focus:border-blue-600 focus:ring-2 focus:ring-blue-200"
+          className="h-28 w-full resize-y rounded-xl border border-[rgba(176,174,165,0.85)] bg-[rgba(253,252,248,0.96)] px-3 py-2 text-base leading-7 text-ink shadow-sm transition duration-200 ease-out focus:border-accent-blue focus:ring-2 focus:ring-[rgba(106,155,204,0.2)]"
           disabled={isSubmitting}
           id="chat-input"
           maxLength={MAX_MESSAGE_LENGTH}
@@ -81,13 +81,13 @@ export function MessageComposer({
             >
               {remainingCharacters} characters remaining
             </p>
-            <p className="text-[11px] text-slate-500" id={hintId}>
+            <p className="text-[11px] text-muted" id={hintId}>
               Tip: Press Ctrl/Cmd+Enter to send.
             </p>
             {isSubmitting ? (
               <p
                 aria-live="polite"
-                className="text-[11px] text-slate-500"
+                className="text-[11px] text-muted"
                 id={statusId}
               >
                 {phaseLabel(submissionPhase)}
@@ -96,7 +96,7 @@ export function MessageComposer({
           </div>
 
           <button
-            className="min-h-[44px] min-w-[120px] rounded-lg bg-gradient-to-r from-blue-900 to-blue-700 px-4 py-2 text-sm font-semibold text-white transition duration-200 ease-out hover:from-blue-800 hover:to-blue-600 disabled:cursor-not-allowed disabled:from-slate-400 disabled:to-slate-400"
+            className="min-h-[44px] min-w-[120px] rounded-lg bg-gradient-to-r from-[#d97757] to-[#c96a4b] px-4 py-2 text-sm font-semibold text-[#faf9f5] transition duration-200 ease-out hover:from-[#c96a4b] hover:to-[#b85f43] disabled:cursor-not-allowed disabled:from-[#b0aea5] disabled:to-[#b0aea5]"
             disabled={sendDisabled}
             type="submit"
           >

@@ -1,3 +1,26 @@
+# Task Plan - 2026-02-25 - Anthropic Brand Guidelines UI Pass
+
+## Current Focus
+- Apply the installed `brand-guidelines` skill to the active Next.js UI (`frontend-web`) so the chat experience uses Anthropic-inspired colors and typography.
+
+## Plan
+- [x] Update global UI typography and theme tokens in `frontend-web/app/layout.tsx` and `frontend-web/app/globals.css` using the Anthropic brand palette (Poppins + Lora, dark/light/gray + accent colors).
+- [x] Align Tailwind theme extension colors in `frontend-web/tailwind.config.ts` with the same palette so component utility classes stay consistent.
+- [x] Patch high-visibility chat UI components (header, composer, message list, quick prompts, shell container, related case panel/support panel) to remove the strongest legacy blue/amber accents and use the new brand tones.
+- [x] Run targeted frontend checks (at least lint/typecheck for touched files if available) and record results.
+
+## Review
+- UI theme pass completed across global styling and core chat surfaces:
+  - typography switched to `Poppins` (heading) + `Lora` (body) in `frontend-web/app/layout.tsx`,
+  - CSS tokens in `frontend-web/app/globals.css` updated to the new brand palette (dark/light gray + orange/blue/green accents),
+  - Tailwind semantic colors in `frontend-web/tailwind.config.ts` aligned to the same palette,
+  - high-visibility chat components updated: shell, header, composer, message list, related-case panel, quick prompts, support panel.
+- Verification evidence:
+  - `npm run test --prefix frontend-web` -> pass (`65 passed`)
+  - `npm run typecheck --prefix frontend-web` -> pass
+
+---
+
 # Task Plan - 2026-02-25 - Cloudflare Free Plan Blocker Audit
 
 ## Current Focus

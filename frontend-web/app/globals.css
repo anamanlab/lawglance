@@ -4,19 +4,26 @@
 
 :root {
   color-scheme: light;
-  --imm-bg: #f2f5fb;
-  --imm-bg-soft: #e7edf9;
-  --imm-surface: #ffffff;
-  --imm-surface-muted: #f8fafc;
-  --imm-text: #0f172a;
-  --imm-text-muted: #475569;
-  --imm-primary: #1e3a8a;
-  --imm-primary-strong: #1e40af;
-  --imm-accent: #0369a1;
-  --imm-warning: #b45309;
-  --imm-focus: #1d4ed8;
-  --imm-shadow-strong: 0 18px 48px rgba(15, 23, 42, 0.16);
-  --imm-shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.1);
+  --imm-brand-dark: #141413;
+  --imm-brand-light: #faf9f5;
+  --imm-brand-mid: #b0aea5;
+  --imm-brand-light-gray: #e8e6dc;
+  --imm-brand-orange: #d97757;
+  --imm-brand-blue: #6a9bcc;
+  --imm-brand-green: #788c5d;
+  --imm-bg: var(--imm-brand-light);
+  --imm-bg-soft: #f2efe6;
+  --imm-surface: #fdfcf8;
+  --imm-surface-muted: var(--imm-brand-light-gray);
+  --imm-text: var(--imm-brand-dark);
+  --imm-text-muted: #666259;
+  --imm-primary: var(--imm-brand-orange);
+  --imm-primary-strong: #c96a4b;
+  --imm-accent: var(--imm-brand-blue);
+  --imm-warning: var(--imm-brand-orange);
+  --imm-focus: var(--imm-brand-blue);
+  --imm-shadow-strong: 0 18px 48px rgba(20, 20, 19, 0.12);
+  --imm-shadow-soft: 0 10px 28px rgba(20, 20, 19, 0.08);
 }
 
 * {
@@ -31,11 +38,12 @@ body {
 
 body {
   background:
-    radial-gradient(circle at 6% 4%, rgba(30, 58, 138, 0.1), transparent 34%),
-    radial-gradient(circle at 90% 0%, rgba(180, 83, 9, 0.12), transparent 32%),
+    radial-gradient(circle at 7% 4%, rgba(217, 119, 87, 0.1), transparent 34%),
+    radial-gradient(circle at 90% 3%, rgba(106, 155, 204, 0.1), transparent 34%),
+    radial-gradient(circle at 78% 95%, rgba(120, 140, 93, 0.08), transparent 42%),
     linear-gradient(180deg, var(--imm-bg) 0%, var(--imm-bg-soft) 100%);
   color: var(--imm-text);
-  font-family: var(--font-body), "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-body), Georgia, "Times New Roman", serif;
 }
 
 h1,
@@ -44,8 +52,16 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-heading), Georgia, "Times New Roman", serif;
+  font-family: var(--font-heading), Arial, sans-serif;
   color: var(--imm-text);
+  letter-spacing: -0.01em;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-body), Georgia, "Times New Roman", serif;
 }
 
 a {
@@ -60,13 +76,14 @@ textarea:focus-visible {
 }
 
 ::selection {
-  background: rgba(30, 58, 138, 0.18);
+  background: rgba(217, 119, 87, 0.2);
 }
 
 @media (max-width: 767px) {
   body {
     background:
-      radial-gradient(circle at 8% 6%, rgba(30, 58, 138, 0.08), transparent 30%),
+      radial-gradient(circle at 8% 6%, rgba(217, 119, 87, 0.08), transparent 30%),
+      radial-gradient(circle at 95% 2%, rgba(106, 155, 204, 0.08), transparent 28%),
       linear-gradient(180deg, var(--imm-bg) 0%, var(--imm-bg-soft) 100%);
   }
 }

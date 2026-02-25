@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { EB_Garamond, Lato } from "next/font/google";
+import { Lora, Poppins } from "next/font/google";
 import "./globals.css";
 
-const headingFont = EB_Garamond({
+const headingFont = Poppins({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
   display: "swap",
   variable: "--font-heading",
 });
 
-const bodyFont = Lato({
+const bodyFont = Lora({
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
   variable: "--font-body",
 });
@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en-CA" suppressHydrationWarning>
       <body
-        className={`${headingFont.variable} ${bodyFont.variable}`}
+        className={`${headingFont.variable} ${bodyFont.variable} antialiased`}
         suppressHydrationWarning
       >
         <Script id="strip-bis-skin-checked" strategy="beforeInteractive">

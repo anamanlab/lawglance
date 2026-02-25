@@ -50,12 +50,12 @@ export function buildMessage(
 
 export function buildStatusTone(status: SupportContext["status"] | null): string {
   if (status === "success") {
-    return "bg-emerald-100 text-emerald-800 border-emerald-300";
+    return "bg-[#eef2e7] text-[#5f7248] border-[#b8c6a6]";
   }
   if (status === "error") {
     return "bg-red-100 text-red-800 border-red-300";
   }
-  return "bg-slate-100 text-slate-700 border-slate-300";
+  return "bg-[#eeeae0] text-muted border-[rgba(176,174,165,0.75)]";
 }
 
 export function phaseLabel(submissionPhase: "chat" | "cases" | "export" | "idle"): string {

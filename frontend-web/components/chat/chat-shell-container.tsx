@@ -456,7 +456,7 @@ export function ChatShell({
   );
 
   return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 rounded-3xl border border-slate-300/90 bg-white/90 p-4 shadow-[0_22px_56px_rgba(15,23,42,0.14)] backdrop-blur-sm md:p-6">
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-4 rounded-3xl border border-[rgba(176,174,165,0.75)] bg-[rgba(250,249,245,0.92)] p-4 shadow-[0_22px_56px_rgba(20,20,19,0.12)] backdrop-blur-sm md:p-6">
       <ChatHeader legalDisclaimer={legalDisclaimer} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,1fr)]">

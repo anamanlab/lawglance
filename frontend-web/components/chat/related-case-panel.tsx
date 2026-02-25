@@ -10,6 +10,8 @@ export function RelatedCasePanel({
   relatedCasesStatus,
   relatedCases,
   onSearch,
+  onExportCase,
+  exportingCaseId,
 }: RelatedCasePanelProps): JSX.Element {
   const resultsListId = "related-case-results";
   const hasResults = relatedCases.length > 0;
@@ -64,6 +66,27 @@ export function RelatedCasePanel({
               <p className="mt-1 text-[11px] text-slate-500">
                 Decision date: {result.decision_date}
               </p>
+              <div className="mt-2">
+                <button
+                  className="min-h-[36px] min-w-[44px] rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 transition duration-200 ease-out hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={
+                    isSubmitting || !result.source_id || !result.document_url
+                  }
+                  onClick={() => onExportCase(result)}
+                  type="button"
+                >
+                  {isSubmitting &&
+                  submissionPhase === "export" &&
+                  exportingCaseId === result.case_id
+                    ? "Exporting..."
+                    : "Export PDF"}
+                </button>
+                {!result.source_id || !result.document_url ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Export unavailable for this case result.
+                  </p>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>

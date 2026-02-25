@@ -54,6 +54,7 @@ export function ChatShell({
   const [relatedCases, setRelatedCases] = useState<CaseSearchResult[]>([]);
   const [relatedCasesStatus, setRelatedCasesStatus] = useState("");
   const [pendingCaseQuery, setPendingCaseQuery] = useState<string | null>(null);
+  const [exportingCaseId, setExportingCaseId] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
 
   const apiClient = useMemo(() => createApiClient({ apiBaseUrl }), [apiBaseUrl]);
@@ -99,6 +100,7 @@ export function ChatShell({
       setRelatedCases([]);
       setRelatedCasesStatus("");
       setPendingCaseQuery(null);
+      setExportingCaseId(null);
       setIsSubmitting(true);
       setSubmissionPhase("chat");
 
@@ -177,6 +179,7 @@ export function ChatShell({
 
     setIsSubmitting(true);
     setSubmissionPhase("cases");
+    setExportingCaseId(null);
     setRelatedCasesStatus("Searching official Canadian case law...");
 
     try {
@@ -220,6 +223,97 @@ export function ChatShell({
       setSubmissionPhase("idle");
     }
   }, [apiClient, isSubmitting, pendingCaseQuery, showOperationalPanels]);
+
+  const runCaseExport = useCallback(
+    async (caseResult: CaseSearchResult): Promise<void> => {
+      if (isSubmitting) {
+        return;
+      }
+
+      if (!caseResult.source_id || !caseResult.document_url) {
+        setRelatedCasesStatus(
+          "Case export is unavailable because the source metadata is missing for this result."
+        );
+        return;
+      }
+
+      const userApproved =
+        typeof window !== "undefined"
+          ? window.confirm(
+              "Export this case PDF now? This will download the document from the official source."
+            )
+          : false;
+      if (!userApproved) {
+        setRelatedCasesStatus("Case export cancelled. No file was downloaded.");
+        return;
+      }
+
+      setIsSubmitting(true);
+      setSubmissionPhase("export");
+      setExportingCaseId(caseResult.case_id);
+      setRelatedCasesStatus("Preparing case PDF export...");
+
+      try {
+        const exportResult = await apiClient.exportCasePdf({
+          source_id: caseResult.source_id,
+          case_id: caseResult.case_id,
+          document_url: caseResult.document_url,
+          format: "pdf",
+          user_approved: true,
+        });
+
+        if (!exportResult.ok) {
+          const errorCopy = ERROR_COPY[exportResult.error.code];
+          const errorDetail = exportResult.error.message || errorCopy.detail;
+          const statusMessage = showOperationalPanels
+            ? `${errorCopy.title}: ${errorDetail} (Trace ID: ${exportResult.traceId ?? "Unavailable"})`
+            : "Case export is temporarily unavailable. Please try again shortly.";
+          setRelatedCasesStatus(statusMessage);
+          setSupportContext({
+            endpoint: "/api/export/cases",
+            status: "error",
+            traceId: exportResult.traceId,
+            code: exportResult.error.code,
+            traceIdMismatch: exportResult.traceIdMismatch,
+          });
+          return;
+        }
+
+        const fallbackFilename = `${caseResult.case_id}.pdf`;
+        const downloadFilename = exportResult.data.filename || fallbackFilename;
+        if (typeof window.URL.createObjectURL !== "function") {
+          setRelatedCasesStatus(
+            `Case export completed, but automatic download is unavailable in this browser (${downloadFilename}).`
+          );
+          return;
+        }
+        const objectUrl = window.URL.createObjectURL(exportResult.data.blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = objectUrl;
+        downloadLink.download = downloadFilename;
+        downloadLink.rel = "noopener";
+        document.body.append(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        if (typeof window.URL.revokeObjectURL === "function") {
+          window.URL.revokeObjectURL(objectUrl);
+        }
+
+        setRelatedCasesStatus(`Download started: ${downloadFilename}`);
+        setSupportContext({
+          endpoint: "/api/export/cases",
+          status: "success",
+          traceId: exportResult.traceId,
+          traceIdMismatch: false,
+        });
+      } finally {
+        setExportingCaseId(null);
+        setIsSubmitting(false);
+        setSubmissionPhase("idle");
+      }
+    },
+    [apiClient, isSubmitting, showOperationalPanels]
+  );
 
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>): void => {
@@ -296,10 +390,14 @@ export function ChatShell({
             pendingCaseQuery={pendingCaseQuery}
             relatedCases={relatedCases}
             relatedCasesStatus={relatedCasesStatus}
+            onExportCase={(caseResult) => {
+              void runCaseExport(caseResult);
+            }}
             showDiagnostics={showOperationalPanels}
             statusToneClass={statusToneClass}
             submissionPhase={submissionPhase}
             supportStatus={supportContext?.status ?? null}
+            exportingCaseId={exportingCaseId}
           />
 
           {showOperationalPanels ? (

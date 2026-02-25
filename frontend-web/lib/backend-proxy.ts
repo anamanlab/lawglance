@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { getServerRuntimeConfig } from "@/lib/server-runtime-config";
+import {
+  getServerRuntimeConfig,
+  isHardenedRuntimeEnvironment,
+} from "@/lib/server-runtime-config";
 
 const LEGAL_DISCLAIMER =
   "IMMCAD provides Canadian immigration information only and does not provide legal advice or representation.";
@@ -12,6 +15,11 @@ const SCAFFOLD_CITATION = {
   pin: "s.11",
   snippet: "A foreign national must apply for a visa or authorization before entering Canada.",
 };
+const FORWARDED_RESPONSE_HEADERS = [
+  "content-type",
+  "content-disposition",
+  "x-export-policy-reason",
+] as const;
 
 function buildUpstreamUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
@@ -151,8 +159,23 @@ function buildScaffoldFallbackResponse(
   return null;
 }
 
+function buildForwardedResponseHeaders(upstreamResponse: Response): Headers {
+  const responseHeaders = new Headers();
+  for (const headerName of FORWARDED_RESPONSE_HEADERS) {
+    const headerValue = upstreamResponse.headers.get(headerName);
+    if (headerValue) {
+      responseHeaders.set(headerName, headerValue);
+    }
+  }
+  const traceId = upstreamResponse.headers.get("x-trace-id");
+  if (traceId) {
+    responseHeaders.set("x-trace-id", traceId);
+  }
+  return responseHeaders;
+}
+
 function isScaffoldFallbackAllowed(): boolean {
-  return (process.env.NODE_ENV ?? "development") !== "production";
+  return !isHardenedRuntimeEnvironment();
 }
 
 export async function forwardPostRequest(
@@ -176,7 +199,7 @@ export async function forwardPostRequest(
     }
     return buildProxyErrorResponse(
       503,
-      "IMMCAD backend configuration is missing for this deployment. Set IMMCAD_API_BASE_URL (https://...) and IMMCAD_API_BEARER_TOKEN.",
+      "IMMCAD backend configuration is missing for this deployment. Set IMMCAD_API_BASE_URL (https://...) and IMMCAD_API_BEARER_TOKEN (or API_BEARER_TOKEN compatibility alias).",
       traceId
     );
   }
@@ -198,16 +221,13 @@ export async function forwardPostRequest(
       body: requestBody,
       cache: "no-store",
     });
-    const payload = await upstreamResponse.text();
-    const traceId = upstreamResponse.headers.get("x-trace-id");
-    const contentType = upstreamResponse.headers.get("content-type") ?? "application/json";
-
+    const payload = await upstreamResponse.arrayBuffer();
     const response = new NextResponse(payload, {
       status: upstreamResponse.status,
-      headers: { "content-type": contentType },
+      headers: buildForwardedResponseHeaders(upstreamResponse),
     });
-    if (traceId) {
-      response.headers.set("x-trace-id", traceId);
+    if (!response.headers.get("content-type")) {
+      response.headers.set("content-type", "application/octet-stream");
     }
     return response;
   } catch {

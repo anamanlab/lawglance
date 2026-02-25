@@ -22,10 +22,10 @@ export type ChatShellProps = {
   showOperationalPanels?: boolean;
 };
 
-export type SubmissionPhase = "idle" | "chat" | "cases";
+export type SubmissionPhase = "idle" | "chat" | "cases" | "export";
 
 export type SupportContext = {
-  endpoint: "/api/chat" | "/api/search/cases";
+  endpoint: "/api/chat" | "/api/search/cases" | "/api/export/cases";
   status: "success" | "error";
   traceId: string | null;
   code?: ApiErrorCode;
@@ -57,4 +57,6 @@ export type RelatedCasePanelProps = {
   relatedCasesStatus: string;
   relatedCases: CaseSearchResult[];
   onSearch: () => void;
+  onExportCase: (result: CaseSearchResult) => void;
+  exportingCaseId: string | null;
 };

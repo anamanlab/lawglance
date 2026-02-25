@@ -5,7 +5,8 @@ export const ERROR_COPY: Record<ApiErrorCode, ErrorCopy> = {
   UNAUTHORIZED: {
     title: "Authentication required",
     detail: "We could not authenticate your request to the service.",
-    action: "Please refresh and try again.",
+    action:
+      "Verify IMMCAD_API_BEARER_TOKEN (or API_BEARER_TOKEN) is configured on the frontend server, then retry.",
     retryable: true,
   },
   VALIDATION_ERROR: {

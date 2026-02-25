@@ -101,7 +101,7 @@ export function MessageComposer({
             type="submit"
           >
             {isSubmitting
-              ? submissionPhase === "cases"
+              ? submissionPhase === "cases" || submissionPhase === "export"
                 ? "Loading..."
                 : "Sending..."
               : "Send"}

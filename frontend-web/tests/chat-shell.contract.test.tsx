@@ -9,6 +9,7 @@ import {
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
   SOURCE_UNAVAILABLE_ERROR,
+  UNAUTHORIZED_ERROR,
 } from "@/tests/fixtures/chat-contract-fixtures";
 
 const LEGAL_DISCLAIMER =
@@ -28,6 +29,25 @@ function jsonResponse(
     status,
     headers: {
       "content-type": "application/json",
+      ...headers,
+    },
+  });
+}
+
+function pdfResponse(
+  payload: Uint8Array,
+  {
+    status = 200,
+    headers = {},
+  }: {
+    status?: number;
+    headers?: Record<string, string>;
+  } = {}
+): Response {
+  return new Response(payload, {
+    status,
+    headers: {
+      "content-type": "application/pdf",
       ...headers,
     },
   });
@@ -158,5 +178,158 @@ describe("chat shell contract behavior", () => {
       expect(screen.getByText("Last outcome: error")).toBeTruthy();
       expect(screen.getByText("Last error code: SOURCE_UNAVAILABLE")).toBeTruthy();
     });
+  });
+
+  it("shows actionable auth guidance when API returns unauthorized", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(UNAUTHORIZED_ERROR, {
+        status: 401,
+        headers: { "x-trace-id": "trace-auth" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does sponsorship for a spouse work in Canada?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Authentication required")).toBeTruthy();
+    expect(screen.getByText("Missing or invalid bearer token")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Verify IMMCAD_API_BEARER_TOKEN (or API_BEARER_TOKEN) is configured on the frontend server, then retry."
+      )
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry last request" })).toBeTruthy();
+  });
+
+  it("requires explicit user approval before triggering case export", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-case-success" },
+        })
+      );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court examples for study permit refusals."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+    await screen.findByText("Sample Tribunal Decision");
+
+    await user.click(screen.getByRole("button", { name: "Export PDF" }));
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByText("Case export cancelled. No file was downloaded.")
+    ).toBeTruthy();
+  });
+
+  it("exports a case PDF after approval and updates support context", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-case-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        pdfResponse(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+          headers: {
+            "x-trace-id": "trace-export-success",
+            "content-disposition": 'attachment; filename="case-export.pdf"',
+            "x-export-policy-reason": "source_export_allowed",
+          },
+        })
+      );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const createObjectURLMock = vi.fn(() => "blob:case-export");
+    const revokeObjectURLMock = vi.fn();
+    const linkClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURLMock,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURLMock,
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court examples for study permit refusals."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+    await screen.findByText("Sample Tribunal Decision");
+
+    await user.click(screen.getByRole("button", { name: "Export PDF" }));
+
+    await screen.findByText("Download started: case-export.pdf");
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://api.immcad.test/api/export/cases");
+    expect(fetchMock.mock.calls[2]?.[1]).toEqual(
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"user_approved":true'),
+      })
+    );
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:case-export");
+    expect(linkClickSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Last endpoint: /api/export/cases")).toBeTruthy();
+    expect(screen.getByText("Trace ID: trace-export-success")).toBeTruthy();
   });
 });

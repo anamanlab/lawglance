@@ -46,6 +46,8 @@ export const CASE_SEARCH_SUCCESS_RESPONSE: CaseSearchResponsePayload = {
       citation: "2025 FC 100",
       decision_date: "2025-01-11",
       url: "https://example.test/cases/1",
+      source_id: "canlii",
+      document_url: "https://example.test/cases/1/document.pdf",
     },
   ],
 };
@@ -55,5 +57,13 @@ export const SOURCE_UNAVAILABLE_ERROR = {
     code: "SOURCE_UNAVAILABLE",
     message: "Authoritative source is unavailable.",
     trace_id: "error-trace-body",
+  },
+};
+
+export const UNAUTHORIZED_ERROR = {
+  error: {
+    code: "UNAUTHORIZED",
+    message: "Missing or invalid bearer token",
+    trace_id: "error-trace-auth",
   },
 };

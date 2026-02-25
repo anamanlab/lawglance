@@ -58,9 +58,12 @@ export function buildStatusTone(status: SupportContext["status"] | null): string
   return "bg-slate-100 text-slate-700 border-slate-300";
 }
 
-export function phaseLabel(submissionPhase: "chat" | "cases" | "idle"): string {
+export function phaseLabel(submissionPhase: "chat" | "cases" | "export" | "idle"): string {
   if (submissionPhase === "cases") {
     return "Searching related cases...";
+  }
+  if (submissionPhase === "export") {
+    return "Preparing case PDF export...";
   }
   if (submissionPhase === "chat") {
     return "Sending request...";

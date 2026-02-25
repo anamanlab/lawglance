@@ -14,6 +14,9 @@ function renderLoadingCopy(submissionPhase: SubmissionPhase): string {
   if (submissionPhase === "cases") {
     return "Loading related case references...";
   }
+  if (submissionPhase === "export") {
+    return "Preparing case PDF export...";
+  }
   return "Submitting your question...";
 }
 

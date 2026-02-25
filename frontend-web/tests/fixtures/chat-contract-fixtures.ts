@@ -46,6 +46,11 @@ export const CASE_SEARCH_SUCCESS_RESPONSE: CaseSearchResponsePayload = {
       citation: "2025 FC 100",
       decision_date: "2025-01-11",
       url: "https://example.test/cases/1",
+      source_id: "SCC_DECISIONS",
+      document_url:
+        "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      export_allowed: true,
+      export_policy_reason: "source_export_allowed",
     },
   ],
 };
@@ -55,5 +60,22 @@ export const SOURCE_UNAVAILABLE_ERROR = {
     code: "SOURCE_UNAVAILABLE",
     message: "Authoritative source is unavailable.",
     trace_id: "error-trace-body",
+  },
+};
+
+export const UNAUTHORIZED_ERROR = {
+  error: {
+    code: "UNAUTHORIZED",
+    message: "Missing or invalid bearer token",
+    trace_id: "error-trace-auth",
+  },
+};
+
+export const EXPORT_POLICY_BLOCKED_ERROR = {
+  error: {
+    code: "POLICY_BLOCKED",
+    message: "Case export blocked by source policy (source_export_blocked_by_policy)",
+    trace_id: "error-trace-export-policy",
+    policy_reason: "source_export_blocked_by_policy",
   },
 };

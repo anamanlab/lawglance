@@ -146,13 +146,30 @@ CITATION_TRUSTED_DOMAINS=laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.ca
 
 Production/CI policy:
 
-- Set `ENVIRONMENT=production` (or `prod`/`ci`) only in hardened environments.
+- Set `ENVIRONMENT=production` (or `prod`/`ci`, including aliases like `production-us-east`, `prod_blue`, `ci-smoke`) only in hardened environments.
+- `IMMCAD_ENVIRONMENT` is accepted as a compatibility alias for `ENVIRONMENT`; when both are set they must match.
 - `IMMCAD_API_BEARER_TOKEN` is the canonical token variable and is mandatory in `production`/`prod`/`ci` (`API_BEARER_TOKEN` is supported only as a compatibility alias).
 - `CITATION_TRUSTED_DOMAINS` must be explicitly set in `production`/`prod`/`ci`.
 - `EXPORT_POLICY_GATE_ENABLED` must remain enabled in `production`/`prod`/`ci` (startup rejects disabled values).
 - `EXPORT_MAX_DOWNLOAD_BYTES` controls export payload caps (default `10485760`, i.e. 10 MB).
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` is recommended in hardened deployments to hide non-exportable case results from UI.
 - `GET /ops/metrics` requires a valid bearer token in every environment.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
+- If the team adopts `git-secret` for encrypted repo-stored env bundles, use it only for approved non-production/bootstrap workflows and follow `docs/release/git-secret-runbook.md` (do not replace GitHub/Vercel runtime secrets).
+
+Recommended hardened baseline:
+
+```dotenv
+ENVIRONMENT=production-us-east
+IMMCAD_API_BEARER_TOKEN=<secret>
+ENABLE_SCAFFOLD_PROVIDER=false
+ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false
+EXPORT_POLICY_GATE_ENABLED=true
+ENABLE_CASE_SEARCH=true
+ENABLE_OFFICIAL_CASE_SOURCES=true
+CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true
+CITATION_TRUSTED_DOMAINS=laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
+```
 
 ## Redis (optional but recommended)
 
@@ -211,6 +228,7 @@ Notes:
 - `pull` creates a local backup unless `--no-backup` is provided.
 - `validate` loads required keys from `<project-dir>/.env.example` and falls back to repo-root `.env.example`, plus explicit `--required` keys.
 - backup files are namespaced by project directory in `.env-backups/` to avoid collisions.
+- `git-secret` (if used) complements this workflow by encrypting repo-stored env bundles; it does not replace Vercel environment variables or `scripts/vercel_env_sync.py`.
 
 ## Troubleshooting
 

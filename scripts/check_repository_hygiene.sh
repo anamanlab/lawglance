@@ -1,9 +1,58 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+list_tracked_plaintext_env_files() {
+  git ls-files 2>/dev/null | while IFS= read -r path; do
+    base_name="${path##*/}"
+    case "$base_name" in
+      .env)
+        printf '%s\n' "$path"
+        ;;
+      .env.*)
+        case "$base_name" in
+          .env.example | *.secret)
+            continue
+            ;;
+        esac
+        printf '%s\n' "$path"
+        ;;
+    esac
+  done
+}
+
+filter_secret_scan_matches() {
+  while IFS= read -r line; do
+    case "$line" in
+      *.env.example:* | \
+      *.secret:* | \
+      Binary\ file\ *.secret\ matches | \
+      .gitsecret/*:* | \
+      Binary\ file\ .gitsecret/*\ matches)
+        continue
+        ;;
+    esac
+    printf '%s\n' "$line"
+  done
+}
+
 if git ls-files --error-unmatch .env >/dev/null 2>&1; then
   echo "ERROR: .env is tracked in git. Run: git rm --cached .env"
   exit 1
+fi
+
+if git ls-files --error-unmatch .gitsecret/keys/random_seed >/dev/null 2>&1; then
+  echo "ERROR: .gitsecret/keys/random_seed is tracked in git. Run: git rm --cached .gitsecret/keys/random_seed"
+  exit 1
+fi
+
+tracked_plaintext_env_files=""
+if tracked_plaintext_env_files="$(list_tracked_plaintext_env_files)"; then
+  if [ -n "$tracked_plaintext_env_files" ]; then
+    echo "ERROR: Found tracked plaintext .env files (excluding templates/encrypted artifacts)."
+    echo "$tracked_plaintext_env_files"
+    echo "Remediation: git rm --cached <path> (keep templates as .env.example and encrypted files as *.secret)"
+    exit 1
+  fi
 fi
 
 # High-risk secret pattern scan on tracked files.
@@ -17,8 +66,13 @@ fi
 
 case "$grep_rc" in
   0)
+    filtered_grep_output="$(printf '%s\n' "$grep_output" | filter_secret_scan_matches)"
+    if [ -z "$filtered_grep_output" ]; then
+      echo "[OK] Repository hygiene checks passed."
+      exit 0
+    fi
     echo "ERROR: Potential API secret detected in tracked files."
-    echo "$grep_output"
+    echo "$filtered_grep_output"
     echo "Review matches with: git grep -nE \"$SECRET_PATTERN\" -- . ':(exclude).env.example'"
     exit 1
     ;;

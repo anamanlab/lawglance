@@ -40,10 +40,29 @@ export type CaseSearchResult = {
   citation: string;
   decision_date: string;
   url: string;
+  source_id?: string | null;
+  document_url?: string | null;
+  export_allowed?: boolean | null;
+  export_policy_reason?: string | null;
 };
 
 export type CaseSearchResponsePayload = {
   results: CaseSearchResult[];
+};
+
+export type CaseExportRequestPayload = {
+  source_id: string;
+  case_id: string;
+  document_url: string;
+  format?: "pdf";
+  user_approved: true;
+};
+
+export type CaseExportResponsePayload = {
+  blob: Blob;
+  filename: string | null;
+  contentType: string;
+  policyReason: string | null;
 };
 
 export type ApiErrorCode =
@@ -72,6 +91,7 @@ export type ApiFailure = {
   status: number;
   traceId: string | null;
   traceIdMismatch: boolean;
+  policyReason: string | null;
   error: ApiError;
 };
 
@@ -81,6 +101,7 @@ type ParsedErrorEnvelope = {
   code: ApiErrorCode;
   message: string;
   traceId: string | null;
+  policyReason: string | null;
 };
 
 type ApiClientOptions = {
@@ -93,6 +114,7 @@ const REQUEST_HEADERS: Record<string, string> = {
   accept: "application/json",
   "content-type": "application/json"
 };
+const PDF_ACCEPT_HEADER = "application/pdf, application/json";
 
 function normalizeTraceId(value: string | null | undefined): string | null {
   const trimmedValue = value?.trim();
@@ -138,6 +160,10 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
     traceId: normalizeTraceId(
       typeof errorField.trace_id === "string" ? errorField.trace_id : null
     ),
+    policyReason:
+      typeof errorField.policy_reason === "string"
+        ? normalizeTraceId(errorField.policy_reason)
+        : null,
   };
 }
 
@@ -155,13 +181,21 @@ function buildApiUrl(apiBaseUrl: string, path: string): string {
 }
 
 function buildRequestHeaders(bearerToken?: string | null): Record<string, string> {
-  if (!bearerToken) {
-    return REQUEST_HEADERS;
-  }
-  return {
+  return buildRequestHeadersWithOverrides(bearerToken);
+}
+
+function buildRequestHeadersWithOverrides(
+  bearerToken?: string | null,
+  overrides?: Record<string, string>
+): Record<string, string> {
+  const headers: Record<string, string> = {
     ...REQUEST_HEADERS,
-    authorization: `Bearer ${bearerToken}`,
+    ...overrides,
   };
+  if (bearerToken) {
+    headers.authorization = `Bearer ${bearerToken}`;
+  }
+  return headers;
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
@@ -231,6 +265,7 @@ async function postJson<TPayload>(
       status: response.status,
       traceId: headerTraceId ?? bodyTraceId,
       traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
       error: parsedError
         ? {
             code: parsedError.code,
@@ -244,6 +279,114 @@ async function postJson<TPayload>(
       status: 0,
       traceId: null,
       traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "PROVIDER_ERROR",
+        message: "Unable to reach the IMMCAD API endpoint.",
+      },
+    };
+  }
+}
+
+function parseContentDispositionFilename(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      const decoded = decodeURIComponent(utf8Match[1].trim()).replace(/^"(.*)"$/, "$1");
+      return decoded || null;
+    } catch {
+      // Fallback to legacy filename parsing below.
+    }
+  }
+
+  const quotedMatch = value.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1].trim() || null;
+  }
+
+  const bareMatch = value.match(/filename=([^;]+)/i);
+  if (bareMatch?.[1]) {
+    return bareMatch[1].trim().replace(/^"(.*)"$/, "$1") || null;
+  }
+
+  return null;
+}
+
+async function postCaseExport(
+  options: ApiClientOptions,
+  payload: CaseExportRequestPayload
+): Promise<ApiResult<CaseExportResponsePayload>> {
+  if (payload.user_approved !== true) {
+    return {
+      ok: false,
+      status: 422,
+      traceId: null,
+      traceIdMismatch: false,
+      policyReason: "source_export_user_approval_required",
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Case export requires explicit user approval before download.",
+      },
+    };
+  }
+
+  const requestUrl = buildApiUrl(options.apiBaseUrl, "/export/cases");
+  try {
+    const response = await fetch(requestUrl, {
+      method: "POST",
+      headers: buildRequestHeadersWithOverrides(options.bearerToken, {
+        accept: PDF_ACCEPT_HEADER,
+      }),
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    const headerTraceId = normalizeTraceId(response.headers.get("x-trace-id"));
+
+    if (response.ok) {
+      const exportBlob = await response.blob();
+      return {
+        ok: true,
+        status: response.status,
+        traceId: headerTraceId,
+        data: {
+          blob: exportBlob,
+          filename: parseContentDispositionFilename(response.headers.get("content-disposition")),
+          contentType: response.headers.get("content-type") ?? "application/pdf",
+          policyReason: normalizeTraceId(response.headers.get("x-export-policy-reason")),
+        },
+      };
+    }
+
+    const responseBody = await parseResponseBody(response);
+    const parsedError = parseErrorEnvelope(responseBody);
+    const bodyTraceId = parsedError?.traceId ?? null;
+    const traceIdMismatch =
+      Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+
+    return {
+      ok: false,
+      status: response.status,
+      traceId: headerTraceId ?? bodyTraceId,
+      traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
+      error: parsedError
+        ? {
+            code: parsedError.code,
+            message: parsedError.message,
+          }
+        : buildFallbackError(response.status),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      traceId: null,
+      traceIdMismatch: false,
+      policyReason: null,
       error: {
         code: "PROVIDER_ERROR",
         message: "Unable to reach the IMMCAD API endpoint.",
@@ -263,6 +406,11 @@ export function createApiClient(options: ApiClientOptions) {
       payload: CaseSearchRequestPayload
     ): Promise<ApiResult<CaseSearchResponsePayload>> {
       return postJson<CaseSearchResponsePayload>(options, "/search/cases", payload);
+    },
+    exportCasePdf(
+      payload: CaseExportRequestPayload
+    ): Promise<ApiResult<CaseExportResponsePayload>> {
+      return postCaseExport(options, payload);
     },
   };
 }

@@ -51,13 +51,13 @@ def extract_links(content: str) -> tuple[list[tuple[str, str]], list[str]]:
     return markdown_links, sorted(external_urls)
 
 
-def _validate_file_anchor(linked_file: Path, anchor: str) -> bool:
+def _validate_file_anchor(linked_file: Path, anchor: str) -> tuple[bool, str | None]:
     try:
         content = linked_file.read_text(encoding="utf-8")
-    except Exception:
-        return False
+    except Exception as exc:
+        return False, str(exc)
     anchors = extract_headings(content)
-    return slugify_heading(anchor) in anchors
+    return slugify_heading(anchor) in anchors, None
 
 
 def validate_relative_link(base_path: Path, rel_link: str, root_dir: Path) -> AuditIssue | None:
@@ -111,7 +111,15 @@ def validate_relative_link(base_path: Path, rel_link: str, root_dir: Path) -> Au
         )
 
     if anchor and target_path.is_file() and target_path.suffix.lower() in {".md", ".mdx"}:
-        if not _validate_file_anchor(target_path, anchor):
+        anchor_valid, anchor_error = _validate_file_anchor(target_path, anchor)
+        if anchor_error is not None:
+            return AuditIssue(
+                severity="medium",
+                category="link",
+                message=f"File read error while validating heading anchor {rel_link}: {anchor_error}",
+                hint="Ensure the target file is readable before validating heading anchors.",
+            )
+        if not anchor_valid:
             return AuditIssue(
                 severity="high",
                 category="link",

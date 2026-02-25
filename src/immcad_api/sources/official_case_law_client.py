@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from datetime import date
 import re
+from threading import Lock, Thread, current_thread
+import time
 import xml.etree.ElementTree as ET
 
 import httpx
@@ -87,9 +90,16 @@ _IMMIGRATION_TEXT_PATTERNS = (
     re.compile(r"citizenship and immigration"),
     re.compile(r"immigration"),
     re.compile(r"refugee"),
+    re.compile(r"asylum"),
+    re.compile(r"sponsor"),
+    re.compile(r"visa"),
+    re.compile(r"permit"),
     re.compile(r"permanent resident"),
+    re.compile(r"residence"),
     re.compile(r"inadmissib"),
     re.compile(r"admissib"),
+    re.compile(r"removal"),
+    re.compile(r"deport"),
     re.compile(r"express entry"),
     re.compile(r"\birpa\b"),
     re.compile(r"\birpr\b"),
@@ -101,27 +111,181 @@ _YEAR_PATTERN = re.compile(r"\b((?:19|20)\d{2})\b")
 class OfficialCaseLawClient:
     source_registry: SourceRegistry
     timeout_seconds: float = 8.0
+    cache_ttl_seconds: float = 300.0
+    stale_cache_ttl_seconds: float = 900.0
+    _cache_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _cached_records_by_source: dict[str, list[CourtDecisionRecord]] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    _cache_refreshed_at_monotonic_by_source: dict[str, float] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _refresh_thread: Thread | None = field(default=None, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.cache_ttl_seconds <= 0:
+            raise ValueError("cache_ttl_seconds must be > 0")
+        if self.stale_cache_ttl_seconds < self.cache_ttl_seconds:
+            raise ValueError(
+                "stale_cache_ttl_seconds must be >= cache_ttl_seconds"
+            )
 
     def search_cases(self, request: CaseSearchRequest) -> CaseSearchResponse:
         source_ids = self._resolve_source_ids(request.court)
-        records: list[CourtDecisionRecord] = []
+        resolved_sources, errors = self._resolve_sources(source_ids)
+
+        if not resolved_sources:
+            raise SourceUnavailableError(
+                "Official court case-law sources are currently unavailable. Please retry later."
+            )
+
+        cache_snapshot = self._get_cache_snapshot(source_ids)
+        if cache_snapshot is not None:
+            cached_records, cache_age = cache_snapshot
+            if cache_age <= self.cache_ttl_seconds:
+                return self._build_search_response(cached_records, request)
+            if cache_age <= self.stale_cache_ttl_seconds:
+                self._schedule_background_refresh(resolved_sources)
+                return self._build_search_response(cached_records, request)
+
+        records_by_source, fetch_errors = self._fetch_records_for_sources(resolved_sources)
+        errors.extend(fetch_errors)
+        if records_by_source:
+            self._update_cache(records_by_source)
+            records = self._collect_records(source_ids, records_by_source)
+            return self._build_search_response(records, request)
+
+        if errors:
+            raise SourceUnavailableError(
+                "Official court case-law sources are currently unavailable. Please retry later."
+            )
+
+        return CaseSearchResponse(results=[])
+
+    def _resolve_sources(
+        self,
+        source_ids: tuple[str, ...],
+    ) -> tuple[list[tuple[str, str]], list[str]]:
+        resolved_sources: list[tuple[str, str]] = []
         errors: list[str] = []
+        for source_id in source_ids:
+            source = self.source_registry.get_source(source_id)
+            if source is None:
+                errors.append(f"{source_id}: source is not configured in registry")
+                continue
+            resolved_sources.append((source_id, str(source.url)))
+        return resolved_sources, errors
 
+    def _get_cache_snapshot(
+        self,
+        source_ids: tuple[str, ...],
+    ) -> tuple[list[CourtDecisionRecord], float] | None:
+        with self._cache_lock:
+            if not all(
+                source_id in self._cached_records_by_source for source_id in source_ids
+            ):
+                return None
+            if not all(
+                source_id in self._cache_refreshed_at_monotonic_by_source
+                for source_id in source_ids
+            ):
+                return None
+            now = time.monotonic()
+            cache_age = max(
+                now - self._cache_refreshed_at_monotonic_by_source[source_id]
+                for source_id in source_ids
+            )
+            records = self._collect_records(source_ids, self._cached_records_by_source)
+            return records, cache_age
+
+    def _update_cache(
+        self,
+        records_by_source: dict[str, list[CourtDecisionRecord]],
+    ) -> None:
+        refreshed_at = time.monotonic()
+        with self._cache_lock:
+            for source_id, records in records_by_source.items():
+                self._cached_records_by_source[source_id] = list(records)
+                self._cache_refreshed_at_monotonic_by_source[source_id] = refreshed_at
+
+    def _schedule_background_refresh(
+        self,
+        resolved_sources: list[tuple[str, str]],
+    ) -> None:
+        with self._cache_lock:
+            if self._refresh_thread and self._refresh_thread.is_alive():
+                return
+            refresh_thread = Thread(
+                target=self._refresh_cache_worker,
+                args=(list(resolved_sources),),
+                daemon=True,
+                name="official-case-cache-refresh",
+            )
+            self._refresh_thread = refresh_thread
+            refresh_thread.start()
+
+    def _refresh_cache_worker(self, resolved_sources: list[tuple[str, str]]) -> None:
+        try:
+            records_by_source, _ = self._fetch_records_for_sources(resolved_sources)
+            if records_by_source:
+                self._update_cache(records_by_source)
+        finally:
+            with self._cache_lock:
+                if self._refresh_thread is current_thread():
+                    self._refresh_thread = None
+
+    def _fetch_and_parse_source_payload(
+        self,
+        *,
+        source_id: str,
+        source_url: str,
+    ) -> list[CourtDecisionRecord]:
         with httpx.Client(timeout=self.timeout_seconds) as client:
-            for source_id in source_ids:
-                source = self.source_registry.get_source(source_id)
-                if source is None:
-                    continue
+            response = client.get(source_url)
+            response.raise_for_status()
+        return self._parse_source_payload(source_id, response.content)
 
+    def _fetch_records_for_sources(
+        self,
+        resolved_sources: list[tuple[str, str]],
+    ) -> tuple[dict[str, list[CourtDecisionRecord]], list[str]]:
+        records_by_source: dict[str, list[CourtDecisionRecord]] = {}
+        errors: list[str] = []
+        max_workers = min(len(resolved_sources), 3)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(
+                    self._fetch_and_parse_source_payload,
+                    source_id=source_id,
+                    source_url=source_url,
+                ): source_id
+                for source_id, source_url in resolved_sources
+            }
+            for future in as_completed(futures):
+                source_id = futures[future]
                 try:
-                    response = client.get(str(source.url))
-                    response.raise_for_status()
-                    records.extend(
-                        self._parse_source_payload(source_id, response.content)
-                    )
+                    records_by_source[source_id] = future.result()
                 except Exception as exc:
                     errors.append(f"{source_id}: {exc}")
+        return records_by_source, errors
 
+    def _collect_records(
+        self,
+        source_ids: tuple[str, ...],
+        records_by_source: dict[str, list[CourtDecisionRecord]],
+    ) -> list[CourtDecisionRecord]:
+        records: list[CourtDecisionRecord] = []
+        for source_id in source_ids:
+            records.extend(records_by_source.get(source_id, []))
+        return records
+
+    def _build_search_response(
+        self,
+        records: list[CourtDecisionRecord],
+        request: CaseSearchRequest,
+    ) -> CaseSearchResponse:
         ranked_records = self._rank_records(records, request.query)
         if ranked_records:
             return CaseSearchResponse(
@@ -130,15 +294,6 @@ class OfficialCaseLawClient:
                     for record in ranked_records[: request.limit]
                 ]
             )
-
-        if records:
-            return CaseSearchResponse(results=[])
-
-        if errors:
-            raise SourceUnavailableError(
-                "Official court case-law sources are currently unavailable. Please retry later."
-            )
-
         return CaseSearchResponse(results=[])
 
     def _resolve_source_ids(self, court: str | None) -> tuple[str, ...]:
@@ -232,12 +387,6 @@ class OfficialCaseLawClient:
 
             if immigration_focused and record.court_code in {"FC", "FCA"}:
                 score += 3
-            if (
-                immigration_focused
-                and record.court_code == "SCC"
-                and immigration_signal_hits == 0
-            ):
-                score -= 3
             if score <= 0:
                 continue
 
@@ -267,4 +416,6 @@ class OfficialCaseLawClient:
             citation=record.citation or "Unreported",
             decision_date=decision_date,
             url=record.decision_url,
+            source_id=record.source_id,
+            document_url=record.pdf_url or record.decision_url,
         )

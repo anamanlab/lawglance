@@ -54,6 +54,10 @@ class CaseSearchResult(BaseModel):
     citation: str
     decision_date: date
     url: str
+    source_id: str | None = None
+    document_url: str | None = None
+    export_allowed: bool | None = None
+    export_policy_reason: str | None = None
 
 
 class CaseSearchResponse(BaseModel):
@@ -65,6 +69,7 @@ class CaseExportRequest(BaseModel):
     case_id: str = Field(min_length=1, max_length=256)
     document_url: HttpUrl
     format: Literal["pdf"] = "pdf"
+    user_approved: bool = False
 
 
 class CaseExportResponse(BaseModel):

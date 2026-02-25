@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from immcad_api.errors import SourceUnavailableError
+from immcad_api.errors import RateLimitError, SourceUnavailableError
 from immcad_api.schemas import CaseSearchRequest, CaseSearchResponse, CaseSearchResult
 from immcad_api.services.case_search_service import CaseSearchService
 
@@ -32,6 +32,17 @@ class _CanliiClient:
         del request
         self.calls += 1
         return self.response
+
+
+class _FailingCanliiClient:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.calls = 0
+
+    def search_cases(self, request: CaseSearchRequest) -> CaseSearchResponse:
+        del request
+        self.calls += 1
+        raise self.error
 
 
 def test_case_search_service_uses_official_response_first() -> None:
@@ -96,3 +107,48 @@ def test_case_search_service_falls_back_to_canlii_when_official_unavailable() ->
     assert official.calls == 1
     assert canlii.calls == 1
     assert response.results[0].title == "CanLII fallback"
+
+
+def test_case_search_service_uses_canlii_when_official_returns_no_results() -> None:
+    official = _OfficialClient(response=CaseSearchResponse(results=[]))
+    canlii = _CanliiClient(
+        response=CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="canlii-2",
+                    title="CanLII supplemental result",
+                    citation="2026 FC 2",
+                    decision_date=date(2026, 1, 2),
+                    url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc2/2026fc2.html",
+                )
+            ]
+        )
+    )
+
+    service = CaseSearchService(canlii_client=canlii, official_client=official)
+    response = service.search(
+        CaseSearchRequest(query="work permit", jurisdiction="ca", court="fc", limit=2)
+    )
+
+    assert official.calls == 1
+    assert canlii.calls == 1
+    assert response.results[0].case_id == "canlii-2"
+
+
+def test_case_search_service_keeps_official_result_when_canlii_is_rate_limited() -> None:
+    official = _OfficialClient(response=CaseSearchResponse(results=[]))
+    canlii = _FailingCanliiClient(RateLimitError("CanLII quota reached"))
+
+    service = CaseSearchService(canlii_client=canlii, official_client=official)
+    response = service.search(
+        CaseSearchRequest(
+            query="temporary resident visa",
+            jurisdiction="ca",
+            court="fc",
+            limit=2,
+        )
+    )
+
+    assert official.calls == 1
+    assert canlii.calls == 1
+    assert response.results == []

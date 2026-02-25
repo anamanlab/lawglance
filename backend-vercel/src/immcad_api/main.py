@@ -28,7 +28,7 @@ from immcad_api.services import (
     official_grounding_catalog,
     scaffold_grounded_citations,
 )
-from immcad_api.settings import load_settings
+from immcad_api.settings import is_hardened_environment, load_settings
 from immcad_api.sources import CanLIIClient, OfficialCaseLawClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
@@ -144,6 +144,7 @@ def create_app() -> FastAPI:
         grounding_adapter=grounding_adapter,
         trusted_citation_domains=settings.citation_trusted_domains,
     )
+    hardened_environment = is_hardened_environment(settings.environment)
     case_search_service: CaseSearchService | None = None
     canlii_usage_limiter = None
     source_policy = None
@@ -153,16 +154,16 @@ def create_app() -> FastAPI:
             source_registry = load_source_registry()
             source_policy = load_source_policy()
         except FileNotFoundError as exc:
+            if hardened_environment:
+                raise ValueError(
+                    "Case-search assets are required in hardened environments; missing source registry or source policy files"
+                ) from exc
             LOGGER.warning(
                 "Case-search assets missing; disabling case-search routes",
                 exc_info=exc,
             )
         else:
-            allow_canlii_scaffold_fallback = settings.environment.lower() not in {
-                "production",
-                "prod",
-                "ci",
-            }
+            allow_canlii_scaffold_fallback = not hardened_environment
             canlii_usage_limiter = build_canlii_usage_limiter(
                 redis_url=settings.redis_url,
                 lock_ttl_seconds=max(settings.provider_timeout_seconds + 2.0, 6.0),
@@ -174,7 +175,11 @@ def create_app() -> FastAPI:
                     allow_scaffold_fallback=allow_canlii_scaffold_fallback,
                     usage_limiter=canlii_usage_limiter,
                 ),
-                official_client=OfficialCaseLawClient(source_registry=source_registry)
+                official_client=OfficialCaseLawClient(
+                    source_registry=source_registry,
+                    cache_ttl_seconds=settings.official_case_cache_ttl_seconds,
+                    stale_cache_ttl_seconds=settings.official_case_stale_cache_ttl_seconds,
+                )
                 if settings.enable_official_case_sources
                 else None,
             )
@@ -212,7 +217,7 @@ def create_app() -> FastAPI:
                     error = ErrorEnvelope(
                         error={
                             "code": "UNAUTHORIZED",
-                            "message": "API_BEARER_TOKEN must be configured to access ops endpoints",
+                            "message": "IMMCAD_API_BEARER_TOKEN must be configured to access ops endpoints (API_BEARER_TOKEN is supported as a compatibility alias)",
                             "trace_id": request.state.trace_id,
                         }
                     )
@@ -255,6 +260,7 @@ def create_app() -> FastAPI:
                         content=error.model_dump(),
                         headers={"x-trace-id": request.state.trace_id},
                     )
+                request.state.client_id = client_id
 
                 allowed = rate_limiter.allow(client_id)
                 if not allowed:
@@ -331,6 +337,7 @@ def create_app() -> FastAPI:
                 request_metrics=request_metrics,
                 export_policy_gate_enabled=settings.export_policy_gate_enabled,
                 export_max_download_bytes=settings.export_max_download_bytes,
+                case_search_official_only_results=settings.case_search_official_only_results,
             )
         )
     else:

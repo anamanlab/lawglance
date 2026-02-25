@@ -29,8 +29,8 @@ Issue:
 - Endpoints were publicly callable without any auth control.
 
 Mitigation implemented:
-- Added bearer-token gate for all `/api/*` routes via `API_BEARER_TOKEN`.
-- Policy: `API_BEARER_TOKEN` is required and enforced in production + CI environments; it may be optional for local development/ephemeral test runs only when guarded by developer-only configuration.
+- Added bearer-token gate for all `/api/*` routes via `IMMCAD_API_BEARER_TOKEN` (`API_BEARER_TOKEN` accepted as compatibility alias).
+- Policy: `IMMCAD_API_BEARER_TOKEN` is required and enforced in production + CI environments (with `API_BEARER_TOKEN` alias compatibility); it may be optional for local development/ephemeral test runs only when guarded by developer-only configuration.
 - Store tokens in a secrets manager (not in source control), and rotate them on a fixed schedule or after suspected exposure.
 
 ## 3. Fallback Observability Ambiguity

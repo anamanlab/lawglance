@@ -18,7 +18,9 @@ IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
 ```
 
 `NEXT_PUBLIC_IMMCAD_API_BASE_URL` should point to the local proxy route (`/api`) for browser calls.
-Set `IMMCAD_API_BEARER_TOKEN` on the server when backend bearer auth is enabled.
+Server-side proxy configuration reads only `IMMCAD_API_BASE_URL` (the `NEXT_PUBLIC_*` variable is not used as a server fallback).
+Set `IMMCAD_API_BEARER_TOKEN` on the server when backend bearer auth is enabled (`API_BEARER_TOKEN` is accepted as a compatibility alias).
+If both token variables are set, they must contain the same value.
 Do not expose bearer tokens through `NEXT_PUBLIC_*` variables.
 For production, `IMMCAD_API_BASE_URL` must use `https://`.
 Use `NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED=true|false` to stage rollout of the redesigned shell.

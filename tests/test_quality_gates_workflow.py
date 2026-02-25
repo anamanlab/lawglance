@@ -31,6 +31,7 @@ def test_quality_gates_runs_frontend_build_and_tests() -> None:
 def test_quality_gates_enforces_hardened_synthetic_citation_toggle() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Validate hardened runtime safety toggles" in workflow
+    assert "IMMCAD_ENVIRONMENT: ci-smoke" in workflow
     assert 'ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"' in workflow
     assert "CITATION_TRUSTED_DOMAINS:" in workflow
 
@@ -44,3 +45,22 @@ def test_quality_gates_includes_dependency_review_and_ingestion_smoke() -> None:
     assert match is not None, (
         f"expected pattern {pattern!r} in workflow snippet: {workflow[:220]!r}"
     )
+
+
+def test_quality_gates_has_concurrency_deduplication() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "concurrency:" in workflow
+    assert "quality-gates-${{ github.ref }}" in workflow
+    assert "cancel-in-progress: true" in workflow
+
+
+def test_quality_gates_pins_core_actions_to_commit_shas() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    for action_name in (
+        "actions/checkout",
+        "astral-sh/setup-uv",
+        "actions/setup-node",
+        "actions/upload-artifact",
+    ):
+        pattern = rf"{re.escape(action_name)}@[0-9a-f]{{40}}"
+        assert re.search(pattern, workflow), f"missing pinned SHA for {action_name}"

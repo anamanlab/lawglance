@@ -21,6 +21,10 @@ def test_build_metrics_url_strips_api_suffix() -> None:
         == "https://immcad.example/ops/metrics"
     )
     assert (
+        build_metrics_url("https://immcad.example/api/")
+        == "https://immcad.example/ops/metrics"
+    )
+    assert (
         build_metrics_url("https://immcad.example")
         == "https://immcad.example/ops/metrics"
     )
@@ -115,3 +119,8 @@ def test_evaluate_alert_rules_warns_when_request_volume_is_below_minimum() -> No
     assert report.failing_checks == 0
     assert report.warning_checks == len(rules)
     assert all(check.status == "warn" for check in checks)
+
+
+def test_build_metrics_url_rejects_empty_base_after_normalization() -> None:
+    with pytest.raises(ValueError, match="Base URL is required"):
+        build_metrics_url(" /api/ ")

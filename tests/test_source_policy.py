@@ -109,11 +109,37 @@ def test_source_export_policy_blocks_when_disabled() -> None:
 
 
 @pytest.mark.parametrize(
+    ("source_id", "expected_production_ingest", "expected_answer_citation", "expected_export"),
+    [
+        ("CANLII_TERMS", True, False, False),
+        ("A2AJ", False, False, False),
+        ("REFUGEE_LAW_LAB", False, False, False),
+    ],
+)
+def test_source_policy_restricted_source_flags(
+    source_id: str,
+    expected_production_ingest: bool,
+    expected_answer_citation: bool,
+    expected_export: bool,
+) -> None:
+    policy = load_source_policy()
+    source = policy.get_source(source_id)
+
+    assert source is not None
+    assert source.production_ingest_allowed is expected_production_ingest
+    assert source.answer_citation_allowed is expected_answer_citation
+    assert source.export_fulltext_allowed is expected_export
+
+
+@pytest.mark.parametrize(
     ("value", "expected"),
     [
         ("production", "production"),
         ("prod", "production"),
-        ("ci", "internal"),
+        ("ci", "production"),
+        ("production-us-east", "production"),
+        ("prod_blue", "production"),
+        ("ci-smoke", "production"),
         ("staging", "internal"),
         ("development", "internal"),
         (None, "internal"),

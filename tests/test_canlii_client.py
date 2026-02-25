@@ -79,6 +79,8 @@ def test_canlii_fallback_without_api_key(monkeypatch) -> None:
     response = client.search_cases(request)
     assert len(response.results) == 2
     assert response.results[0].url.startswith("https://www.canlii.org/")
+    assert response.results[0].source_id == "CANLII_CASE_BROWSE"
+    assert response.results[0].document_url == response.results[0].url
 
 
 def test_canlii_parses_success_payload(monkeypatch) -> None:
@@ -116,6 +118,8 @@ def test_canlii_parses_success_payload(monkeypatch) -> None:
     assert response.results[0].case_id == "c1"
     assert response.results[1].case_id == "c2"
     assert response.results[1].decision_date == date(2024, 1, 9)
+    assert response.results[0].source_id == "CANLII_CASE_BROWSE"
+    assert response.results[0].document_url == "https://www.canlii.org/c1"
 
 
 def test_canlii_handles_invalid_date(monkeypatch) -> None:

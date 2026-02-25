@@ -16,6 +16,7 @@ export function SupportContextPanel({
       <p>Last endpoint: {supportContext?.endpoint ?? "Not called yet"}</p>
       <p>Last outcome: {supportContext ? supportContext.status : "Not available"}</p>
       <p>Last error code: {supportContext?.code ?? "None"}</p>
+      <p>Last policy reason: {supportContext?.policyReason ?? "None"}</p>
       <p>Trace ID: {supportContext?.traceId ?? "Unavailable"}</p>
       {supportContext?.traceIdMismatch ? (
         <p className="mt-1 font-medium text-red-700">

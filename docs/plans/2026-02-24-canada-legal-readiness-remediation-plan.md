@@ -189,7 +189,7 @@
 Run and require all green before implementation is considered complete:
 
 ```bash
-scripts/venv_exec.sh mypy src tests
+scripts/venv_exec.sh mypy
 scripts/venv_exec.sh ruff check src/immcad_api scripts tests
 scripts/venv_exec.sh pytest -q \
   tests/test_canada_registry.py \

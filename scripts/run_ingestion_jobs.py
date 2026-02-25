@@ -13,6 +13,27 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 
+def _normalize_env_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return normalized
+
+
+def resolve_default_runtime_environment() -> str:
+    explicit_environment = _normalize_env_value(os.getenv("ENVIRONMENT"))
+    compatibility_environment = _normalize_env_value(os.getenv("IMMCAD_ENVIRONMENT"))
+    if (
+        explicit_environment
+        and compatibility_environment
+        and explicit_environment.lower() != compatibility_environment.lower()
+    ):
+        raise ValueError("ENVIRONMENT and IMMCAD_ENVIRONMENT must match when both are set")
+    return explicit_environment or compatibility_environment or "development"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run IMMCAD ingestion jobs from source registry")
     parser.add_argument(
@@ -38,8 +59,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--environment",
-        default=os.getenv("ENVIRONMENT", "development"),
-        help="Runtime environment for policy gates (development/staging/production/prod/ci).",
+        default=resolve_default_runtime_environment(),
+        help=(
+            "Runtime environment for policy gates "
+            "(development/staging/production/prod/ci, including hardened aliases)."
+        ),
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -71,7 +95,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     from immcad_api.ingestion import run_ingestion_jobs
 
-    args = parse_args()
+    try:
+        args = parse_args()
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     cadence = None if args.cadence == "all" else args.cadence
 
     report = run_ingestion_jobs(

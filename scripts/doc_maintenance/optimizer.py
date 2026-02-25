@@ -60,8 +60,9 @@ def _replace_existing_toc(content: str, toc: str) -> str:
     if not match:
         return content
     start, end = match.span()
-    replacement = toc
-    tail = content[end:]
+    # Keep one blank line between TOC block and the next section for idempotence.
+    replacement = toc.rstrip("\n") + "\n\n"
+    tail = content[end:].lstrip("\n")
     return content[:start] + replacement + tail
 
 

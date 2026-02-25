@@ -61,6 +61,7 @@ def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:
 def test_release_gates_enforces_hardened_synthetic_citation_toggle() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Validate hardened runtime safety toggles" in workflow
+    assert "IMMCAD_ENVIRONMENT: ci-smoke" in workflow
     assert 'ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"' in workflow
     assert "CITATION_TRUSTED_DOMAINS:" in workflow
 
@@ -81,3 +82,21 @@ def test_release_gates_runs_on_release_refs() -> None:
     assert "concurrency:" in workflow
     assert "staging-smoke-${{ github.ref }}" in workflow
     assert "cancel-in-progress: true" in workflow
+
+
+def test_release_gates_uses_read_only_job_permissions() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "permissions:" in workflow
+    assert "contents: read" in workflow
+
+
+def test_release_gates_pins_core_actions_to_commit_shas() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    for action_name in (
+        "actions/checkout",
+        "astral-sh/setup-uv",
+        "actions/setup-node",
+        "actions/upload-artifact",
+    ):
+        pattern = rf"{re.escape(action_name)}@[0-9a-f]{{40}}"
+        assert re.search(pattern, workflow), f"missing pinned SHA for {action_name}"

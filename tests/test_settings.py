@@ -10,6 +10,7 @@ def _set_hardened_env(
     environment: str,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
@@ -23,6 +24,7 @@ def _set_hardened_env(
 
 def _set_hardened_env_without_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
@@ -41,8 +43,48 @@ def test_load_settings_requires_bearer_token_in_production(
 ) -> None:
     _set_hardened_env(monkeypatch, environment)
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
 
-    with pytest.raises(ValueError, match="API_BEARER_TOKEN is required"):
+    with pytest.raises(ValueError, match="IMMCAD_API_BEARER_TOKEN is required"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production-us-east", "prod_blue", "ci-smoke"])
+def test_load_settings_treats_environment_variants_as_hardened(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="IMMCAD_API_BEARER_TOKEN is required"):
+        load_settings()
+
+
+@pytest.mark.parametrize("environment", ["production-us-east", "prod_blue", "ci-smoke"])
+def test_load_settings_supports_immcad_environment_alias(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("IMMCAD_ENVIRONMENT", environment)
+
+    settings = load_settings()
+
+    assert settings.environment == environment
+
+
+def test_load_settings_rejects_mismatched_environment_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("IMMCAD_ENVIRONMENT", "development")
+
+    with pytest.raises(
+        ValueError,
+        match="ENVIRONMENT and IMMCAD_ENVIRONMENT must match when both are set",
+    ):
         load_settings()
 
 
@@ -57,14 +99,64 @@ def test_load_settings_defaults_to_production_when_vercel_env_is_production(
     assert settings.environment == "production"
 
 
+def test_load_settings_defaults_to_production_when_node_env_is_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("NODE_ENV", "production")
+
+    settings = load_settings()
+
+    assert settings.environment == "production"
+
+
 def test_load_settings_requires_hardened_guards_when_vercel_env_is_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_hardened_env_without_environment(monkeypatch)
     monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
 
-    with pytest.raises(ValueError, match="API_BEARER_TOKEN is required"):
+    with pytest.raises(ValueError, match="IMMCAD_API_BEARER_TOKEN is required"):
+        load_settings()
+
+
+def test_load_settings_requires_hardened_guards_when_node_env_is_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("NODE_ENV", "production")
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="IMMCAD_API_BEARER_TOKEN is required"):
+        load_settings()
+
+
+def test_load_settings_accepts_canonical_bearer_token_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env(monkeypatch, "production")
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
+
+    settings = load_settings()
+
+    assert settings.api_bearer_token == "secret-token"
+
+
+def test_load_settings_rejects_mismatched_bearer_token_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "token-a")
+    monkeypatch.setenv("API_BEARER_TOKEN", "token-b")
+
+    with pytest.raises(
+        ValueError,
+        match="IMMCAD_API_BEARER_TOKEN and API_BEARER_TOKEN must match when both are set",
+    ):
         load_settings()
 
 
@@ -73,6 +165,7 @@ def test_load_settings_allows_missing_bearer_token_in_development(
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
     monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
 
     settings = load_settings()
     assert settings.api_bearer_token is None
@@ -201,6 +294,7 @@ def test_load_settings_trims_sensitive_env_values(
 ) -> None:
     _set_hardened_env(monkeypatch, "production")
     monkeypatch.setenv("ENVIRONMENT", " production ")
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", " secret-token ")
     monkeypatch.setenv("API_BEARER_TOKEN", " secret-token ")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", " laws-lois.justice.gc.ca,canlii.org ")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
@@ -410,6 +504,63 @@ def test_load_settings_disables_official_case_sources_by_default_in_development(
 
     settings = load_settings()
     assert settings.enable_official_case_sources is False
+
+
+def test_load_settings_disables_official_only_case_results_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("CASE_SEARCH_OFFICIAL_ONLY_RESULTS", raising=False)
+
+    settings = load_settings()
+    assert settings.case_search_official_only_results is False
+
+
+def test_load_settings_enables_official_only_case_results_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("CASE_SEARCH_OFFICIAL_ONLY_RESULTS", "true")
+
+    settings = load_settings()
+    assert settings.case_search_official_only_results is True
+
+
+def test_load_settings_has_default_official_case_cache_ttls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("OFFICIAL_CASE_CACHE_TTL_SECONDS", raising=False)
+    monkeypatch.delenv("OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS", raising=False)
+
+    settings = load_settings()
+
+    assert settings.official_case_cache_ttl_seconds == 300.0
+    assert settings.official_case_stale_cache_ttl_seconds == 900.0
+
+
+def test_load_settings_rejects_non_positive_official_case_cache_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("OFFICIAL_CASE_CACHE_TTL_SECONDS", "0")
+
+    with pytest.raises(ValueError, match="OFFICIAL_CASE_CACHE_TTL_SECONDS must be > 0"):
+        load_settings()
+
+
+def test_load_settings_rejects_stale_ttl_shorter_than_fresh_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("OFFICIAL_CASE_CACHE_TTL_SECONDS", "120")
+    monkeypatch.setenv("OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS", "60")
+
+    with pytest.raises(
+        ValueError,
+        match="OFFICIAL_CASE_STALE_CACHE_TTL_SECONDS must be >= OFFICIAL_CASE_CACHE_TTL_SECONDS",
+    ):
+        load_settings()
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])

@@ -114,8 +114,10 @@ REDIS_URL=redis://localhost:6379/0
 
 Production/CI hardening notes:
 
-- `API_BEARER_TOKEN` is required in `ENVIRONMENT=production|prod|ci`
+- `IMMCAD_API_BEARER_TOKEN` is required in hardened environments (`ENVIRONMENT=production|prod|ci` and aliases like `production-us-east`, `prod_blue`, `ci-smoke`; `API_BEARER_TOKEN` is accepted as a compatibility alias)
+- `IMMCAD_ENVIRONMENT` is a compatibility alias for `ENVIRONMENT`; if both are set they must match
 - `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS` must be disabled in hardened modes
+- `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` is recommended in hardened modes to keep related-case results export-ready
 - Never commit `.env` files
 
 ### Frontend environment (production path)
@@ -138,6 +140,7 @@ Use the built-in scripts:
 Key troubleshooting docs:
 
 - `docs/development-environment.md`
+- `docs/release/git-secret-runbook.md` (only if the team is using encrypted repo-stored env bundles; does not replace GitHub/Vercel runtime secrets)
 
 ## 3. Project and Codebase Overview
 
@@ -307,6 +310,7 @@ This section is intentionally structured as a fill-in template because org-speci
 - `docs/release/canlii-compliance-runbook.md`
 - `docs/release/incident-observability-runbook.md`
 - `docs/release/legal-review-checklist.md`
+- `docs/release/git-secret-runbook.md` (if enabled for env bundle workflow)
 
 ### External docs (role-based)
 
@@ -401,7 +405,7 @@ Steps:
 
 - Never commit secrets (`.env`, API tokens, service credentials)
 - Use `.env.example` as the template only
-- Treat `API_BEARER_TOKEN` as sensitive server-side config
+- Treat `IMMCAD_API_BEARER_TOKEN` (and `API_BEARER_TOKEN` alias) as sensitive server-side config
 - Follow `.editorconfig` and repo lint/test rules before PR
 
 ### Legal/compliance rules (important)
@@ -417,6 +421,7 @@ Steps:
 - `docs/release/canlii-compliance-runbook.md`
 - `docs/release/legal-review-checklist.md`
 - `docs/release/incident-observability-runbook.md`
+- `docs/release/git-secret-runbook.md` (if enabled for env bundle workflow)
 
 ### Incident handling basics for new engineers
 
@@ -531,4 +536,3 @@ Review cadence:
 - [ ] First PR scope reviewed for risk/compliance impact
 - [ ] Feedback captured and doc improvements filed
 ```
-

@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from immcad_api.evaluation import (
     evaluate_jurisdictional_readiness,
     render_jurisdiction_report_markdown,
     write_jurisdiction_report_artifacts,
 )
+from immcad_api.evaluation import jurisdiction as jurisdiction_module
+from immcad_api.sources import SourceRegistry
 
 
 def test_evaluate_jurisdictional_readiness_passes_threshold() -> None:
@@ -46,3 +50,32 @@ def test_render_jurisdiction_report_markdown_contains_summary() -> None:
     assert "Score:" in rendered
     assert "Threshold:" in rendered
     assert "`prompt_scope`" in rendered
+
+
+def test_registry_domain_check_accepts_fca_primary_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = SourceRegistry.model_validate(
+        {
+            "version": "test-v1",
+            "jurisdiction": "ca",
+            "sources": [
+                {
+                    "source_id": "FCA_NOTICE",
+                    "source_type": "case_law",
+                    "instrument": "Federal Court of Appeal notices",
+                    "url": "https://www.fca-caf.gc.ca/en/pages/important-notices",
+                    "update_cadence": "weekly",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(
+        jurisdiction_module,
+        "load_source_registry",
+        lambda: registry,
+    )
+
+    check = jurisdiction_module._check_registry_source_domains()
+
+    assert check.passed is True

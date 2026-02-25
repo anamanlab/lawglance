@@ -118,3 +118,23 @@ def test_iter_candidate_files_falls_back_when_archive_is_incomplete(tmp_path: Pa
 
     assert any(path.as_posix().endswith("/legacy/local_rag/cache.py") for path in files)
     assert any(path.name == "lawglance_main.py" and path.parent == tmp_path for path in files)
+
+
+def test_default_scan_paths_include_config_directory() -> None:
+    assert "config" in MODULE.DEFAULT_SCAN_PATHS
+
+
+def test_scan_repository_can_filter_to_tracked_files(tmp_path: Path) -> None:
+    leak_file = tmp_path / "docs" / "plan.md"
+    leak_file.parent.mkdir(parents=True)
+    leak_file.write_text("This mentions India.\n", encoding="utf-8")
+
+    violations, scanned_files = MODULE.scan_repository(
+        repo_root=tmp_path,
+        scan_paths=("docs",),
+        allowlist=frozenset(),
+        tracked_relative_paths=frozenset(),
+    )
+
+    assert scanned_files == 0
+    assert violations == []

@@ -35,6 +35,18 @@ filter_secret_scan_matches() {
   done
 }
 
+find_prebuilt_backend_env_references() {
+  local prebuilt_config="backend-vercel/.vercel/output/functions/index.func/.vc-config.json"
+  if [ ! -f "$prebuilt_config" ]; then
+    return 0
+  fi
+
+  grep -oE '"\.env(\.[^"]*)?"' "$prebuilt_config" 2>/dev/null \
+    | tr -d '"' \
+    | sort -u \
+    | grep -vE '^\.env\.example$' || true
+}
+
 if git ls-files --error-unmatch .env >/dev/null 2>&1; then
   echo "ERROR: .env is tracked in git. Run: git rm --cached .env"
   exit 1
@@ -53,6 +65,15 @@ if tracked_plaintext_env_files="$(list_tracked_plaintext_env_files)"; then
     echo "Remediation: git rm --cached <path> (keep templates as .env.example and encrypted files as *.secret)"
     exit 1
   fi
+fi
+
+prebuilt_env_refs="$(find_prebuilt_backend_env_references)"
+if [ -n "$prebuilt_env_refs" ]; then
+  echo "ERROR: backend-vercel prebuilt artifact references local .env file(s)."
+  echo "This usually means a local Vercel prebuilt output was generated with plaintext env files present."
+  echo "Avoid deploying backend with stale --prebuilt artifacts; use a source-based deploy or regenerate safely."
+  echo "$prebuilt_env_refs"
+  exit 1
 fi
 
 # High-risk secret pattern scan on tracked files.

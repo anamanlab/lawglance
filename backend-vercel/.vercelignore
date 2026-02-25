@@ -1,0 +1,16 @@
+# Prevent local secrets and generated prebuilt output from entering the deploy context.
+.env
+.env.*
+!.env.example
+
+# Prevent Vercel local metadata / prebuilt artifacts from entering source deploy context.
+.vercel
+.vercel/**
+
+# Local caches / test artifacts (not needed in runtime bundle).
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+artifacts/
+tests/

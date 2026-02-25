@@ -5,12 +5,14 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import subprocess
 from typing import Iterable, Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 DEFAULT_SCAN_PATHS: tuple[str, ...] = (
     "app.py",
+    "config",
     "legacy/local_rag",
     "src/immcad_api",
     "docs",
@@ -154,6 +156,7 @@ def scan_repository(
     repo_root: Path,
     scan_paths: Sequence[str],
     allowlist: frozenset[str] = ALLOWLISTED_RELATIVE_PATHS,
+    tracked_relative_paths: frozenset[str] | None = None,
 ) -> tuple[list[Violation], int]:
     violations: list[Violation] = []
     scanned_files = 0
@@ -161,9 +164,41 @@ def scan_repository(
         relative_path = _to_relative_posix(file_path, repo_root=repo_root)
         if relative_path in allowlist:
             continue
+        if tracked_relative_paths is not None and relative_path not in tracked_relative_paths:
+            continue
         scanned_files += 1
         violations.extend(scan_file(file_path))
     return violations, scanned_files
+
+
+def load_tracked_relative_paths(*, repo_root: Path) -> frozenset[str] | None:
+    try:
+        rev_parse = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "--is-inside-work-tree"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+
+    if rev_parse.returncode != 0:
+        return None
+
+    ls_files = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if ls_files.returncode != 0:
+        return None
+
+    return frozenset(
+        line.strip()
+        for line in ls_files.stdout.splitlines()
+        if line.strip()
+    )
 
 
 def format_violation(violation: Violation, *, repo_root: Path) -> str:
@@ -199,9 +234,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     scan_paths = tuple(args.path) if args.path else DEFAULT_SCAN_PATHS
+    tracked_relative_paths = load_tracked_relative_paths(repo_root=repo_root)
     violations, scanned_files = scan_repository(
         repo_root=repo_root,
         scan_paths=scan_paths,
+        tracked_relative_paths=tracked_relative_paths,
     )
 
     if violations:

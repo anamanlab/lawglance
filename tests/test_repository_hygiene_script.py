@@ -96,6 +96,60 @@ def test_repository_hygiene_script_ignores_encrypted_secret_artifacts_in_regex_s
     assert "[OK] Repository hygiene checks passed." in result.stdout
 
 
+def test_repository_hygiene_script_fails_when_backend_prebuilt_manifest_references_env_files(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    (tmp_path / "README.md").write_text("clean repo\n", encoding="utf-8")
+    _run(["git", "add", "README.md"], cwd=tmp_path)
+    _run(["git", "commit", "-qm", "init"], cwd=tmp_path)
+
+    prebuilt_config = (
+        tmp_path / "backend-vercel" / ".vercel" / "output" / "functions" / "index.func"
+    )
+    prebuilt_config.mkdir(parents=True)
+    (prebuilt_config / ".vc-config.json").write_text(
+        (
+            '{\n'
+            '  "filePathMap": {\n'
+            '    ".env.example": ".env.example",\n'
+            '    ".env.production.vercel": ".env.production.vercel"\n'
+            "  }\n"
+            "}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
+
+    assert result.returncode == 1
+    assert "prebuilt artifact references local .env" in result.stdout
+    assert ".env.production.vercel" in result.stdout
+
+
+def test_repository_hygiene_script_allows_prebuilt_manifest_env_example_only(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    (tmp_path / "README.md").write_text("clean repo\n", encoding="utf-8")
+    _run(["git", "add", "README.md"], cwd=tmp_path)
+    _run(["git", "commit", "-qm", "init"], cwd=tmp_path)
+
+    prebuilt_config = (
+        tmp_path / "backend-vercel" / ".vercel" / "output" / "functions" / "index.func"
+    )
+    prebuilt_config.mkdir(parents=True)
+    (prebuilt_config / ".vc-config.json").write_text(
+        '{\n  "filePathMap": {\n    ".env.example": ".env.example"\n  }\n}\n',
+        encoding="utf-8",
+    )
+
+    result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
+
+    assert result.returncode == 0
+    assert "[OK] Repository hygiene checks passed." in result.stdout
+
+
 def test_repository_hygiene_script_reports_git_grep_failures(tmp_path: Path) -> None:
     result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
 

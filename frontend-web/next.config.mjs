@@ -1,3 +1,7 @@
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+
+initOpenNextCloudflareForDev();
+
 const securityHeaders = [
   {
     key: "X-DNS-Prefetch-Control",

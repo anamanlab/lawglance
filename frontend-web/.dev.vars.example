@@ -1,0 +1,4 @@
+# Cloudflare local preview variables (wrangler dev / opennext preview)
+IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+IMMCAD_API_BEARER_TOKEN=replace-with-local-api-token
+ENVIRONMENT=development

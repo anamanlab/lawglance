@@ -6,10 +6,23 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "lint": "next lint",
     "typecheck": "tsc --noEmit --incremental false",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e:install": "playwright install chromium firefox",
+    "test:e2e:install:webkit": "playwright install webkit",
+    "test:e2e:install:mobile-safari": "playwright install webkit",
+    "test:e2e": "playwright test",
+    "test:e2e:cross-browser": "playwright test --project=chromium --project=firefox",
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "test:e2e:mobile": "playwright test --project=\"Mobile Chrome\"",
+    "test:e2e:mobile-safari": "playwright test --project=\"Mobile Safari\"",
+    "test:e2e:headed": "playwright test --project=chromium --headed"
   },
   "dependencies": {
     "next": "14.2.26",
@@ -17,6 +30,8 @@
     "react-dom": "18.3.1"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.14.2",
+    "@playwright/test": "^1.58.2",
     "@testing-library/react": "16.3.0",
     "@testing-library/user-event": "14.6.1",
     "@types/node": "22.13.5",
@@ -29,6 +44,7 @@
     "postcss": "8.5.2",
     "tailwindcss": "3.4.17",
     "typescript": "5.8.2",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "wrangler": "^4.68.1"
   }
 }

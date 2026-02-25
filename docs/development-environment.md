@@ -13,20 +13,9 @@
 - [Daily workflow](#daily-workflow)
 - [Environment variables](#environment-variables)
 - [Redis (optional but recommended)](#redis-(optional-but-recommended))
-- [Vercel Environment Sync](#vercel-environment-sync)
-- [Troubleshooting](#troubleshooting)
-
-- [Supported baseline](#supported-baseline)
-- [Quick start (recommended)](#quick-start-(recommended))
-- [Manual install prerequisites](#manual-install-prerequisites)
-  - [Python 3.11+](#python-311+)
-  - [uv](#uv)
-- [Project bootstrap details](#project-bootstrap-details)
-- [Team-shared editor defaults](#team-shared-editor-defaults)
-- [Daily workflow](#daily-workflow)
-- [Environment variables](#environment-variables)
-- [Redis (optional but recommended)](#redis-(optional-but-recommended))
-- [Vercel Environment Sync](#vercel-environment-sync)
+- [Cloudflare Frontend Deploy](#cloudflare-frontend-deploy)
+- [Cloudflare Backend Proxy (Transitional)](#cloudflare-backend-proxy-(transitional))
+- [Legacy Vercel Environment Sync (Transitional)](#legacy-vercel-environment-sync-(transitional))
 - [Troubleshooting](#troubleshooting)
 
 This guide standardizes local development for IMMCAD.
@@ -185,7 +174,52 @@ Stop and remove:
 docker stop immcad-redis && docker rm immcad-redis
 ```
 
-## Vercel Environment Sync
+## Cloudflare Frontend Deploy
+
+`frontend-web` is Cloudflare-ready via OpenNext + Wrangler.
+
+Local parity verification:
+
+```bash
+make frontend-cf-build
+make frontend-cf-preview
+```
+
+Required secrets/vars for CI deploy:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+GitHub Actions workflow:
+
+- `.github/workflows/cloudflare-frontend-deploy.yml`
+
+The workflow performs typecheck + contract tests + OpenNext bundle build before deploy.
+
+## Cloudflare Backend Proxy (Transitional)
+
+`backend-cloudflare` provides a Cloudflare Worker edge proxy in front of the current backend origin.
+
+Local/backend migration checks:
+
+```bash
+# Build backend runtime container spike artifact
+make backend-cf-spike-build
+
+# Deploy backend proxy worker
+make backend-cf-proxy-deploy
+```
+
+Key files:
+
+- `backend-cloudflare/src/worker.ts`
+- `backend-cloudflare/wrangler.backend-proxy.jsonc`
+- `.github/workflows/cloudflare-backend-proxy-deploy.yml`
+- GitHub Actions secret required for deploy: `IMMCAD_BACKEND_ORIGIN`
+
+This is a transitional step for edge cutover while backend runtime migration (Containers vs Python Worker) is finalized.
+
+## Legacy Vercel Environment Sync (Transitional)
 
 Use `scripts/vercel_env_sync.py` to analyze, pull, diff, validate, push, and backup Vercel variables for linked projects.
 

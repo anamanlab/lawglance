@@ -140,7 +140,7 @@ Use the built-in scripts:
 Key troubleshooting docs:
 
 - `docs/development-environment.md`
-- `docs/release/git-secret-runbook.md` (only if the team is using encrypted repo-stored env bundles; does not replace GitHub/Vercel runtime secrets)
+- `docs/release/git-secret-runbook.md` (only if the team is using encrypted repo-stored env bundles; does not replace GitHub/Cloudflare runtime secrets)
 
 ## 3. Project and Codebase Overview
 
@@ -445,7 +445,7 @@ Optional / role-specific:
 
 - [ ] CanLII API key (backend/source integrations)
 - [ ] Redis access in shared environments
-- [ ] Vercel/project hosting access (frontend/platform)
+- [ ] Cloudflare/project hosting access (frontend/platform)
 - [ ] Monitoring/dashboard access for `/ops/metrics` consumers
 
 ### Tool-specific notes

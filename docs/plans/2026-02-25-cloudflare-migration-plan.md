@@ -8,7 +8,16 @@
 ## Execution Status (2026-02-25)
 - Frontend Cloudflare path: implemented (`frontend-web` OpenNext config + CI deploy workflow).
 - Backend edge transitional path: implemented (`backend-cloudflare` Worker proxy + CI deploy workflow).
-- Backend native runtime on Cloudflare (Containers vs Python Worker): pending decision and canary validation.
+- Backend native runtime decision: Python Workers path selected for next implementation phase; canary validation is still pending.
+- Backend native runtime scaffold landed:
+  - `backend-cloudflare/src/entry.py`
+  - `backend-cloudflare/wrangler.toml`
+  - `backend-cloudflare/pyproject.toml`
+  - `.github/workflows/cloudflare-backend-native-deploy.yml`
+- Live deployment evidence captured:
+  - `immcad-frontend-web` Worker deployed (version `d2cce7e8-094e-489d-b54b-10af2b620e87`)
+  - `immcad-backend-proxy` Worker deployed (version `2ef750a9-ae2c-431c-837c-7425fc60063b`)
+  - Custom domains configured (`immcad.arkiteto.dpdns.org`, `immcad-api.arkiteto.dpdns.org`)
 
 ## Verified Platform Facts (as of 2026-02-25)
 - Cloudflare Workers Free plan limits are strict for production traffic and CPU-intensive requests (`100,000 requests/day`, `10ms CPU/request`). Paid Workers removes the daily request cap and raises per-request CPU limits.
@@ -120,9 +129,9 @@
 - Unacceptable latency regression vs baseline.
 
 ## Immediate Next Steps (Execution Order)
-1. Implement Phase 1 frontend Cloudflare adapter/config and run local+preview verification.
-2. Run Phase 2 backend spike (Containers vs Python Worker) and make architecture decision in writing.
-3. Execute chosen backend path with canary rollout and strict rollback gates.
+1. Execute backend native runtime implementation (Python Workers path) with auth/policy parity.
+2. Run canary + load/perf validation and close `KI-2026-02-25-01` and `KI-2026-02-25-07` when evidence passes.
+3. Complete 24h/72h observation windows and finalize Cloudflare-only production sign-off.
 
 ## Official References Used
 - Cloudflare Workers Next.js (OpenNext) guide:

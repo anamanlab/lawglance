@@ -1,12 +1,18 @@
 # Production Deep Audit Implementation Plan
 
+> Status (2026-02-25): This plan contains legacy Vercel verification steps and is retained for historical traceability.
+> Execute Cloudflare-first audit flow from:
+> - `docs/release/pre-deploy-command-sheet-2026-02-25.md`
+> - `docs/plans/2026-02-25-cloudflare-migration-plan.md`
+> - `scripts/release_preflight.sh`
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Produce a zero-assumption, evidence-backed pre-deploy audit that surfaces all remaining production risks, closes high-priority gaps, and prepares a deterministic go/no-go packet for the next deploy window.
 
 **Architecture:** This plan treats readiness as a layered system audit: release controls, runtime safety, legal-policy correctness, API behavior, frontend behavior, CI/workflow determinism, and operations. Each task generates explicit artifacts and pass/fail criteria so we can make a deployment decision without interpretation drift.
 
-**Tech Stack:** Python/FastAPI backend (`src/immcad_api`, `backend-vercel` mirror), Next.js frontend (`frontend-web`), Vercel deployments, pytest, Ruff, mypy, repo maintenance scripts, GitHub Actions workflows.
+**Tech Stack:** Python/FastAPI backend (`src/immcad_api`, `backend-vercel` mirror), Next.js frontend (`frontend-web`), Cloudflare Workers + Wrangler deployments (legacy Vercel references are transitional), pytest, Ruff, mypy, repo maintenance scripts, GitHub Actions workflows.
 
 ---
 
@@ -110,7 +116,7 @@ Expected:
 **Step 2: Validate runtime secret manager separation**
 
 Check docs and scripts for:
-- Vercel/GitHub secrets as runtime source of truth.
+- Cloudflare/GitHub secrets as runtime source of truth.
 - `git-secret` documented as optional/non-replacement flow.
 
 **Step 3: Document unresolved secret-risk gaps**
@@ -314,4 +320,3 @@ Criteria:
 - No open P0 issues.
 - Smoke checks green.
 - Evidence artifacts complete.
-

@@ -1,5 +1,11 @@
 # Production Finalization Go-Live Plan
 
+> Status (2026-02-25): Historical Vercel-first execution plan kept for audit history.
+> Primary execution docs are now:
+> - `docs/plans/2026-02-25-cloudflare-migration-plan.md`
+> - `docs/release/pre-deploy-command-sheet-2026-02-25.md`
+> - `scripts/release_preflight.sh` (`make release-preflight`)
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Close the remaining production blockers, redeploy backend and frontend safely, and complete a verifiable go-live readiness sign-off for IMMCAD.

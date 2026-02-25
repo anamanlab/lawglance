@@ -1,5 +1,11 @@
 # Deep Production Readiness Audit Plan (Pre-Deploy)
 
+> Status (2026-02-25): Contains historical Vercel-era audit checkpoints.
+> For active Cloudflare migration readiness, use:
+> - `docs/plans/2026-02-25-cloudflare-migration-plan.md`
+> - `docs/release/pre-deploy-command-sheet-2026-02-25.md`
+> - `make release-preflight`
+
 ## Objective
 Perform a full pre-deploy systems audit so the next backend/frontend deployment can be executed with minimal risk and no surprise blockers.
 
@@ -7,7 +13,7 @@ Perform a full pre-deploy systems audit so the next backend/frontend deployment 
 - Backend runtime (`src/immcad_api`, `backend-vercel/src/immcad_api`)
 - Frontend runtime (`frontend-web`)
 - Policy and legal-source controls (`config/source_policy.yaml`, registry, export gate)
-- CI/CD and deployment safety (GitHub Actions, Vercel config, deploy process)
+- CI/CD and deployment safety (GitHub Actions, Cloudflare config, deploy process)
 - Operations readiness (health, metrics, alerts, incident/rollback docs)
 - Release process hygiene (tasks, known issues, PR readiness, evidence trail)
 

@@ -158,7 +158,7 @@ Production/CI policy:
 - `CASE_SEARCH_OFFICIAL_ONLY_RESULTS=true` is recommended in hardened deployments to hide non-exportable case results from UI.
 - `GET /ops/metrics` requires a valid bearer token in every environment.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
-- If the team adopts `git-secret` for encrypted repo-stored env bundles, use it only for approved non-production/bootstrap workflows and follow `docs/release/git-secret-runbook.md` (do not replace GitHub/Vercel runtime secrets).
+- If the team adopts `git-secret` for encrypted repo-stored env bundles, use it only for approved non-production/bootstrap workflows and follow `docs/release/git-secret-runbook.md` (do not replace GitHub/Cloudflare runtime secrets).
 
 Recommended hardened baseline:
 
@@ -233,9 +233,38 @@ Key files:
 
 This is a transitional step for edge cutover while backend runtime migration (Containers vs Python Worker) is finalized.
 
+## Cloudflare Backend Native (Python Worker, In Progress)
+
+Native backend runtime scaffold artifacts are available under `backend-cloudflare/`:
+
+- `backend-cloudflare/src/entry.py`
+- `backend-cloudflare/wrangler.toml`
+- `backend-cloudflare/pyproject.toml`
+- `.github/workflows/cloudflare-backend-native-deploy.yml`
+
+Local/native commands:
+
+```bash
+make backend-cf-native-sync
+make backend-cf-native-dev
+make backend-cf-native-deploy
+```
+
+Note: native Python Worker deploy can fail on Cloudflare plan script-size limits (`code: 10027`) for large dependency bundles; validate plan/runtime constraints before cutover.
+
+Runtime performance smoke helper (authenticated):
+
+```bash
+export IMMCAD_API_BASE_URL=https://immcad-api.arkiteto.dpdns.org
+export IMMCAD_API_BEARER_TOKEN=<prod-token>
+REQUESTS=20 CONCURRENCY=5 MAX_P95_SECONDS=2.5 make backend-cf-perf-smoke
+```
+
 ## Legacy Vercel Environment Sync (Transitional)
 
 Use `scripts/vercel_env_sync.py` to analyze, pull, diff, validate, push, and backup Vercel variables for linked projects.
+
+This workflow is retained only for transitional operations while backend origin remains on legacy infrastructure. It is not the primary Cloudflare deployment path.
 
 Typical project directories in this repo:
 
@@ -276,7 +305,7 @@ Notes:
 - `pull` creates a local backup unless `--no-backup` is provided.
 - `validate` loads required keys from `<project-dir>/.env.example` and falls back to repo-root `.env.example`, plus explicit `--required` keys.
 - backup files are namespaced by project directory in `.env-backups/` to avoid collisions.
-- `git-secret` (if used) complements this workflow by encrypting repo-stored env bundles; it does not replace Vercel environment variables or `scripts/vercel_env_sync.py`.
+- `git-secret` (if used) complements this workflow by encrypting repo-stored env bundles; it does not replace Cloudflare runtime secret bindings or `scripts/vercel_env_sync.py` in transitional scenarios.
 
 ## Troubleshooting
 

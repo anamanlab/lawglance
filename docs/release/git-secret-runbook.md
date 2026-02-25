@@ -2,7 +2,7 @@
 
 Use this runbook to manage `git-secret` safely in IMMCAD for encrypted repository-stored configuration bundles.
 
-This is a **controlled workflow** for encrypted files in git. It is **not** a replacement for GitHub Actions secrets, Vercel environment variables, or production secret management policy.
+This is a **controlled workflow** for encrypted files in git. It is **not** a replacement for GitHub Actions secrets, Cloudflare Worker secrets/bindings, or production secret management policy.
 
 ## Scope and Production Readiness Position
 
@@ -15,7 +15,7 @@ This is a **controlled workflow** for encrypted files in git. It is **not** a re
 ### Not allowed (production policy)
 
 - Replacing GitHub Actions `secrets.*` with repo-committed encrypted files for normal runtime secret delivery.
-- Replacing Vercel environment variables for deployed `frontend-web` / `backend-vercel`.
+- Replacing Cloudflare Worker secrets/bindings for deployed `frontend-web` / `backend-cloudflare`.
 - Treating `git-secret` re-encryption alone as offboarding/credential revocation.
 
 ## Core Risks (Read Before Use)
@@ -34,7 +34,7 @@ This is a **controlled workflow** for encrypted files in git. It is **not** a re
 
 Recommended pilot target:
 
-- `backend-vercel/.env.preview` -> encrypted artifact `backend-vercel/.env.preview.secret`
+- `backend-cloudflare/.env.preview` -> encrypted artifact `backend-cloudflare/.env.preview.secret`
 
 ## Prerequisites
 
@@ -71,7 +71,7 @@ git secret tell you@example.com
 4. Add a file to be encrypted (pilot with non-production env file):
 
 ```bash
-git secret add backend-vercel/.env.preview
+git secret add backend-cloudflare/.env.preview
 ```
 
 5. Encrypt the tracked secret files:
@@ -84,7 +84,7 @@ git secret hide
 
 ```bash
 bash scripts/check_repository_hygiene.sh
-! git check-ignore -q backend-vercel/.env.preview.secret
+! git check-ignore -q backend-cloudflare/.env.preview.secret
 ```
 
 The `git check-ignore` command above should succeed (exit `0`) only when a file **is** ignored, so this verification intentionally asserts the encrypted artifact is **not** ignored.
@@ -92,7 +92,7 @@ The `git check-ignore` command above should succeed (exit `0`) only when a file 
 7. Stage and commit the encrypted artifact(s) plus `git-secret` metadata:
 
 ```bash
-git add .gitsecret backend-vercel/.env.preview.secret .gitignore
+git add .gitsecret backend-cloudflare/.env.preview.secret .gitignore
 git commit -m "chore(secrets): initialize git-secret for preview env bundle"
 ```
 
@@ -109,7 +109,7 @@ Notes:
 git secret reveal
 ```
 
-2. Edit the plaintext file(s) locally (for example `backend-vercel/.env.preview`).
+2. Edit the plaintext file(s) locally (for example `backend-cloudflare/.env.preview`).
 
 3. Re-encrypt and optionally remove plaintext:
 
@@ -146,7 +146,7 @@ make git-secret-changes
 Pass through extra command arguments (for example pathspecs/password flags) with `GIT_SECRET_ARGS`:
 
 ```bash
-make git-secret-changes GIT_SECRET_ARGS="backend-vercel/.env.preview"
+make git-secret-changes GIT_SECRET_ARGS="backend-cloudflare/.env.preview"
 ```
 
 ## Adding a Collaborator (Trusted Access)
@@ -214,7 +214,7 @@ git push
 4. Update platform-managed secrets after rotation:
 
 - GitHub Actions secrets
-- Vercel environment variables
+- Cloudflare Worker secrets/bindings
 
 5. Record completion in release/ops evidence.
 
@@ -275,26 +275,32 @@ fi
 - `echo` of secret values to logs
 - Reusing long-lived decrypt material on self-hosted runners without cleanup
 
-## Environment Files and Vercel Sync (IMMCAD)
+## Environment Files and Cloudflare Secret Sync (IMMCAD)
 
-`git-secret` does not replace `scripts/vercel_env_sync.py`.
+`git-secret` does not replace runtime secret management through Cloudflare Worker bindings.
 
-Recommended usage:
+Recommended usage for Cloudflare deployments:
 
 1. Reveal non-production env file locally.
-2. Validate with:
+2. Validate secret bindings for the target workers:
 
 ```bash
-python scripts/vercel_env_sync.py validate --project-dir backend-vercel --environment preview
+npx --yes wrangler@4.68.1 secret list --config frontend-web/wrangler.jsonc
+npx --yes wrangler@4.68.1 secret list --config backend-cloudflare/wrangler.backend-proxy.jsonc
 ```
 
-3. Push to Vercel with the existing flow (`--dry-run` first).
+3. Update secrets through Wrangler (never commit plaintext values):
+
+```bash
+printf '%s' "$IMMCAD_API_BEARER_TOKEN" | npx --yes wrangler@4.68.1 secret put IMMCAD_API_BEARER_TOKEN --config frontend-web/wrangler.jsonc
+printf '%s' "$API_BEARER_TOKEN" | npx --yes wrangler@4.68.1 secret put API_BEARER_TOKEN --config frontend-web/wrangler.jsonc
+```
+
 4. Re-encrypt local file with `git secret hide`.
 
 Notes:
 
-- `.env-backups/` files are local plaintext backups created by env sync operations and are ignored by git.
-- Do not commit `.env-backups/` contents.
+- Keep plaintext backups outside git and avoid committing transient secret material.
 
 ## Pre-Commit Hook Guidance (Optional)
 
@@ -342,7 +348,7 @@ Ensure `scripts/check_repository_hygiene.sh` includes exclusions for:
 
 Use this checklist before declaring `git-secret` usage production-safe in IMMCAD:
 
-- [ ] Scope limited to approved use cases (no replacement of GitHub/Vercel runtime secrets)
+- [ ] Scope limited to approved use cases (no replacement of GitHub/Cloudflare runtime secrets)
 - [ ] Dedicated CI decrypt key created (if CI decrypt is used)
 - [ ] CI key storage + cleanup procedure validated
 - [ ] GPG versions pinned/tested across local + CI

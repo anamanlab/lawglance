@@ -16,8 +16,8 @@
   - Tailwind semantic colors in `frontend-web/tailwind.config.ts` aligned to the same palette,
   - high-visibility chat components updated: shell, header, composer, message list, related-case panel, quick prompts, support panel.
 - Verification evidence:
-  - `npm run test --prefix frontend-web` -> pass (`65 passed`)
-  - `npm run typecheck --prefix frontend-web` -> pass
+  - `npm --prefix frontend-web run lint` -> pass (`next lint`, no warnings/errors)
+  - `npm --prefix frontend-web run typecheck` -> pass (`tsc --noEmit --incremental false`)
 
 ---
 

@@ -257,6 +257,67 @@ describe("chat shell contract behavior", () => {
     ).toBeTruthy();
   });
 
+  it("blocks export UI for non-exportable case results", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            results: [
+              {
+                case_id: "case-2",
+                title: "Policy-limited Case",
+                citation: "2025 FC 200",
+                decision_date: "2025-02-12",
+                url: "https://www.canlii.org/en/ca/fct/doc/2025/2025fc200/2025fc200.html",
+                source_id: "CANLII_CASE_BROWSE",
+                document_url:
+                  "https://www.canlii.org/en/ca/fct/doc/2025/2025fc200/2025fc200.html",
+                export_allowed: false,
+                export_policy_reason: "source_export_blocked_by_policy",
+              },
+            ],
+          },
+          {
+            headers: { "x-trace-id": "trace-case-success" },
+          }
+        )
+      );
+    const confirmSpy = vi.spyOn(window, "confirm");
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court examples for study permit refusals."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+    await screen.findByText("Policy-limited Case");
+
+    const exportButton = screen.getByRole("button", { name: "Export PDF" });
+    expect((exportButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("Export unavailable for this source under policy.")
+    ).toBeTruthy();
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("exports a case PDF after approval and updates support context", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

@@ -46,8 +46,11 @@ export const CASE_SEARCH_SUCCESS_RESPONSE: CaseSearchResponsePayload = {
       citation: "2025 FC 100",
       decision_date: "2025-01-11",
       url: "https://example.test/cases/1",
-      source_id: "canlii",
-      document_url: "https://example.test/cases/1/document.pdf",
+      source_id: "SCC_DECISIONS",
+      document_url:
+        "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      export_allowed: true,
+      export_policy_reason: "source_export_allowed",
     },
   ],
 };

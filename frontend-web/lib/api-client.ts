@@ -42,6 +42,8 @@ export type CaseSearchResult = {
   url: string;
   source_id?: string | null;
   document_url?: string | null;
+  export_allowed?: boolean | null;
+  export_policy_reason?: string | null;
 };
 
 export type CaseSearchResponsePayload = {

@@ -36,6 +36,22 @@ import {
   nextMessageId,
 } from "@/components/chat/utils";
 
+function buildCaseExportUnavailableMessage(policyReason?: string | null): string {
+  switch (policyReason) {
+    case "source_export_blocked_by_policy":
+      return "Case export is unavailable for this source under current policy.";
+    case "export_url_not_allowed_for_source":
+    case "export_redirect_url_not_allowed_for_source":
+      return "Case export is unavailable because the document URL is not trusted for this source.";
+    case "source_not_in_registry_for_export":
+      return "Case export is unavailable because the source is not registered for export.";
+    case "source_export_metadata_missing":
+      return "Case export is unavailable because source metadata is missing for this result.";
+    default:
+      return "Case export is unavailable for this case result.";
+  }
+}
+
 export function ChatShell({
   apiBaseUrl,
   legalDisclaimer,
@@ -230,9 +246,16 @@ export function ChatShell({
         return;
       }
 
+      if (caseResult.export_allowed === false) {
+        setRelatedCasesStatus(
+          buildCaseExportUnavailableMessage(caseResult.export_policy_reason)
+        );
+        return;
+      }
+
       if (!caseResult.source_id || !caseResult.document_url) {
         setRelatedCasesStatus(
-          "Case export is unavailable because the source metadata is missing for this result."
+          buildCaseExportUnavailableMessage("source_export_metadata_missing")
         );
         return;
       }

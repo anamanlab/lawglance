@@ -12,8 +12,8 @@ function normalizeValue(value: string | undefined): string | undefined {
 }
 
 function resolveRuntimeEnvironment(): string {
-  const explicitEnvironment = normalizeValue(process.env.IMMCAD_ENVIRONMENT);
-  const compatibilityEnvironment = normalizeValue(process.env.ENVIRONMENT);
+  const explicitEnvironment = normalizeValue(process.env.ENVIRONMENT);
+  const compatibilityEnvironment = normalizeValue(process.env.IMMCAD_ENVIRONMENT);
   if (
     explicitEnvironment &&
     compatibilityEnvironment &&

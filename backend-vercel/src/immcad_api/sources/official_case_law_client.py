@@ -217,7 +217,8 @@ class OfficialCaseLawClient:
             if not haystack:
                 continue
 
-            token_hits = sum(1 for token in query_tokens if token in haystack)
+            haystack_tokens = set(re.findall(r"[a-z0-9]+", haystack))
+            token_hits = sum(1 for token in query_tokens if token in haystack_tokens)
             immigration_signal_hits = sum(
                 1 for pattern in _IMMIGRATION_TEXT_PATTERNS if pattern.search(haystack)
             )

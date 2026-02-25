@@ -138,7 +138,7 @@ This keeps IMMCAD aligned with existing docs that require platform secret manage
 **Step 3: Extend repository hygiene checks**
 - Update `scripts/check_repository_hygiene.sh` to validate `git-secret` invariants if `.gitsecret/` exists:
   - fail if `.gitsecret/keys/random_seed` is tracked,
-  - optionally warn/fail on tracked plaintext env files paired with encrypted `.secret` equivalents,
+  - fail on tracked plaintext `.env*` files (excluding documented templates like `.env.example`) across repo subprojects, with remediation hints,
   - exclude tracked `*.secret` encrypted artifacts (and `/.gitsecret/` internals where appropriate) from regex secret-pattern scans to avoid false positives on encrypted blobs,
   - preserve existing high-risk secret pattern scan.
 
@@ -149,6 +149,7 @@ This keeps IMMCAD aligned with existing docs that require platform secret manage
 
 **Step 5: Verify**
 - Run: `./scripts/venv_exec.sh pytest -q tests/test_repository_hygiene_script.py`
+- Run: `git check-ignore -v backend-vercel/.env.preview.secret` (after pilot init) to confirm encrypted artifact is not ignored by `.env.*` patterns
 - Run: `bash scripts/check_repository_hygiene.sh`
 - Expected: script passes for clean repos and fails with explicit messages for `git-secret` misuse.
 

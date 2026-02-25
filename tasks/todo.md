@@ -1207,6 +1207,7 @@
 - Post-review plan corrections applied:
   - replaced invalid/unsupported `git-secret-status` target suggestion with `git-secret-list` / `git-secret-changes`
   - added explicit requirement to exclude tracked `*.secret` blobs from regex plaintext secret scans to avoid false positives in `scripts/check_repository_hygiene.sh`
+  - strengthened hygiene plan from `.env`-only to tracked plaintext `.env*` detection (excluding templates) and added `git check-ignore` verification for encrypted `.secret` artifacts
   - tightened CI install guidance to avoid deprecated `apt-key` snippets and to log `git-secret`/`gpg` versions for interoperability debugging
 - Plan is tailored to current IMMCAD constraints:
   - preserves platform-managed production secrets policy,

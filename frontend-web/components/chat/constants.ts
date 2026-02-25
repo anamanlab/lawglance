@@ -4,44 +4,44 @@ import type { ErrorCopy } from "@/components/chat/types";
 export const ERROR_COPY: Record<ApiErrorCode, ErrorCopy> = {
   UNAUTHORIZED: {
     title: "Authentication required",
-    detail: "Confirm the backend authentication configuration is valid for this environment.",
-    action: "Update credentials and submit the question again.",
+    detail: "We could not authenticate your request to the service.",
+    action: "Please refresh and try again.",
     retryable: true,
   },
   VALIDATION_ERROR: {
-    title: "Request validation failed",
-    detail: "The request payload did not pass API validation checks.",
-    action: "Use a shorter, plain-language question and retry.",
+    title: "We couldn't process that question",
+    detail: "Please rephrase your question in plain language and try again.",
+    action: "Try a shorter question with one topic.",
     retryable: true,
   },
   PROVIDER_ERROR: {
-    title: "Provider unavailable",
-    detail: "The upstream provider is temporarily unavailable. Please retry.",
-    action: "Retry shortly. If this repeats, share the trace ID with support.",
+    title: "Service temporarily unavailable",
+    detail: "The answer service is temporarily unavailable.",
+    action: "Please try again in a moment.",
     retryable: true,
   },
   SOURCE_UNAVAILABLE: {
-    title: "Source unavailable",
-    detail: "Authoritative case-law source is unavailable in hardened mode.",
-    action: "Retry later when the source is back online.",
+    title: "Case-law source unavailable",
+    detail: "Official case-law sources are temporarily unavailable.",
+    action: "Please try again shortly.",
     retryable: true,
   },
   POLICY_BLOCKED: {
-    title: "Policy-blocked request",
-    detail: "The request violates policy constraints and cannot be completed.",
-    action: "Ask for general information instead of personalized strategy or representation.",
+    title: "Request outside scope",
+    detail: "We can only provide general Canadian immigration information.",
+    action: "Ask a general informational question instead of personalized legal strategy.",
     retryable: false,
   },
   RATE_LIMITED: {
     title: "Rate limited",
-    detail: "Request quota exceeded. Wait briefly before submitting again.",
+    detail: "Too many requests were sent in a short period.",
     action: "Wait a moment, then retry the same question.",
     retryable: true,
   },
   UNKNOWN_ERROR: {
     title: "Unexpected error",
-    detail: "The API returned an unknown error state. Please retry.",
-    action: "Retry once. If it fails again, share the trace ID with support.",
+    detail: "Something went wrong while processing your request.",
+    action: "Please retry once.",
     retryable: true,
   },
 };
@@ -53,6 +53,6 @@ export const QUICK_PROMPTS = [
 ];
 
 export const ASSISTANT_BOOTSTRAP_TEXT =
-  "Welcome to IMMCAD. Ask a Canada immigration question to begin.";
+  "Welcome to IMMCAD. Ask a Canadian immigration question to get started.";
 
 export const MAX_MESSAGE_LENGTH = 8000;

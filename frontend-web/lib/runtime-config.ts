@@ -49,10 +49,12 @@ export function getRuntimeConfig(): RuntimeConfig {
     process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED,
     DEV_DEFAULT_REDESIGN_ENABLED
   );
-  const showOperationalPanels = parseBooleanFlag(
+  const showOperationalPanelsConfig = parseBooleanFlag(
     process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS,
     nodeEnv !== "production"
   );
+  const showOperationalPanels =
+    nodeEnv === "production" ? false : showOperationalPanelsConfig;
 
   ensureProductionSafeApiUrl(apiBaseUrl, nodeEnv);
 

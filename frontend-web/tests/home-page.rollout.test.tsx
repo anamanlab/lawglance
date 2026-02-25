@@ -35,10 +35,10 @@ describe("home page rollout", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
+    expect(screen.getByText("Canadian Immigration Information Assistant")).toBeTruthy();
     expect(
       screen.getByText(
-        "Canada-focused immigration information to help you understand your options."
+        "Understand official immigration pathways, requirements, and next steps with grounded information."
       )
     ).toBeTruthy();
     expect(screen.getByTestId("chat-shell-stub")).toBeTruthy();

@@ -6,6 +6,7 @@ type MessageListProps = {
   messages: ChatMessage[];
   isSubmitting: boolean;
   submissionPhase: SubmissionPhase;
+  showDiagnostics?: boolean;
   endOfThreadRef: RefObject<HTMLDivElement>;
 };
 
@@ -18,8 +19,10 @@ function renderLoadingCopy(submissionPhase: SubmissionPhase): string {
 
 const MessageBubble = memo(function MessageBubble({
   message,
+  showDiagnostics,
 }: {
   message: ChatMessage;
+  showDiagnostics: boolean;
 }): JSX.Element {
   return (
     <li className={`flex ${message.author === "user" ? "justify-end" : "justify-start"}`}>
@@ -38,7 +41,7 @@ const MessageBubble = memo(function MessageBubble({
               Rephrase the request as general immigration information (eligibility criteria,
               official process steps, or document requirements).
             </p>
-            {message.traceId ? (
+            {showDiagnostics && message.traceId ? (
               <p className="mt-1 text-[11px] text-amber-800">Trace ID: {message.traceId}</p>
             ) : null}
           </div>
@@ -81,7 +84,7 @@ const MessageBubble = memo(function MessageBubble({
           </p>
         ) : null}
 
-        {message.author === "assistant" && message.traceId && !message.isPolicyRefusal ? (
+        {showDiagnostics && message.author === "assistant" && message.traceId && !message.isPolicyRefusal ? (
           <p className="mt-2 text-[11px] text-slate-500">Trace ID: {message.traceId}</p>
         ) : null}
       </article>
@@ -93,6 +96,7 @@ export function MessageList({
   messages,
   isSubmitting,
   submissionPhase,
+  showDiagnostics = false,
   endOfThreadRef,
 }: MessageListProps): JSX.Element {
   return (
@@ -112,7 +116,11 @@ export function MessageList({
       >
         <ol className="space-y-3">
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              showDiagnostics={showDiagnostics}
+            />
           ))}
           {isSubmitting ? (
             <li className="flex justify-start">

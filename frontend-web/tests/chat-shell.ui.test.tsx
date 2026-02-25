@@ -55,10 +55,11 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test/"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
-    expect(screen.getByText("Canada legal scope notice")).toBeTruthy();
+    expect(screen.getByText("Canada immigration scope notice")).toBeTruthy();
     expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
     expect(
       screen.getAllByText("API target: https://api.immcad.test").length
@@ -70,11 +71,12 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
-    const textarea = screen.getByLabelText("Ask a Canada immigration question");
+    const textarea = screen.getByLabelText("Ask a Canadian immigration question");
     const sendButton = screen.getByRole("button", { name: "Send" });
     const describedBy = textarea.getAttribute("aria-describedby") ?? "";
 
@@ -106,11 +108,12 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
-    const textarea = screen.getByLabelText("Ask a Canada immigration question");
+    const textarea = screen.getByLabelText("Ask a Canadian immigration question");
 
     await user.type(textarea, "How does Express Entry work?");
     await user.keyboard("{Control>}{Enter}{/Control}");
@@ -126,12 +129,13 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Ask a Canada immigration question"),
+      screen.getByLabelText("Ask a Canadian immigration question"),
       "Give me a study permit eligibility summary."
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -169,17 +173,18 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
-    const searchCasesButton = screen.getByRole("button", { name: "Search related cases" });
+    const searchCasesButton = screen.getByRole("button", { name: "Find related cases" });
     expect(searchCasesButton.hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("log")).toBeTruthy();
     expect(screen.getByRole("group", { name: "Quick prompts" })).toBeTruthy();
 
     await user.type(
-      screen.getByLabelText("Ask a Canada immigration question"),
+      screen.getByLabelText("Ask a Canadian immigration question"),
       "Show me guidance on study permit documents."
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -190,7 +195,7 @@ describe("chat shell ui", () => {
     await user.click(searchCasesButton);
     expect(await screen.findByText("Sample Tribunal Decision")).toBeTruthy();
     const searchCasesButtonAfterResults = screen.getByRole("button", {
-      name: "Search related cases",
+      name: "Find related cases",
     });
     expect(searchCasesButtonAfterResults.getAttribute("aria-controls")).toBe(
       "related-case-results"

@@ -39,7 +39,7 @@ export function MessageComposer({
     <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-[0_10px_28px_rgba(15,23,42,0.08)]">
       <form className="space-y-3" onSubmit={onSubmit} ref={formRef}>
         <label className="block text-sm font-semibold text-slate-700" htmlFor="chat-input">
-          Ask a Canada immigration question
+          Ask a Canadian immigration question
         </label>
 
         <QuickPrompts

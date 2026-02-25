@@ -64,4 +64,13 @@ describe("runtime config", () => {
 
     expect(config.showOperationalPanels).toBe(false);
   });
+
+  it("keeps operational panels disabled in production even if explicitly enabled", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS = "true";
+
+    const config = getRuntimeConfig();
+
+    expect(config.showOperationalPanels).toBe(false);
+  });
 });

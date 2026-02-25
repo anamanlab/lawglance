@@ -57,12 +57,13 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Ask a Canada immigration question"),
+      screen.getByLabelText("Ask a Canadian immigration question"),
       "How does Express Entry work?"
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -78,7 +79,7 @@ describe("chat shell contract behavior", () => {
     expect(screen.getByText("Last endpoint: /api/chat")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByRole("button", { name: "Search related cases" }));
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
 
     expect(await screen.findByText("Sample Tribunal Decision")).toBeTruthy();
     expect(screen.getByText("Last endpoint: /api/search/cases")).toBeTruthy();
@@ -97,12 +98,13 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Ask a Canada immigration question"),
+      screen.getByLabelText("Ask a Canadian immigration question"),
       "Can you represent me in my application?"
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -110,7 +112,7 @@ describe("chat shell contract behavior", () => {
     expect(await screen.findByText("Policy refusal response")).toBeTruthy();
     expect(
       screen.getByText(
-        "Policy refusal response returned. Ask a general informational question to continue."
+        "Case-law search is unavailable for this request. Ask a general immigration question to continue."
       )
     ).toBeTruthy();
     expect(screen.getAllByText("Trace ID: trace-policy-refusal").length).toBeGreaterThan(
@@ -132,18 +134,21 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
       />
     );
 
     const user = userEvent.setup();
     await user.type(
-      screen.getByLabelText("Ask a Canada immigration question"),
+      screen.getByLabelText("Ask a Canadian immigration question"),
       "Show me recent appeal decisions."
     );
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByText("Source unavailable")).toBeTruthy();
-    expect(screen.getByText("Authoritative source is unavailable.")).toBeTruthy();
+    expect(await screen.findByText("Case-law source unavailable")).toBeTruthy();
+    expect(
+      screen.getByText("Authoritative source is unavailable.")
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry last request" })).toBeTruthy();
     expect(
       screen.getByText("Trace mismatch detected between header and error body.")

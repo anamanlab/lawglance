@@ -39,7 +39,7 @@ import {
 export function ChatShell({
   apiBaseUrl,
   legalDisclaimer,
-  showOperationalPanels = true,
+  showOperationalPanels = false,
 }: ChatShellProps): JSX.Element {
   const sessionIdRef = useRef(buildSessionId());
   const messageCounterRef = useRef(0);
@@ -64,7 +64,6 @@ export function ChatShell({
     }),
   ]);
 
-  const endpointLabel = useMemo(() => apiBaseUrl.replace(/\/+$/, ""), [apiBaseUrl]);
   const trimmedDraft = draft.trim();
   const sendDisabled = isSubmitting || !trimmedDraft;
   const remainingCharacters = MAX_MESSAGE_LENGTH - draft.length;
@@ -153,38 +152,32 @@ export function ChatShell({
         });
 
         if (isPolicyRefusal) {
-          if (showOperationalPanels) {
-            setPendingCaseQuery(null);
-            setRelatedCasesStatus(
-              "Policy refusal response returned. Ask a general informational question to continue."
-            );
-          }
+          setPendingCaseQuery(null);
+          setRelatedCasesStatus(
+            "Case-law search is unavailable for this request. Ask a general immigration question to continue."
+          );
           return;
         }
 
-        if (showOperationalPanels) {
-          setPendingCaseQuery(promptToSubmit);
-          setRelatedCasesStatus(
-            "Related case search is ready. Click Search related cases to fetch authoritative metadata."
-          );
-        }
+        setPendingCaseQuery(promptToSubmit);
+        setRelatedCasesStatus("Ready to find related Canadian case law.");
       } finally {
         setIsSubmitting(false);
         setSubmissionPhase("idle");
         textareaRef.current?.focus();
       }
     },
-    [apiClient, isSubmitting, legalDisclaimer, showOperationalPanels]
+    [apiClient, isSubmitting, legalDisclaimer]
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
-    if (!showOperationalPanels || isSubmitting || !pendingCaseQuery) {
+    if (isSubmitting || !pendingCaseQuery) {
       return;
     }
 
     setIsSubmitting(true);
     setSubmissionPhase("cases");
-    setRelatedCasesStatus("Loading related case results...");
+    setRelatedCasesStatus("Searching official Canadian case law...");
 
     try {
       const caseSearchResult = await apiClient.searchCases({
@@ -195,11 +188,11 @@ export function ChatShell({
 
       if (!caseSearchResult.ok) {
         const errorCopy = ERROR_COPY[caseSearchResult.error.code];
-        setRelatedCasesStatus(
-          `${errorCopy.title}: ${
-            caseSearchResult.error.message || errorCopy.detail
-          } (Trace ID: ${caseSearchResult.traceId ?? "Unavailable"})`
-        );
+        const errorDetail = caseSearchResult.error.message || errorCopy.detail;
+        const statusMessage = showOperationalPanels
+          ? `${errorCopy.title}: ${errorDetail} (Trace ID: ${caseSearchResult.traceId ?? "Unavailable"})`
+          : "Case-law search is temporarily unavailable. Please try again shortly.";
+        setRelatedCasesStatus(statusMessage);
         setSupportContext({
           endpoint: "/api/search/cases",
           status: "error",
@@ -214,7 +207,7 @@ export function ChatShell({
       setRelatedCasesStatus(
         caseSearchResult.data.results.length
           ? ""
-          : "No related case results returned for this question."
+          : "No matching case-law records were found for this question."
       );
       setSupportContext({
         endpoint: "/api/search/cases",
@@ -270,6 +263,7 @@ export function ChatShell({
             isSubmitting={isSubmitting}
             onRetryLastRequest={onRetryLastRequest}
             retryPrompt={retryPrompt}
+            showDiagnostics={showOperationalPanels}
           />
 
           <MessageList
@@ -277,6 +271,7 @@ export function ChatShell({
             isSubmitting={isSubmitting}
             messages={messages}
             submissionPhase={submissionPhase}
+            showDiagnostics={showOperationalPanels}
           />
 
           <MessageComposer
@@ -292,24 +287,28 @@ export function ChatShell({
           />
         </div>
 
-        {showOperationalPanels ? (
-          <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-            <RelatedCasePanel
-              isSubmitting={isSubmitting}
-              onSearch={() => {
-                void runRelatedCaseSearch();
-              }}
-              pendingCaseQuery={pendingCaseQuery}
-              relatedCases={relatedCases}
-              relatedCasesStatus={relatedCasesStatus}
-              statusToneClass={statusToneClass}
-              submissionPhase={submissionPhase}
-              supportStatus={supportContext?.status ?? null}
-            />
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <RelatedCasePanel
+            isSubmitting={isSubmitting}
+            onSearch={() => {
+              void runRelatedCaseSearch();
+            }}
+            pendingCaseQuery={pendingCaseQuery}
+            relatedCases={relatedCases}
+            relatedCasesStatus={relatedCasesStatus}
+            showDiagnostics={showOperationalPanels}
+            statusToneClass={statusToneClass}
+            submissionPhase={submissionPhase}
+            supportStatus={supportContext?.status ?? null}
+          />
 
-            <SupportContextPanel endpointLabel={endpointLabel} supportContext={supportContext} />
-          </aside>
-        ) : null}
+          {showOperationalPanels ? (
+            <SupportContextPanel
+              endpointLabel={apiBaseUrl.replace(/\/+$/, "")}
+              supportContext={supportContext}
+            />
+          ) : null}
+        </aside>
       </div>
     </section>
   );

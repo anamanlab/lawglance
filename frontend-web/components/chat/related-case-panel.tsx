@@ -3,6 +3,7 @@ import type { RelatedCasePanelProps } from "@/components/chat/types";
 export function RelatedCasePanel({
   statusToneClass,
   supportStatus,
+  showDiagnostics = false,
   isSubmitting,
   submissionPhase,
   pendingCaseQuery,
@@ -16,13 +17,18 @@ export function RelatedCasePanel({
   return (
     <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm shadow-[0_8px_20px_rgba(15,23,42,0.08)]">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="font-semibold text-slate-800">Related case search</p>
-        <span
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusToneClass}`}
-        >
-          {supportStatus ?? "idle"}
-        </span>
+        <p className="font-semibold text-slate-800">Related case law</p>
+        {showDiagnostics && statusToneClass && supportStatus ? (
+          <span
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${statusToneClass}`}
+          >
+            {supportStatus}
+          </span>
+        ) : null}
       </div>
+      <p className="mb-3 text-xs text-slate-600">
+        Find official Canadian court decisions related to your question.
+      </p>
 
       <button
         aria-controls={resultsListId}
@@ -32,10 +38,15 @@ export function RelatedCasePanel({
         onClick={onSearch}
         type="button"
       >
-        {isSubmitting && submissionPhase === "cases" ? "Searching..." : "Search related cases"}
+        {isSubmitting && submissionPhase === "cases" ? "Searching..." : "Find related cases"}
       </button>
 
-      {relatedCasesStatus ? <p className="mt-1 text-slate-600">{relatedCasesStatus}</p> : null}
+      <p
+        aria-live="polite"
+        className="mt-2 min-h-[20px] text-slate-600"
+      >
+        {relatedCasesStatus}
+      </p>
 
       {hasResults ? (
         <ul className="mt-2 space-y-2 text-xs text-slate-700" id={resultsListId}>
@@ -50,6 +61,9 @@ export function RelatedCasePanel({
                 {result.title}
               </a>
               <p className="mt-1">{result.citation}</p>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Decision date: {result.decision_date}
+              </p>
             </li>
           ))}
         </ul>

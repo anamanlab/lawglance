@@ -48,8 +48,9 @@ export type ErrorCopy = {
 };
 
 export type RelatedCasePanelProps = {
-  statusToneClass: string;
-  supportStatus: SupportContext["status"] | null;
+  statusToneClass?: string;
+  supportStatus?: SupportContext["status"] | null;
+  showDiagnostics?: boolean;
   isSubmitting: boolean;
   submissionPhase: SubmissionPhase;
   pendingCaseQuery: string | null;

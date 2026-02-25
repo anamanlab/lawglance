@@ -162,7 +162,11 @@ function isScaffoldFallbackAllowed(): boolean {
 }
 
 function resolveProxyErrorCode(upstreamPath: string): ProxyErrorCode {
-  if (upstreamPath === "/api/search/cases" || upstreamPath.startsWith("/api/export/cases")) {
+  if (
+    upstreamPath === "/api/search/cases" ||
+    upstreamPath === "/api/research/lawyer-cases" ||
+    upstreamPath.startsWith("/api/export/cases")
+  ) {
     return "SOURCE_UNAVAILABLE";
   }
   return "PROVIDER_ERROR";

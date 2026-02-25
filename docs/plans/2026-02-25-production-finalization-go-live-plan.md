@@ -60,7 +60,7 @@
 - Completed:
   - Export host validation fix + regressions (`tests/test_export_policy_gate.py`).
   - Backend deploy hardening (`backend-vercel/.python-version`, `.vercelignore`, hygiene checks, deploy config tests).
-  - India->Canada runtime prompt migration (`config/prompts.yaml` compatibility text + runtime prompt files already Canada-safe).
+  - Legacy non-Canada -> Canada runtime prompt migration (`config/prompts.yaml` compatibility text + runtime prompt files already Canada-safe).
 - Pending:
   - Quota-unblocked redeploy
   - Token-authenticated smoke pass
@@ -219,4 +219,4 @@ gh pr checks <new-pr-number>
 - Export host validation regression is fixed with regression tests passing.
 - Source-policy/registry validators pass.
 - CI checks for the release-fix PR are green.
-- India-era references are triaged (runtime-facing fixed; legacy/docs explicitly labeled or scheduled).
+- Legacy non-Canada references are triaged (runtime-facing fixed; legacy/docs explicitly labeled or scheduled).

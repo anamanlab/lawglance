@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChatShell } from "@/components/chat-shell";
 import {
-  CASE_SEARCH_SUCCESS_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
+  LAWYER_RESEARCH_SUCCESS_RESPONSE,
 } from "@/tests/fixtures/chat-contract-fixtures";
 
 const LEGAL_DISCLAIMER =
@@ -164,7 +164,7 @@ describe("chat shell ui", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-cases-success" },
         })
       );

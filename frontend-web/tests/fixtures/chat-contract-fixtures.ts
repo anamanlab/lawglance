@@ -1,6 +1,7 @@
 import type {
   CaseSearchResponsePayload,
   ChatResponsePayload,
+  LawyerCaseResearchResponsePayload,
 } from "@/lib/api-client";
 
 export const CHAT_SUCCESS_RESPONSE: ChatResponsePayload = {
@@ -53,6 +54,37 @@ export const CASE_SEARCH_SUCCESS_RESPONSE: CaseSearchResponsePayload = {
       export_policy_reason: "source_export_allowed",
     },
   ],
+};
+
+export const LAWYER_RESEARCH_SUCCESS_RESPONSE: LawyerCaseResearchResponsePayload = {
+  matter_profile: {
+    issue_tags: ["procedural_fairness"],
+    target_court: "fc",
+  },
+  cases: [
+    {
+      case_id: "case-1",
+      title: "Sample Tribunal Decision",
+      citation: "2025 FC 100",
+      source_id: "SCC_DECISIONS",
+      court: "SCC",
+      decision_date: "2025-01-11",
+      url: "https://example.test/cases/1",
+      document_url:
+        "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      pdf_status: "available",
+      pdf_reason: "document_url_trusted",
+      export_allowed: true,
+      export_policy_reason: "source_export_allowed",
+      relevance_reason:
+        "This case aligns with the matter issues and appears relevant for FC precedent support.",
+      summary: "Sample summary for legal research support.",
+    },
+  ],
+  source_status: {
+    official: "ok",
+    canlii: "not_used",
+  },
 };
 
 export const SOURCE_UNAVAILABLE_ERROR = {

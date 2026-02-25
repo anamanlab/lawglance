@@ -62,11 +62,15 @@ export type LawyerCaseSupport = {
   case_id: string;
   title: string;
   citation: string;
+  source_id?: string | null;
   court?: string | null;
   decision_date: string;
   url: string;
   document_url?: string | null;
   pdf_status: "available" | "unavailable";
+  pdf_reason?: string | null;
+  export_allowed?: boolean | null;
+  export_policy_reason?: string | null;
   relevance_reason: string;
   summary?: string | null;
 };

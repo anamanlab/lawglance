@@ -15,6 +15,8 @@ from immcad_api.api.routes import (
     build_case_router,
     build_case_router_disabled,
     build_chat_router,
+    build_lawyer_research_router,
+    build_lawyer_research_router_disabled,
 )
 from immcad_api.middleware.rate_limit import build_rate_limiter
 from immcad_api.policy import load_source_policy
@@ -24,6 +26,7 @@ from immcad_api.services import (
     CaseSearchService,
     ChatService,
     KeywordGroundingAdapter,
+    LawyerCaseResearchService,
     StaticGroundingAdapter,
     official_grounding_catalog,
     scaffold_grounded_citations,
@@ -158,6 +161,7 @@ def create_app() -> FastAPI:
         grounding_adapter = KeywordGroundingAdapter(official_grounding_catalog())
     hardened_environment = is_hardened_environment(settings.environment)
     case_search_service: CaseSearchService | None = None
+    lawyer_case_research_service: LawyerCaseResearchService | None = None
     canlii_usage_limiter = None
     source_policy = None
     source_registry = None
@@ -194,6 +198,11 @@ def create_app() -> FastAPI:
                 )
                 if settings.enable_official_case_sources
                 else None,
+            )
+            lawyer_case_research_service = LawyerCaseResearchService(
+                case_search_service=case_search_service,
+                source_policy=source_policy,
+                source_registry=source_registry,
             )
 
     chat_service = ChatService(
@@ -365,6 +374,19 @@ def create_app() -> FastAPI:
     else:
         app.include_router(
             build_case_router_disabled(policy_reason="case_search_disabled")
+        )
+    if lawyer_case_research_service:
+        app.include_router(
+            build_lawyer_research_router(
+                lawyer_case_research_service,
+                request_metrics=request_metrics,
+            )
+        )
+    else:
+        app.include_router(
+            build_lawyer_research_router_disabled(
+                policy_reason="case_search_disabled"
+            )
         )
 
     @app.get("/healthz", tags=["health"])

@@ -23,6 +23,12 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     metrics.record_export_outcome(
         outcome="fetch_failed", policy_reason="source_export_fetch_failed"
     )
+    metrics.record_lawyer_research_outcome(
+        case_count=2,
+        pdf_available_count=1,
+        pdf_unavailable_count=1,
+        source_status={"official": "ok", "canlii": "not_used"},
+    )
     metrics.record_export_audit_event(
         trace_id="trace-1",
         client_id="203.0.113.10",
@@ -67,6 +73,12 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
         == "source_export_allowed"
     )
     assert snapshot["export"]["audit_recent"][0]["timestamp_utc"].endswith("Z")
+    assert snapshot["lawyer_research"]["requests"] == 1
+    assert snapshot["lawyer_research"]["cases_returned_total"] == 2
+    assert snapshot["lawyer_research"]["cases_per_request"] == pytest.approx(2.0)
+    assert snapshot["lawyer_research"]["pdf_available_total"] == 1
+    assert snapshot["lawyer_research"]["pdf_unavailable_total"] == 1
+    assert snapshot["lawyer_research"]["source_unavailable_events"] == 0
     assert snapshot["latency_ms"]["sample_count"] == 2
     assert snapshot["latency_ms"]["p50"] == pytest.approx(250.0)
     assert snapshot["latency_ms"]["p95"] == pytest.approx(385.0)
@@ -92,6 +104,12 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["export"]["too_large"] == 0
     assert snapshot["export"]["policy_reasons"] == {}
     assert snapshot["export"]["audit_recent"] == []
+    assert snapshot["lawyer_research"]["requests"] == 0
+    assert snapshot["lawyer_research"]["cases_returned_total"] == 0
+    assert snapshot["lawyer_research"]["cases_per_request"] == 0.0
+    assert snapshot["lawyer_research"]["pdf_available_total"] == 0
+    assert snapshot["lawyer_research"]["pdf_unavailable_total"] == 0
+    assert snapshot["lawyer_research"]["source_unavailable_events"] == 0
     assert snapshot["latency_ms"]["sample_count"] == 0
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0

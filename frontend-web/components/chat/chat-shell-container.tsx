@@ -10,7 +10,7 @@ import {
 } from "react";
 
 import { createApiClient } from "@/lib/api-client";
-import type { CaseSearchResult } from "@/lib/api-client";
+import type { LawyerCaseSupport } from "@/lib/api-client";
 import { ChatHeader } from "@/components/chat/chat-header";
 import {
   ASSISTANT_BOOTSTRAP_TEXT,
@@ -90,7 +90,7 @@ export function ChatShell({
   const [chatError, setChatError] = useState<ChatErrorState | null>(null);
   const [retryPrompt, setRetryPrompt] = useState<string | null>(null);
   const [supportContext, setSupportContext] = useState<SupportContext | null>(null);
-  const [relatedCases, setRelatedCases] = useState<CaseSearchResult[]>([]);
+  const [relatedCases, setRelatedCases] = useState<LawyerCaseSupport[]>([]);
   const [relatedCasesStatus, setRelatedCasesStatus] = useState("");
   const [caseSearchQuery, setCaseSearchQuery] = useState("");
   const [lastCaseSearchQuery, setLastCaseSearchQuery] = useState<string | null>(null);
@@ -220,11 +220,12 @@ export function ChatShell({
     setIsSubmitting(true);
     setSubmissionPhase("cases");
     setExportingCaseId(null);
-    setRelatedCasesStatus("Searching official Canadian case law...");
+    setRelatedCasesStatus("Running grounded lawyer case research...");
 
     try {
-      const caseSearchResult = await apiClient.searchCases({
-        query,
+      const caseSearchResult = await apiClient.researchLawyerCases({
+        session_id: sessionIdRef.current,
+        matter_summary: query,
         jurisdiction: "ca",
         limit: 5,
       });
@@ -239,7 +240,7 @@ export function ChatShell({
         });
         setRelatedCasesStatus(statusMessage);
         setSupportContext({
-          endpoint: "/api/search/cases",
+          endpoint: "/api/research/lawyer-cases",
           status: "error",
           traceId: caseSearchResult.traceId,
           code: caseSearchResult.error.code,
@@ -248,15 +249,15 @@ export function ChatShell({
         return;
       }
 
-      setRelatedCases(caseSearchResult.data.results);
+      setRelatedCases(caseSearchResult.data.cases);
       setLastCaseSearchQuery(query);
-      setRelatedCasesStatus(
-        caseSearchResult.data.results.length
-          ? ""
-          : "No matching case-law records were found for this question."
-      );
+      const noMatchMessage =
+        caseSearchResult.data.source_status.official === "unavailable"
+          ? "Official case-law sources are temporarily unavailable. Please retry shortly."
+          : "No matching case-law records were found for this query.";
+      setRelatedCasesStatus(caseSearchResult.data.cases.length ? "" : noMatchMessage);
       setSupportContext({
-        endpoint: "/api/search/cases",
+        endpoint: "/api/research/lawyer-cases",
         status: "success",
         traceId: caseSearchResult.traceId,
         traceIdMismatch: false,
@@ -268,7 +269,7 @@ export function ChatShell({
   }, [apiClient, caseSearchQuery, isSubmitting, showOperationalPanels]);
 
   const runCaseExport = useCallback(
-    async (caseResult: CaseSearchResult): Promise<void> => {
+    async (caseResult: LawyerCaseSupport): Promise<void> => {
       if (isSubmitting) {
         return;
       }

@@ -76,11 +76,15 @@ class LawyerCaseSupport(BaseModel):
     case_id: str
     title: str
     citation: str
+    source_id: str | None = None
     court: str | None = None
     decision_date: date
     url: str
     document_url: str | None = None
     pdf_status: Literal["available", "unavailable"]
+    pdf_reason: str | None = None
+    export_allowed: bool | None = None
+    export_policy_reason: str | None = None
     relevance_reason: str
     summary: str | None = None
 

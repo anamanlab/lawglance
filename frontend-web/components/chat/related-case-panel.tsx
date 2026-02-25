@@ -11,8 +11,23 @@ function buildExportUnavailableReason(policyReason?: string | null): string {
       return "Export unavailable because this source is not registered for export.";
     case "source_export_metadata_missing":
       return "Export unavailable because source metadata is missing for this case.";
+    case "document_url_host_untrusted":
+      return "Export unavailable because the case document host is not trusted for this source.";
     default:
       return "Export unavailable for this case result.";
+  }
+}
+
+function buildPdfUnavailableReason(pdfReason?: string | null): string {
+  switch (pdfReason) {
+    case "document_url_missing":
+      return "PDF unavailable because no decision document URL was returned for this case.";
+    case "document_url_host_untrusted":
+      return "PDF unavailable because the document host is not trusted for this source.";
+    case "source_not_in_registry_for_export":
+      return "PDF unavailable because this source is not registered for export.";
+    default:
+      return "PDF unavailable for this case result.";
   }
 }
 
@@ -141,6 +156,7 @@ export function RelatedCasePanel({
           {relatedCases.map((result) => {
             const exportUnavailable =
               result.export_allowed === false ||
+              result.pdf_status === "unavailable" ||
               !result.source_id ||
               !result.document_url;
             const exportUnavailableReason = buildExportUnavailableReason(
@@ -158,8 +174,29 @@ export function RelatedCasePanel({
                   {result.title}
                 </a>
                 <p className="mt-1">{result.citation}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      result.pdf_status === "available"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-amber-200 bg-amber-50 text-amber-700"
+                    }`}
+                  >
+                    {result.pdf_status === "available"
+                      ? "PDF available"
+                      : "PDF unavailable"}
+                  </span>
+                  {result.court ? (
+                    <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      {result.court}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="mt-1 text-[11px] text-slate-500">
                   Decision date: {result.decision_date}
+                </p>
+                <p className="mt-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700">
+                  {result.relevance_reason}
                 </p>
                 <div className="mt-2">
                   <button
@@ -176,7 +213,9 @@ export function RelatedCasePanel({
                   </button>
                   {exportUnavailable ? (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      {exportUnavailableReason}
+                      {result.pdf_status === "unavailable"
+                        ? buildPdfUnavailableReason(result.pdf_reason)
+                        : exportUnavailableReason}
                     </p>
                   ) : null}
                 </div>

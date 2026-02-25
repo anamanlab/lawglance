@@ -58,7 +58,7 @@ Perform a full pre-deploy systems audit so the next backend/frontend deployment 
   - deploy-context exclusions
 - Legal/policy guardrails:
   - Canada-only runtime prompt and policy behavior
-  - explicit classification of residual India-era references (runtime vs archival)
+  - explicit classification of residual legacy non-Canada references (runtime vs archival)
   - not-legal-advice positioning consistency in user-visible paths
 
 ### Phase 4 - CI/CD and Deploy Process Audit

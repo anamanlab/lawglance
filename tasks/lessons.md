@@ -34,3 +34,4 @@
 - Do not enable frontend chat scaffold fallback implicitly; require explicit env opt-in so backend misconfiguration is visible instead of silently masked.
 - For user-facing case-search failures, map structured validation/policy errors to actionable UI guidance instead of generic "temporarily unavailable" copy.
 - In dual-service chat + case-search UIs, always show whether displayed results correspond to the current query or a previous query to prevent stale-context confusion.
+- If subagent spawn fails due thread-cap limits, do not stall implementation; report the limit once, continue sequential execution, and close any known agent IDs as soon as they are no longer needed.

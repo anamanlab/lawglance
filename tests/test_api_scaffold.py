@@ -791,11 +791,23 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
         headers=auth_headers,
         json={"session_id": "short", "message": ""},
     )
+    lawyer_research_response = metrics_client.post(
+        "/api/research/lawyer-cases",
+        headers=auth_headers,
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "Federal Court appeal on procedural fairness and inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 3,
+        },
+    )
     metrics = metrics_client.get("/ops/metrics", headers=auth_headers)
 
     assert ok_response.status_code == 200
     assert refusal_response.status_code == 200
     assert validation_error_response.status_code == 422
+    assert lawyer_research_response.status_code in {200, 503}
     assert metrics.status_code == 200
 
     payload = metrics.json()
@@ -807,7 +819,10 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["refusal"]["total"] >= 1
     assert "fallback" in request_metrics
     assert "export" in request_metrics
+    assert "lawyer_research" in request_metrics
     assert "audit_recent" in request_metrics["export"]
+    assert request_metrics["lawyer_research"]["requests"] >= 1
+    assert request_metrics["lawyer_research"]["cases_per_request"] >= 0
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]

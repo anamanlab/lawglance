@@ -1,3 +1,42 @@
+# Task Plan - 2026-02-25 - Lawyer Case Research Production Path
+
+## Current Focus
+- Ship a production-safe lawyer case-research flow with grounded retrieval, explicit PDF/export status, and frontend integration that does not depend on chat-only scaffolding.
+
+## Plan
+- [x] Task 1: Define lawyer research API contract (backend schema + frontend client types + contract tests).
+- [x] Task 2: Build matter extractor + multi-query planner.
+- [x] Task 3: Implement lawyer case research orchestration service with deterministic merge/ranking and deduplication.
+- [x] Task 4: Add document/PDF availability resolver and integrate into service responses.
+- [x] Task 5: Add `/api/research/lawyer-cases` backend route (enabled + disabled modes).
+- [x] Task 6: Integrate frontend related-case workflow with lawyer research endpoint and richer case cards.
+- [x] Task 7: Add lawyer-research observability fields + docs contract updates.
+- [x] Task 8: Final release-readiness closure (known issues, quality/release gates evidence).
+
+## Review
+- Added resolver-backed support metadata for each recommended case:
+  - explicit `pdf_status`, `pdf_reason`,
+  - `source_id`, `export_allowed`, `export_policy_reason`,
+  - grounded `relevance_reason`.
+- Added backend route and disabled-mode behavior:
+  - `POST /api/research/lawyer-cases` now available when case search is enabled,
+  - returns structured `SOURCE_UNAVAILABLE` envelope when case search is disabled.
+- Frontend now uses lawyer-research endpoint for related-case retrieval:
+  - proxy route added at `frontend-web/app/api/research/lawyer-cases/route.ts`,
+  - support context now records `/api/research/lawyer-cases`,
+  - related case cards now show relevance rationale and explicit PDF availability badges.
+- Proxy safety maintained:
+  - scaffold fallback remains chat-only,
+  - lawyer-research proxy failures map to `SOURCE_UNAVAILABLE`.
+- Verification evidence:
+  - Backend targeted tests: `12 passed`.
+  - Frontend targeted tests: `37 passed`.
+  - `frontend-web` typecheck/lint: pass.
+  - backend/deploy mirror sync check: pass.
+  - full quality gate: `make quality` -> pass (`414 passed`, docs/architecture/source-registry/sync/hygiene checks green).
+
+---
+
 # Task Plan - 2026-02-25 - Cloudflare Migration (Vercel Exit Path)
 
 ## Current Focus
@@ -16,6 +55,16 @@
   - [ ] Backend native-runtime deploy workflow pending architecture decision (Containers vs Python Worker).
 - [ ] Phase 5 production cutover: staged DNS/traffic migration with 24h and 72h observation windows and rollback criteria.
 - [ ] Evidence and signoff: document results in release artifacts and update known-issues register.
+
+## Task Plan - 2026-02-25 - Cloudflare Migration Audit
+
+### Current Focus
+- Evaluate release documentation, Cloudflare deploy configs/workflows (frontend + backend proxy), and list concrete gaps blocking production cutover.
+
+### Plan
+- [ ] Audit `docs/release/known-issues.md` to confirm existing Cloudflare migration entries describe up-to-date blockers and note any missing evidence.
+- [ ] Review frontend and backend Cloudflare deploy configs/workflows for completeness (wrangler, OpenNext, GitHub Actions) and record missing steps or unpinned/pending parts.
+- [ ] Compile a concise list of actionable gaps (documentation, config, automation) that must be fixed before Cloudflare migration is production-ready.
 
 ## Review
 - Phase 1 frontend migration executed for `frontend-web`:
@@ -160,6 +209,26 @@
 - Verification evidence:
   - `npm run typecheck` (`frontend-web`) -> pass.
   - `npm run lint` (`frontend-web`) -> pass.
+
+# Task Plan - 2026-02-25 - Documentation Cloudflare Migration Sync
+
+## Current Focus
+- Align release/plan/readme artifacts so they describe the Cloudflare-first rollout instead of the legacy Vercel-first flow.
+
+## Plan
+- [ ] Inventory `docs/release`, `docs/plans`, `README.md`, `backend-cloudflare/README.md`, and `frontend-web/README.md` for Vercel-first instructions.
+- [ ] For each file, capture sections that now need Cloudflare-first language and note what should replace them.
+- [ ] Prioritize doc edits (by user impact/clarity) and provide concrete recommendations per file.
+
+# Task Plan - 2026-02-25 - Documentation Cloudflare Migration Sync
+
+## Current Focus
+- Align release/plan/readme artifacts so they describe the Cloudflare-first rollout instead of the legacy Vercel-first flow.
+
+## Plan
+- [ ] Inventory `docs/release`, `docs/plans`, `README.md`, `backend-cloudflare/README.md`, and `frontend-web/README.md` for Vercel-first instructions.
+- [ ] For each file, capture sections that now need Cloudflare-first language and note what should replace them.
+- [ ] Prioritize doc edits (by user impact/clarity) and provide concrete recommendations per file.
   - `npm run test` (`frontend-web`) -> pass (`59 tests`).
   - `npm run test:e2e` (`frontend-web`) -> pass (`18 passed`, `0 skipped`).
   - `npm run test:e2e:cross-browser` (`frontend-web`) -> pass (`chromium+firefox`, `6 tests`).

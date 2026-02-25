@@ -1,7 +1,7 @@
 import type {
   ApiErrorCode,
-  CaseSearchResult,
   ChatCitation,
+  LawyerCaseSupport,
 } from "@/lib/api-client";
 
 export type MessageAuthor = "assistant" | "user";
@@ -28,6 +28,7 @@ export type SupportContext = {
   endpoint:
     | "/api/chat"
     | "/api/search/cases"
+    | "/api/research/lawyer-cases"
     | "/api/export/cases"
     | "/api/export/cases/approval";
   status: "success" | "error";
@@ -61,9 +62,9 @@ export type RelatedCasePanelProps = {
   caseSearchQuery: string;
   lastCaseSearchQuery: string | null;
   relatedCasesStatus: string;
-  relatedCases: CaseSearchResult[];
+  relatedCases: LawyerCaseSupport[];
   onCaseSearchQueryChange: (value: string) => void;
   onSearch: () => void;
-  onExportCase: (result: CaseSearchResult) => void;
+  onExportCase: (result: LawyerCaseSupport) => void;
   exportingCaseId: string | null;
 };

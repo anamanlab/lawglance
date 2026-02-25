@@ -37,6 +37,11 @@ class RequestMetrics:
         self._export_audit_events: deque[dict[str, object]] = deque(
             maxlen=max_export_audit_events
         )
+        self._lawyer_research_requests = 0
+        self._lawyer_research_cases_returned_total = 0
+        self._lawyer_research_pdf_available_total = 0
+        self._lawyer_research_pdf_unavailable_total = 0
+        self._lawyer_research_source_unavailable_events = 0
         self._latencies_ms: deque[float] = deque(maxlen=max_latency_samples)
 
     def record_api_response(self, *, status_code: int, duration_seconds: float) -> None:
@@ -70,6 +75,25 @@ class RequestMetrics:
                 self._export_too_large += 1
             if policy_reason:
                 self._export_policy_reasons[policy_reason] += 1
+
+    def record_lawyer_research_outcome(
+        self,
+        *,
+        case_count: int,
+        pdf_available_count: int,
+        pdf_unavailable_count: int,
+        source_status: dict[str, str] | None = None,
+    ) -> None:
+        with self._lock:
+            self._lawyer_research_requests += 1
+            self._lawyer_research_cases_returned_total += max(case_count, 0)
+            self._lawyer_research_pdf_available_total += max(pdf_available_count, 0)
+            self._lawyer_research_pdf_unavailable_total += max(pdf_unavailable_count, 0)
+            if source_status:
+                unavailable_count = sum(
+                    1 for status in source_status.values() if status == "unavailable"
+                )
+                self._lawyer_research_source_unavailable_events += unavailable_count
 
     def record_export_audit_event(
         self,
@@ -116,6 +140,19 @@ class RequestMetrics:
             export_too_large = self._export_too_large
             export_policy_reasons = dict(self._export_policy_reasons)
             export_audit_events = list(self._export_audit_events)
+            lawyer_research_requests = self._lawyer_research_requests
+            lawyer_research_cases_returned_total = (
+                self._lawyer_research_cases_returned_total
+            )
+            lawyer_research_pdf_available_total = (
+                self._lawyer_research_pdf_available_total
+            )
+            lawyer_research_pdf_unavailable_total = (
+                self._lawyer_research_pdf_unavailable_total
+            )
+            lawyer_research_source_unavailable_events = (
+                self._lawyer_research_source_unavailable_events
+            )
             latencies = list(self._latencies_ms)
 
         request_rate_per_minute = (api_requests / elapsed_seconds) * 60.0
@@ -149,6 +186,18 @@ class RequestMetrics:
                 "too_large": export_too_large,
                 "policy_reasons": export_policy_reasons,
                 "audit_recent": export_audit_events,
+            },
+            "lawyer_research": {
+                "requests": lawyer_research_requests,
+                "cases_returned_total": lawyer_research_cases_returned_total,
+                "cases_per_request": (
+                    lawyer_research_cases_returned_total / lawyer_research_requests
+                    if lawyer_research_requests
+                    else 0.0
+                ),
+                "pdf_available_total": lawyer_research_pdf_available_total,
+                "pdf_unavailable_total": lawyer_research_pdf_unavailable_total,
+                "source_unavailable_events": lawyer_research_source_unavailable_events,
             },
             "latency_ms": {
                 "sample_count": len(latencies),

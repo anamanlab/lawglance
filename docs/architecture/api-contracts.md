@@ -5,6 +5,7 @@
 - [Table of Contents](#table-of-contents)
 - [`POST /api/chat`](#`post-/api/chat`)
 - [`POST /api/search/cases`](#`post-/api/search/cases`)
+- [`POST /api/research/lawyer-cases`](#`post-/api/research/lawyer-cases`)
 - [`POST /api/export/cases`](#`post-/api/export/cases`)
 - [`GET /ops/metrics`](#`get-/ops/metrics`)
 - [Error Envelope](#error-envelope)
@@ -159,6 +160,65 @@ CanLII compliance notes:
 - Query matching is performed on returned metadata fields in IMMCAD.
 - Service-level guardrails enforce CanLII plan limits: `5000/day`, `2 requests/second`, and `1 in-flight request`.
 
+## `POST /api/research/lawyer-cases`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+```
+
+Request:
+
+```json
+{
+  "session_id": "session-123456",
+  "matter_summary": "Federal Court appeal on procedural fairness and inadmissibility",
+  "jurisdiction": "ca",
+  "court": "fc",
+  "limit": 5
+}
+```
+
+Response:
+
+```json
+{
+  "matter_profile": {
+    "issue_tags": ["procedural_fairness", "inadmissibility"],
+    "target_court": "fc"
+  },
+  "cases": [
+    {
+      "case_id": "2026-FC-101",
+      "title": "Example v Canada",
+      "citation": "2026 FC 101",
+      "source_id": "FC_DECISIONS",
+      "court": "FC",
+      "decision_date": "2026-02-01",
+      "url": "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/123456/index.do",
+      "document_url": "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/123456/index.do",
+      "pdf_status": "available",
+      "pdf_reason": "document_url_trusted",
+      "export_allowed": true,
+      "export_policy_reason": "source_export_allowed",
+      "relevance_reason": "This case aligns with the matter issues and appears relevant for FC precedent support.",
+      "summary": null
+    }
+  ],
+  "source_status": {
+    "official": "ok",
+    "canlii": "not_used"
+  }
+}
+```
+
+Notes:
+
+- This endpoint is designed for lawyer-style research workflows and uses matter-profile extraction plus multi-query retrieval behind the scenes.
+- `pdf_status` and `pdf_reason` provide explicit document availability transparency.
+- If case-search features are disabled in the deployment, this route returns `503 SOURCE_UNAVAILABLE` with `policy_reason=case_search_disabled`.
+
 ## `POST /api/export/cases`
 
 Headers:
@@ -269,6 +329,14 @@ Response:
         }
       ]
     },
+    "lawyer_research": {
+      "requests": 14,
+      "cases_returned_total": 36,
+      "cases_per_request": 2.57,
+      "pdf_available_total": 30,
+      "pdf_unavailable_total": 6,
+      "source_unavailable_events": 1
+    },
     "latency_ms": {
       "sample_count": 350,
       "p50": 840.4,
@@ -308,7 +376,7 @@ Error envelope contract note: `error.trace_id` is required for error responses a
 
 - All responses include `x-trace-id` header for observability correlation.
 - Error responses include `error.trace_id` in the body in addition to `x-trace-id`.
-- `GET /ops/metrics` is the canonical endpoint for request rate, error rate, fallback rate, refusal rate, export outcomes, and latency percentiles.
+- `GET /ops/metrics` is the canonical endpoint for request rate, error rate, fallback rate, refusal rate, export outcomes, lawyer-research outcomes, and latency percentiles.
 - `POST /api/chat` must return at least one citation unless either:
   - response is a policy refusal, or
   - synthetic scaffold citations are disabled and no grounded citations are available (safe constrained response path).

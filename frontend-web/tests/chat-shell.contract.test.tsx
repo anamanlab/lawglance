@@ -6,10 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatShell } from "@/components/chat-shell";
 import {
   CASE_SEARCH_TOO_BROAD_ERROR,
-  CASE_SEARCH_SUCCESS_RESPONSE,
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
   EXPORT_POLICY_BLOCKED_ERROR,
+  LAWYER_RESEARCH_SUCCESS_RESPONSE,
   SOURCE_UNAVAILABLE_ERROR,
   UNAUTHORIZED_ERROR,
 } from "@/tests/fixtures/chat-contract-fixtures";
@@ -70,7 +70,7 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
       );
@@ -104,7 +104,13 @@ describe("chat shell contract behavior", () => {
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
 
     expect(await screen.findByText("Sample Tribunal Decision")).toBeTruthy();
-    expect(screen.getByText("Last endpoint: /api/search/cases")).toBeTruthy();
+    expect(screen.getByText("PDF available")).toBeTruthy();
+    expect(
+      screen.getByText(/appears relevant for FC precedent support/i)
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Last endpoint: /api/research/lawyer-cases")
+    ).toBeTruthy();
     expect(screen.getByText("Trace ID: trace-case-success")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -118,7 +124,7 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
       );
@@ -309,7 +315,7 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
       );
@@ -354,20 +360,31 @@ describe("chat shell contract behavior", () => {
       .mockResolvedValueOnce(
         jsonResponse(
           {
-            results: [
+            matter_profile: {
+              issue_tags: ["inadmissibility"],
+              target_court: "fc",
+            },
+            cases: [
               {
                 case_id: "case-2",
                 title: "Policy-limited Case",
                 citation: "2025 FC 200",
+                court: "FC",
                 decision_date: "2025-02-12",
                 url: "https://www.canlii.org/en/ca/fct/doc/2025/2025fc200/2025fc200.html",
                 source_id: "CANLII_CASE_BROWSE",
                 document_url:
                   "https://www.canlii.org/en/ca/fct/doc/2025/2025fc200/2025fc200.html",
+                pdf_status: "available",
                 export_allowed: false,
                 export_policy_reason: "source_export_blocked_by_policy",
+                relevance_reason: "Relevant to the current matter.",
               },
             ],
+            source_status: {
+              official: "no_match",
+              canlii: "used",
+            },
           },
           {
             headers: { "x-trace-id": "trace-case-success" },
@@ -413,7 +430,7 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
       )
@@ -504,7 +521,7 @@ describe("chat shell contract behavior", () => {
         })
       )
       .mockResolvedValueOnce(
-        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
           headers: { "x-trace-id": "trace-case-success" },
         })
       )

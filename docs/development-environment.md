@@ -121,6 +121,20 @@ make api-dev
 make frontend-dev
 ```
 
+Lawyer case-research local smoke (optional quick check):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/research/lawyer-cases \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "session-123456",
+    "matter_summary": "Federal Court appeal on procedural fairness and inadmissibility",
+    "jurisdiction": "ca",
+    "court": "fc",
+    "limit": 5
+  }'
+```
+
 ## Environment variables
 
 Use `.env.example` as baseline:

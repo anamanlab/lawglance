@@ -64,6 +64,37 @@ class CaseSearchResponse(BaseModel):
     results: list[CaseSearchResult]
 
 
+class LawyerCaseResearchRequest(BaseModel):
+    session_id: str = Field(min_length=8, max_length=128)
+    matter_summary: str = Field(min_length=10, max_length=12000)
+    jurisdiction: str = Field(default="ca", max_length=16)
+    court: str | None = Field(default=None, max_length=32)
+    limit: int = Field(default=10, ge=1, le=25)
+
+
+class LawyerCaseSupport(BaseModel):
+    case_id: str
+    title: str
+    citation: str
+    source_id: str | None = None
+    court: str | None = None
+    decision_date: date
+    url: str
+    document_url: str | None = None
+    pdf_status: Literal["available", "unavailable"]
+    pdf_reason: str | None = None
+    export_allowed: bool | None = None
+    export_policy_reason: str | None = None
+    relevance_reason: str
+    summary: str | None = None
+
+
+class LawyerCaseResearchResponse(BaseModel):
+    matter_profile: dict[str, list[str] | str | None]
+    cases: list[LawyerCaseSupport]
+    source_status: dict[str, str]
+
+
 class CaseExportRequest(BaseModel):
     source_id: str = Field(min_length=2, max_length=128)
     case_id: str = Field(min_length=1, max_length=256)

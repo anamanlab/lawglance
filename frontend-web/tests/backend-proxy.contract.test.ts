@@ -73,6 +73,26 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
   });
 
+  it("returns source-unavailable error for lawyer research when backend config is missing", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
+      throw new Error("missing runtime config");
+    });
+    vi.mocked(isHardenedRuntimeEnvironment).mockReturnValue(false);
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/research/lawyer-cases", {
+        session_id: "session-123456",
+        matter_summary: "Federal Court appeal on procedural fairness",
+      }),
+      "/api/research/lawyer-cases"
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-immcad-fallback")).toBeNull();
+    expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
+  });
+
   it("returns explicit provider error in production when backend config is missing", async () => {
     vi.mocked(getServerRuntimeConfig).mockImplementation(() => {
       throw new Error("missing runtime config");

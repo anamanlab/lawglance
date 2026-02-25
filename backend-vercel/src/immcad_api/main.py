@@ -23,7 +23,9 @@ from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import (
     CaseSearchService,
     ChatService,
+    KeywordGroundingAdapter,
     StaticGroundingAdapter,
+    official_grounding_catalog,
     scaffold_grounded_citations,
 )
 from immcad_api.settings import load_settings
@@ -133,12 +135,13 @@ def create_app() -> FastAPI:
         telemetry=ProviderMetrics(),
     )
 
-    grounded_citations = (
-        scaffold_grounded_citations() if settings.allow_scaffold_synthetic_citations else []
-    )
+    if settings.allow_scaffold_synthetic_citations:
+        grounding_adapter = StaticGroundingAdapter(scaffold_grounded_citations())
+    else:
+        grounding_adapter = KeywordGroundingAdapter(official_grounding_catalog())
     chat_service = ChatService(
         provider_router,
-        grounding_adapter=StaticGroundingAdapter(grounded_citations),
+        grounding_adapter=grounding_adapter,
         trusted_citation_domains=settings.citation_trusted_domains,
     )
     case_search_service: CaseSearchService | None = None

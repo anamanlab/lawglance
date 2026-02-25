@@ -319,9 +319,11 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
     assert second_body["fallback_used"]["reason"] is None
 
 
-def test_safe_constrained_response_when_synthetic_citations_disabled(
+def test_curated_grounded_response_when_synthetic_citations_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ENABLE_OPENAI_PROVIDER", "false")
+    monkeypatch.setenv("PRIMARY_PROVIDER", "scaffold")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
     constrained_client = TestClient(create_app())
 
@@ -337,9 +339,9 @@ def test_safe_constrained_response_when_synthetic_citations_disabled(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["citations"] == []
-    assert body["confidence"] == "low"
-    assert body["answer"].startswith("I do not have enough grounded legal context")
+    assert body["answer"].startswith("Scaffold response:")
+    assert len(body["citations"]) >= 1
+    assert body["confidence"] == "medium"
     assert body["disclaimer"] == DISCLAIMER_TEXT
 
 

@@ -44,7 +44,7 @@ Endpoints:
 ## Notes
 
 - If provider keys are missing, scaffold provider returns deterministic responses.
-- If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
+- If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false`, runtime uses curated official grounding citations (IRPA/IRCC references) instead of synthetic scaffold citations.
 - Runtime citation enforcement accepts citations only when they are well-formed and match grounding-adapter candidates; ungrounded citations are dropped and the response is constrained safely.
 - Runtime citation enforcement also validates citation URL domains against `CITATION_TRUSTED_DOMAINS`.
 - Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY`; case search requires at least one backend (`ENABLE_OFFICIAL_CASE_SOURCES=true` or `CANLII_API_KEY`); if `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.

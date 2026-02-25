@@ -26,7 +26,75 @@ _SOURCE_IDS_BY_COURT = {
     "caf": ("FCA_DECISIONS",),
     "fca-caf": ("FCA_DECISIONS",),
 }
-_DEFAULT_SOURCE_IDS = ("SCC_DECISIONS", "FC_DECISIONS", "FCA_DECISIONS")
+_DEFAULT_SOURCE_IDS = ("FC_DECISIONS", "FCA_DECISIONS", "SCC_DECISIONS")
+_QUERY_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "be",
+        "by",
+        "canada",
+        "for",
+        "from",
+        "how",
+        "i",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "was",
+        "what",
+        "when",
+        "where",
+        "who",
+        "why",
+        "with",
+    }
+)
+_IMMIGRATION_TERMS = frozenset(
+    {
+        "immigration",
+        "refugee",
+        "citizenship",
+        "inadmissibility",
+        "admissibility",
+        "visa",
+        "permit",
+        "permanent",
+        "resident",
+        "residence",
+        "pr",
+        "prtd",
+        "deportation",
+        "removal",
+        "asylum",
+        "express",
+        "entry",
+        "sponsorship",
+        "irpa",
+        "irpr",
+    }
+)
+_IMMIGRATION_TEXT_PATTERNS = (
+    re.compile(r"citizenship and immigration"),
+    re.compile(r"immigration"),
+    re.compile(r"refugee"),
+    re.compile(r"permanent resident"),
+    re.compile(r"inadmissib"),
+    re.compile(r"admissib"),
+    re.compile(r"express entry"),
+    re.compile(r"\birpa\b"),
+    re.compile(r"\birpr\b"),
+)
+_YEAR_PATTERN = re.compile(r"\b((?:19|20)\d{2})\b")
 
 
 @dataclass
@@ -123,8 +191,14 @@ class OfficialCaseLawClient:
         records: list[CourtDecisionRecord],
         query: str,
     ) -> list[CourtDecisionRecord]:
-        query_tokens = re.findall(r"[a-z0-9]+", query.lower())
+        raw_query_tokens = re.findall(r"[a-z0-9]+", query.lower())
+        query_tokens = [
+            token
+            for token in raw_query_tokens
+            if token not in _QUERY_STOPWORDS and len(token) > 1
+        ]
         compact_query = " ".join(query_tokens)
+        immigration_focused = any(token in _IMMIGRATION_TERMS for token in query_tokens)
         if not query_tokens:
             return sorted(
                 records,
@@ -144,12 +218,27 @@ class OfficialCaseLawClient:
                 continue
 
             token_hits = sum(1 for token in query_tokens if token in haystack)
-            if token_hits == 0:
+            immigration_signal_hits = sum(
+                1 for pattern in _IMMIGRATION_TEXT_PATTERNS if pattern.search(haystack)
+            )
+            if token_hits == 0 and immigration_signal_hits == 0:
                 continue
 
-            score = token_hits
+            score = token_hits * 3
             if compact_query and compact_query in haystack:
-                score += 5
+                score += 8
+            score += immigration_signal_hits * 2
+
+            if immigration_focused and record.court_code in {"FC", "FCA"}:
+                score += 3
+            if (
+                immigration_focused
+                and record.court_code == "SCC"
+                and immigration_signal_hits == 0
+            ):
+                score -= 3
+            if score <= 0:
+                continue
 
             scored_records.append(
                 (
@@ -164,10 +253,17 @@ class OfficialCaseLawClient:
         return [record for _, _, _, record in scored_records]
 
     def _to_result(self, record: CourtDecisionRecord) -> CaseSearchResult:
+        decision_date = record.decision_date
+        if decision_date is None:
+            citation_year_match = _YEAR_PATTERN.search(record.citation)
+            if citation_year_match:
+                decision_date = date(int(citation_year_match.group(1)), 1, 1)
+            else:
+                decision_date = date(1900, 1, 1)
         return CaseSearchResult(
             case_id=record.case_id or "unknown-case",
             title=record.title or "Untitled",
             citation=record.citation or "Unreported",
-            decision_date=record.decision_date or date.today(),
+            decision_date=decision_date,
             url=record.decision_url,
         )

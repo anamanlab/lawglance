@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
+from immcad_api.api.routes.case_query_validation import is_specific_case_query
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
 from immcad_api.schemas import (
     CaseExportApprovalRequest,
@@ -34,52 +35,6 @@ class ExportTooLargeError(Exception):
 
 LOGGER = logging.getLogger(__name__)
 _APPROVAL_TOKEN_VERSION = 1
-_CASE_SEARCH_QUERY_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "are",
-        "be",
-        "by",
-        "for",
-        "from",
-        "how",
-        "in",
-        "is",
-        "it",
-        "of",
-        "on",
-        "or",
-        "the",
-        "to",
-        "was",
-        "what",
-        "when",
-        "where",
-        "who",
-        "why",
-        "with",
-    }
-)
-_CASE_SEARCH_SHORT_TOKEN_ALLOWLIST = frozenset(
-    {"fc", "fca", "scc", "irpa", "irpr", "pr", "ee", "pnp"}
-)
-
-
-def _is_specific_case_search_query(query: str) -> bool:
-    tokens = re.findall(r"[a-z0-9]+", query.lower())
-    if not tokens:
-        return False
-    meaningful_tokens = [
-        token
-        for token in tokens
-        if token not in _CASE_SEARCH_QUERY_STOPWORDS
-        and (len(token) >= 3 or token in _CASE_SEARCH_SHORT_TOKEN_ALLOWLIST)
-    ]
-    if not meaningful_tokens:
-        return False
-    return any(any(char.isalpha() for char in token) for token in meaningful_tokens)
 
 
 def _download_export_payload(
@@ -429,7 +384,7 @@ def build_case_router(
     ) -> CaseSearchResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
-        if not _is_specific_case_search_query(payload.query):
+        if not is_specific_case_query(payload.query):
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,

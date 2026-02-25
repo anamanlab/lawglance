@@ -89,11 +89,10 @@ class RequestMetrics:
             self._lawyer_research_cases_returned_total += max(case_count, 0)
             self._lawyer_research_pdf_available_total += max(pdf_available_count, 0)
             self._lawyer_research_pdf_unavailable_total += max(pdf_unavailable_count, 0)
-            if source_status:
-                unavailable_count = sum(
-                    1 for status in source_status.values() if status == "unavailable"
-                )
-                self._lawyer_research_source_unavailable_events += unavailable_count
+            if source_status and any(
+                status == "unavailable" for status in source_status.values()
+            ):
+                self._lawyer_research_source_unavailable_events += 1
 
     def record_export_audit_event(
         self,

@@ -164,10 +164,13 @@ class LawyerCaseResearchService:
                 document_url=case_result.document_url,
                 source_url=source_url,
             )
-        elif case_result.document_url:
-            pdf_status, pdf_reason = "available", "document_url_present_unverified"
         else:
-            pdf_status, pdf_reason = "unavailable", "document_url_missing"
+            if export_policy_reason:
+                pdf_status, pdf_reason = "unavailable", export_policy_reason
+            elif case_result.document_url:
+                pdf_status, pdf_reason = "unavailable", "document_url_unverified_source"
+            else:
+                pdf_status, pdf_reason = "unavailable", "document_url_missing"
 
         if pdf_status == "unavailable" and export_allowed is None and case_result.source_id:
             export_allowed = False

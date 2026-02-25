@@ -114,3 +114,17 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0
     assert snapshot["latency_ms"]["p99"] == 0.0
+
+
+def test_lawyer_research_source_unavailable_events_count_per_request() -> None:
+    metrics = RequestMetrics(time_fn=lambda: 10.0)
+    metrics.record_lawyer_research_outcome(
+        case_count=0,
+        pdf_available_count=0,
+        pdf_unavailable_count=0,
+        source_status={"official": "unavailable", "canlii": "unavailable"},
+    )
+
+    snapshot = metrics.snapshot()
+    assert snapshot["lawyer_research"]["requests"] == 1
+    assert snapshot["lawyer_research"]["source_unavailable_events"] == 1

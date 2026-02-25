@@ -5,6 +5,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+from immcad_api.errors import RateLimitError
 from immcad_api.main import create_app
 from immcad_api.schemas import CaseSearchResponse, CaseSearchResult
 
@@ -75,4 +76,55 @@ def test_lawyer_research_endpoint_returns_disabled_envelope_when_case_search_off
     body = response.json()
     assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
     assert body["error"]["policy_reason"] == "case_search_disabled"
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_lawyer_research_endpoint_rejects_broad_stopword_query() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "and the or to be",
+            "jurisdiction": "ca",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "case_search_query_too_broad"
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_lawyer_research_endpoint_returns_rate_limited_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _rate_limited_search(self, request):
+        del self, request
+        raise RateLimitError("CanLII per-second request limit reached. Please retry shortly.")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _rate_limited_search,
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "Federal Court inadmissibility appeal decision",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 429
+    body = response.json()
+    assert body["error"]["code"] == "RATE_LIMITED"
+    assert "retry" in body["error"]["message"].lower()
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]

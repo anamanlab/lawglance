@@ -83,3 +83,14 @@ def test_orchestrator_returns_structured_source_status_when_sources_unavailable(
     assert response.cases == []
     assert response.source_status["official"] == "unavailable"
     assert response.source_status["canlii"] == "unavailable"
+
+
+def test_orchestrator_marks_pdf_unavailable_when_source_metadata_not_loaded() -> None:
+    service = LawyerCaseResearchService(case_search_service=_MockCaseSearchService())
+
+    response = service.research(_request(limit=1))
+
+    assert response.cases[0].pdf_status == "unavailable"
+    assert response.cases[0].pdf_reason == "document_url_unverified_source"
+    assert response.cases[0].export_allowed is False
+    assert response.cases[0].export_policy_reason == "source_export_metadata_missing"

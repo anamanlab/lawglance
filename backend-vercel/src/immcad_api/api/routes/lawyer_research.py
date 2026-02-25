@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
-from immcad_api.errors import SourceUnavailableError
+from immcad_api.api.routes.case_query_validation import is_specific_case_query
+from immcad_api.errors import ApiError, SourceUnavailableError
 from immcad_api.schemas import (
     ErrorEnvelope,
     LawyerCaseResearchRequest,
@@ -53,6 +54,17 @@ def build_lawyer_research_router(
     ) -> LawyerCaseResearchResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
+        if not is_specific_case_query(payload.matter_summary):
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message=(
+                    "Case-law query is too broad. Please include specific terms such as "
+                    "program, issue, court, or citation."
+                ),
+                policy_reason="case_search_query_too_broad",
+            )
         try:
             research_response = lawyer_case_research_service.research(payload)
             if request_metrics is not None:
@@ -80,6 +92,13 @@ def build_lawyer_research_router(
                 trace_id=trace_id,
                 code="SOURCE_UNAVAILABLE",
                 message=str(exc),
+            )
+        except ApiError as exc:
+            return _error_response(
+                status_code=exc.status_code,
+                trace_id=trace_id,
+                code=exc.code,
+                message=exc.message,
             )
 
     return router

@@ -24,8 +24,14 @@ function buildPdfUnavailableReason(pdfReason?: string | null): string {
       return "PDF unavailable because no decision document URL was returned for this case.";
     case "document_url_host_untrusted":
       return "PDF unavailable because the document host is not trusted for this source.";
+    case "document_url_unverified_source":
+      return "PDF unavailable because the source metadata could not be verified for this document.";
+    case "source_export_metadata_missing":
+      return "PDF unavailable because source metadata is missing for this case.";
     case "source_not_in_registry_for_export":
       return "PDF unavailable because this source is not registered for export.";
+    case "source_not_in_policy_for_export":
+      return "PDF unavailable because this source is not approved for export policy.";
     default:
       return "PDF unavailable for this case result.";
   }

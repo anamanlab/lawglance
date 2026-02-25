@@ -110,6 +110,12 @@ PY
   else
     fail "pytest is unavailable in environment"
   fi
+
+  if "${run_cmd[@]}" mypy --version >/dev/null 2>&1; then
+    ok "mypy is available"
+  else
+    fail "mypy is unavailable in environment"
+  fi
 fi
 
 if [[ -f .env ]]; then

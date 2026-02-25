@@ -35,3 +35,12 @@
 - For user-facing case-search failures, map structured validation/policy errors to actionable UI guidance instead of generic "temporarily unavailable" copy.
 - In dual-service chat + case-search UIs, always show whether displayed results correspond to the current query or a previous query to prevent stale-context confusion.
 - If subagent spawn fails due thread-cap limits, do not stall implementation; report the limit once, continue sequential execution, and close any known agent IDs as soon as they are no longer needed.
+- For Cloudflare cutovers, always record Worker version IDs, check custom-domain DNS from public resolvers (`1.1.1.1`/`8.8.8.8`), and keep a `workers.dev` fallback path active until 24h observation evidence is captured.
+- Before any production deploy sequence, run an explicit clean-worktree preflight (`make release-preflight`) so migration evidence is not mixed with unrelated local edits.
+- For Cloudflare Python Worker rollouts, keep migration staged: land scaffold + workflow tests first, then validate with authenticated perf smoke (`make backend-cf-perf-smoke`) before attempting full traffic cutover.
+- Always run at least one real canary deploy attempt after scaffolding; local tests can pass while platform limits (for example Cloudflare Worker bundle-size `code: 10027`) block production viability.
+- When reporting a production blocker to the user, implement at least one concrete mitigation in the same pass (for example a preflight gate, safer fallback path, or runbook check), not just a diagnosis.
+- When wrapping synchronous service calls with `run_in_threadpool`, keep explicit `ApiError` handling in the route; otherwise `RateLimitError`/`SourceUnavailableError` can leak as raw 500s.
+- During edge-proxy migrations, keep error envelope and trace-header contracts aligned with frontend parsing (`error.code` + `trace_id` + `x-trace-id`) and maintain temporary client-side fallback for legacy proxy shapes.
+- For lawyer-research `source_status`, avoid hardcoded official source-id lists; prefer registry-driven classification so new official case-law sources are not misreported as unknown.
+- Treat edge proxy contract checks as a preflight gate (script + CI workflow step), not just a unit test, so release/deploy paths fail fast when worker headers/envelope drift from frontend expectations.

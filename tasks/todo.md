@@ -1,3 +1,81 @@
+# Task Plan - 2026-02-25 - Cloudflare Free Plan Blocker Audit
+
+## Current Focus
+- Verify (without assumptions) whether we can continue on Cloudflare free plan and document concrete blockers + next actions.
+
+## Plan
+- [x] Validate official Cloudflare free/paid Worker limits using MCP research tools (Brave + Context7) and Cloudflare docs.
+- [x] Capture current deploy/runtime facts from Wrangler (`deployments list`, native deploy errors, and dry-run package sizes).
+- [x] Verify engineering flow blockers (open PRs, recent CI status, pending migration tasks).
+- [x] Add quota-aware alert thresholds and runbook entries for free-plan request/capacity limits.
+- [x] Decide and lock backend production path on free tier (`proxy -> origin`) vs native Cloudflare backend refactor/paid-tier migration.
+
+## Review
+- Official limits verified:
+  - Worker size: `3 MB` (Free) / `10 MB` (Paid).
+  - Account plan request body limits: `100 MB` (Free/Pro), `200 MB` (Business), `500 MB` default (Enterprise).
+  - Runtime quotas include `100,000` requests/day on Free plan, `10 ms` CPU/request on Free plan, and Free-plan subrequest cap (`50`/request).
+- Current measured deployment evidence:
+  - Frontend Worker dry-run: `3141.47 KiB` total / `682.47 KiB` gzip.
+  - Backend proxy Worker dry-run: `2.27 KiB` total / `0.96 KiB` gzip.
+  - Native Python backend dry-run: `27042.96 KiB` total / `5973.60 KiB` gzip; deploy fails with Cloudflare API `code: 10027`.
+  - Native Worker deployment list confirms no successful deploy (`code: 10007` worker not found).
+- Process status:
+  - Open PRs: none (`gh pr list`).
+  - Recent CI runs: latest listed workflows succeeded (`Quality Gates`, `CodeQL`, `Ops Metrics Alerts`).
+- Interim production decision for free plan:
+  - Continue with Cloudflare frontend + backend edge proxy to legacy backend origin.
+  - Treat Cloudflare-native Python backend as blocked until dependency/runtime footprint is reduced below free-plan constraints or plan changes.
+- Blocker mitigation implemented:
+  - Added `scripts/check_cloudflare_free_plan_readiness.sh` + `make cloudflare-free-preflight` to verify frontend/proxy bundle fit on free tier and report native backend status before deploy.
+  - Added pre-deploy workflow gate in `.github/workflows/cloudflare-backend-proxy-deploy.yml`.
+  - Added bounded timeout/retry and traceable error responses to `backend-cloudflare/src/worker.ts` to make proxy mode safer while native backend remains blocked.
+  - `scripts/release_preflight.sh` now runs the Cloudflare free-plan readiness check (unless explicitly skipped) so local release prep fails early on plan-limit surprises.
+  - Deployed backend proxy mitigation to Cloudflare Workers (`1499a8af-54f0-451e-a0ac-a39f7cf9e935`, `2026-02-25T22:56:56Z`) using free-tier compatible bundle size (`2.16 KiB` gzip) and verified live custom-domain behavior (`/healthz` 200, allowlist JSON 404 with `x-immcad-edge-proxy` + `x-immcad-trace-id`).
+- Quota-risk mitigation implemented:
+  - Added Cloudflare free-tier API request projection checks (warn/fail thresholds) to `config/ops_alert_thresholds.json` via derived metrics in `immcad_api.ops.alert_evaluator`.
+  - Updated release runbook to run `make ops-alert-eval` as a Cloudflare free-tier budget check before/after deploy.
+  - Added frontend proxy mitigation for transitional backend-origin gap: upstream `404` on `/api/research/lawyer-cases` now maps to structured `503 SOURCE_UNAVAILABLE`, with regression test coverage and frontend redeploy to Cloudflare (frontend version `30029410-c9b3-41d9-b452-e4dc67f9b596`).
+
+---
+
+# Task Plan - 2026-02-25 - Production Readiness Fix Pass (Post-Review)
+
+## Current Focus
+- Close P1/P2 production blockers found in strict code review for lawyer case research and case export.
+
+## Plan
+- [x] Add regression tests for long lawyer-research summaries, docket-style query validation, and unknown-source status classification.
+- [x] Prevent internal `CaseSearchRequest` overflow by normalizing/planning query lengths before orchestration calls.
+- [x] Harden export download redirect handling to enforce trusted-host checks before fetching redirected payloads.
+- [x] Offload blocking case-search/research/export work from async routes to threadpool to reduce event-loop blocking risk.
+- [x] Re-run targeted backend/frontend suites and update review evidence with explicit production readiness verdict.
+
+## Review
+- Fixed blocking long-query failure in lawyer research orchestration:
+  - Added query normalization/truncation before internal `CaseSearchRequest` creation.
+  - Added regression test proving long summaries no longer cause 500s and internal query lengths are bounded.
+- Extended case-query specificity logic for docket-style identifiers:
+  - Added acceptance for patterns like `A-1234-23` and `T-123-24`.
+  - Added unit + API-route regression coverage for docket validation behavior.
+- Corrected source-status classification:
+  - Unknown/missing source IDs no longer count as official-source success.
+  - Added regression test for unknown-source classification.
+- Hardened export redirect flow:
+  - Download now follows redirects manually and blocks untrusted redirect targets before payload retrieval.
+  - Added regression test for redirect-host blocking policy (`export_redirect_url_not_allowed_for_source`).
+- Reduced async route blocking risk:
+  - Moved case search, lawyer research orchestration, and export download work to threadpool execution paths.
+- Verification evidence:
+  - Backend targeted tests: `56 passed`.
+  - Export policy/security regression tests: `16 passed`.
+  - Frontend contract tests: `32 passed`.
+  - Full frontend suite: `63 passed`.
+  - Full backend quality gate: `make quality` passed (`440 passed`, lint/mypy/docs/policy/sync checks green).
+  - Source mirror parity: `make backend-vercel-sync-validate` passed.
+
+---
+
 # Task Plan - 2026-02-25 - Lawyer Case Research Production Path
 
 ## Current Focus
@@ -52,9 +130,11 @@
 - [ ] Phase 4 CI/CD migration: add Cloudflare deploy workflows with deterministic pre-deploy quality gates and rollback command.
   - [x] Frontend workflow added (`.github/workflows/cloudflare-frontend-deploy.yml`) with typecheck/test/build-before-deploy gate.
   - [x] Backend transitional proxy workflow added (`.github/workflows/cloudflare-backend-proxy-deploy.yml`) for edge ingress migration.
-  - [ ] Backend native-runtime deploy workflow pending architecture decision (Containers vs Python Worker).
+  - [ ] Backend native-runtime deploy workflow pending Python Workers implementation + canary.
 - [ ] Phase 5 production cutover: staged DNS/traffic migration with 24h and 72h observation windows and rollback criteria.
-- [ ] Evidence and signoff: document results in release artifacts and update known-issues register.
+  - [x] Initial Cloudflare DNS/traffic cutover executed (workers.dev + custom domains reachable).
+  - [ ] Observation windows and formal rollback attestation pending.
+- [x] Evidence and signoff: release artifacts and known-issues register updated with current deployment evidence and remaining blockers.
 
 ## Task Plan - 2026-02-25 - Cloudflare Migration Audit
 
@@ -62,9 +142,9 @@
 - Evaluate release documentation, Cloudflare deploy configs/workflows (frontend + backend proxy), and list concrete gaps blocking production cutover.
 
 ### Plan
-- [ ] Audit `docs/release/known-issues.md` to confirm existing Cloudflare migration entries describe up-to-date blockers and note any missing evidence.
-- [ ] Review frontend and backend Cloudflare deploy configs/workflows for completeness (wrangler, OpenNext, GitHub Actions) and record missing steps or unpinned/pending parts.
-- [ ] Compile a concise list of actionable gaps (documentation, config, automation) that must be fixed before Cloudflare migration is production-ready.
+- [x] Audit `docs/release/known-issues.md` to confirm existing Cloudflare migration entries describe up-to-date blockers and note any missing evidence.
+- [x] Review frontend and backend Cloudflare deploy configs/workflows for completeness (wrangler, OpenNext, GitHub Actions) and record missing steps or unpinned/pending parts.
+- [x] Compile a concise list of actionable gaps (documentation, config, automation) that must be fixed before Cloudflare migration is production-ready.
 
 ## Review
 - Phase 1 frontend migration executed for `frontend-web`:
@@ -102,6 +182,45 @@
     - `uv run pytest -q tests/test_settings.py tests/test_api_scaffold.py tests/test_rate_limiters.py` -> pass (`130 passed`).
     - `uv run ruff check ...` (changed backend/runtime files + tests) -> pass.
     - `make backend-vercel-sync-validate` -> pass.
+- Continuation alignment pass completed:
+  - Added deterministic release preflight guard (`scripts/release_preflight.sh`) and Make target (`make release-preflight`) to enforce clean-worktree + hygiene + Wrangler auth before deploy execution.
+  - Rewrote `docs/release/pre-deploy-command-sheet-2026-02-25.md` to Cloudflare-first deploy/smoke/rollback commands.
+  - Refreshed `docs/release/lead-engineering-readiness-audit-2026-02-25.md` with current Cloudflare deployment evidence and updated residual risk verdict.
+  - Updated migration/status docs and onboarding/secret workflows to remove Vercel-first ambiguity:
+    - `docs/plans/2026-02-25-cloudflare-migration-plan.md`
+    - `docs/plans/2026-02-25-production-finalization-go-live-plan.md` (historical banner)
+    - `docs/plans/2026-02-25-pre-deploy-deep-audit-plan.md` (historical banner)
+    - `docs/plans/2026-02-25-deep-production-readiness-audit-plan.md` (historical banner)
+    - `docs/release/git-secret-runbook.md`
+    - `docs/development-environment.md`
+    - `docs/onboarding/developer-onboarding-guide.md`
+  - Updated known-issues status:
+    - Closed process-control/doc-drift gaps via `KI-2026-02-25-C19` and `KI-2026-02-25-C20`.
+    - Added DNS propagation operational watch item `KI-2026-02-25-08`.
+- Native runtime execution pass completed:
+  - Added Cloudflare native backend scaffold for Python Workers:
+    - `backend-cloudflare/src/entry.py`
+    - `backend-cloudflare/wrangler.toml`
+    - `backend-cloudflare/pyproject.toml`
+  - Added dedicated native deploy workflow:
+    - `.github/workflows/cloudflare-backend-native-deploy.yml`
+    - workflow contract tests in `tests/test_cloudflare_backend_native_deploy_workflow.py`
+  - Extended migration artifact tests to cover native runtime scaffold.
+  - Added authenticated backend performance smoke harness + Make target:
+    - `scripts/run_cloudflare_backend_perf_smoke.sh`
+    - `make backend-cf-perf-smoke`
+  - Updated Cloudflare docs/runbooks to include native runtime and perf canary steps.
+  - Updated known-issues register with:
+    - `KI-2026-02-25-C21` (native runtime scaffold),
+    - `KI-2026-02-25-C22` (perf smoke harness),
+    - and retained `KI-2026-02-25-07` as open pending production-grade load evidence.
+  - Verification evidence:
+    - `cd backend-cloudflare && uv sync --dev` -> pass.
+    - `cd backend-cloudflare && uv run pywrangler sync` -> pass.
+    - `./scripts/venv_exec.sh pytest -q tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_cloudflare_backend_migration_artifacts.py tests/test_workflow_action_pinning.py` -> pass (`12 passed`).
+    - `./scripts/venv_exec.sh ruff check backend-cloudflare/src/entry.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_cloudflare_backend_migration_artifacts.py` -> pass.
+    - Native deploy attempt 1 (`cd backend-cloudflare && uv run pywrangler deploy`) -> failed with `ModuleNotFoundError: immcad_api` (resolved by adding `scripts/sync_backend_cloudflare_native_source.sh` + workflow sync step).
+    - Native deploy attempt 2 (after sync) -> failed with Cloudflare API `code: 10027` bundle-size limit (`immcad-backend-native-python`), recorded as `KI-2026-02-25-09`.
 
 ## References
 - Detailed plan: `docs/plans/2026-02-25-cloudflare-migration-plan.md`
@@ -1210,3 +1329,78 @@
   - `make quality` -> pass (`370 passed`)
   - `npm run test` (in `frontend-web/`) -> pass (`52 passed`)
   - `npm run typecheck` (in `frontend-web/`) -> pass
+
+---
+
+# Task Plan - 2026-02-25 - API Contract Hardening (Case Search + Cloudflare Edge)
+
+## Current Focus
+- Close production blockers in case-search error handling and edge-proxy error-contract compatibility while preserving backend/backend-vercel parity.
+
+## Plan
+- [x] Reproduce and confirm `/api/search/cases` unhandled `ApiError` path and add structured error handling in route layer.
+- [x] Remove duplicated URL allowlist logic in case-export route by reusing shared document-resolver helpers.
+- [x] Replace hardcoded official-source classification in lawyer research with registry-aware classification (with fallback behavior).
+- [x] Align Cloudflare edge-proxy error response envelope and trace headers with frontend API client contract.
+- [x] Add regression tests for: case-search rate-limit envelope, registry-aware official classification, frontend legacy/edge trace parsing, and edge artifact contract assertions.
+- [x] Run focused and full verification gates (`ruff`, targeted pytest/vitest, `make quality`, frontend full test + typecheck).
+
+## Review
+- Fixed API route robustness:
+  - `/api/search/cases` now catches `ApiError` and returns structured envelopes instead of raw 500s.
+  - case-export route now uses shared host-allowlist helpers from `case_document_resolver` to avoid policy drift.
+- Fixed classification robustness:
+  - lawyer research source-status classification now checks `source_registry` (case_law entries) when available, with deterministic fallback for legacy/offline contexts.
+- Fixed Cloudflare migration contract gap:
+  - Worker error responses now emit nested `{ error: { code, message, trace_id, policy_reason } }` and include `x-trace-id` (while retaining `x-immcad-trace-id`).
+  - Frontend API client now accepts either `x-trace-id` or `x-immcad-trace-id` and can parse legacy flat proxy error envelopes during rollout.
+- Verification evidence:
+  - `uv run ruff check src/immcad_api/api/routes/cases.py src/immcad_api/services/lawyer_case_research_service.py backend-vercel/src/immcad_api/api/routes/cases.py backend-vercel/src/immcad_api/services/lawyer_case_research_service.py tests/test_api_scaffold.py tests/test_lawyer_case_research_service.py tests/test_cloudflare_backend_migration_artifacts.py` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_api_scaffold.py tests/test_lawyer_case_research_service.py tests/test_case_query_validation.py tests/test_case_export_security.py tests/test_export_policy_gate.py tests/test_cloudflare_backend_migration_artifacts.py` -> `75 passed`
+  - `npm run test -- --run tests/api-client.contract.test.ts tests/server-runtime-config.contract.test.ts tests/backend-proxy.contract.test.ts` (in `frontend-web/`) -> `37 passed`
+  - `make quality` -> pass (`448 passed`)
+  - `npm run test` (in `frontend-web/`) -> pass (`64 passed`)
+  - `npm run typecheck` (in `frontend-web/`) -> pass
+
+---
+
+# Task Plan - 2026-02-25 - Cloudflare Edge Contract Preflight Guard
+
+## Current Focus
+- Add deterministic edge-contract guardrails so preflight and release/deploy workflows fail fast on proxy/frontend contract drift.
+
+## Plan
+- [x] Add a dedicated script to validate critical Cloudflare edge-proxy contract literals (allowlist, error envelope, trace headers, frontend compatibility hooks).
+- [x] Wire edge-contract check into `scripts/release_preflight.sh` with explicit skip toggle for diagnostics.
+- [x] Expose a standalone Make target for local edge-contract preflight.
+- [x] Enforce the same check in release/quality CI and Cloudflare backend proxy deploy workflow.
+- [x] Add deterministic tests for script behavior and workflow/preflight wiring.
+- [x] Run focused verification and a preflight diagnostic execution.
+
+## Review
+- Added `scripts/check_cloudflare_edge_proxy_contract.sh` to guard:
+  - worker allowlisted paths (`/api/`, `/ops/`, `/healthz`),
+  - nested proxy error payload keys (`code`, `trace_id`, `policy_reason`),
+  - trace header continuity (`x-trace-id` and `x-immcad-trace-id`) in error/success paths,
+  - frontend API-client compatibility for legacy edge envelope + legacy trace header fallback.
+- Updated Cloudflare worker success header behavior:
+  - `backend-cloudflare/src/worker.ts` now sets `x-trace-id` on proxied success responses (not only `x-immcad-trace-id`).
+- Wired checks into execution paths:
+  - `scripts/release_preflight.sh` now runs edge-contract checks by default (toggle: `SKIP_CLOUDFLARE_EDGE_CONTRACT_CHECK=1`).
+  - `Makefile` now includes `cloudflare-edge-contract-preflight`.
+  - `.github/workflows/quality-gates.yml`, `.github/workflows/release-gates.yml`, and `.github/workflows/cloudflare-backend-proxy-deploy.yml` now run the edge-contract check.
+- Added/updated tests:
+  - `tests/test_cloudflare_edge_proxy_contract_script.py`
+  - `tests/test_release_preflight_script.py`
+  - `tests/test_cloudflare_backend_proxy_deploy_workflow.py`
+  - `tests/test_quality_gates_workflow.py`
+  - `tests/test_release_gates_workflow.py`
+- Verification evidence:
+  - `bash scripts/check_cloudflare_edge_proxy_contract.sh` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_cloudflare_edge_proxy_contract_script.py tests/test_release_preflight_script.py tests/test_cloudflare_backend_proxy_deploy_workflow.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_cloudflare_backend_migration_artifacts.py` -> `33 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_cloudflare_free_plan_readiness_script.py tests/test_cloudflare_backend_proxy_deploy_workflow.py tests/test_cloudflare_edge_proxy_contract_script.py tests/test_release_preflight_script.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_cloudflare_backend_migration_artifacts.py` -> `36 passed`
+  - `npm run test --prefix frontend-web -- --run tests/api-client.contract.test.ts tests/backend-proxy.contract.test.ts` -> `24 passed`
+  - `SKIP_CLOUDFLARE_FREE_PLAN_CHECK=1 SKIP_WRANGLER_AUTH_CHECK=1 bash scripts/release_preflight.sh --allow-dirty` -> pass
+  - `make quality` -> pass (`453 passed`)
+  - `npm run test --prefix frontend-web` -> pass (`65 passed`)
+  - `npm run typecheck --prefix frontend-web` -> pass

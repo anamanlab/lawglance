@@ -18,6 +18,8 @@ def test_cloudflare_backend_proxy_deploy_workflow_exists() -> None:
 def test_cloudflare_backend_proxy_deploy_workflow_has_expected_steps() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     required_steps = [
+        "Validate Cloudflare free-plan proxy readiness",
+        "Validate Cloudflare edge-proxy contract",
         "Validate Cloudflare credentials are configured",
         "Inject backend origin",
         "Deploy backend proxy to Cloudflare Workers",

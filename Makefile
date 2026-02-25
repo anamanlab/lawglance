@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-perf-smoke cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
@@ -43,6 +43,24 @@ backend-cf-spike-build:
 
 backend-cf-proxy-deploy:
 	npx --yes wrangler@4.68.1 deploy --config backend-cloudflare/wrangler.backend-proxy.jsonc
+
+backend-cf-native-sync:
+	bash scripts/sync_backend_cloudflare_native_source.sh
+
+backend-cf-native-dev: backend-cf-native-sync
+	cd backend-cloudflare && uv sync --dev && uv run pywrangler dev
+
+backend-cf-native-deploy: backend-cf-native-sync
+	cd backend-cloudflare && uv sync --dev && uv run pywrangler deploy
+
+backend-cf-perf-smoke:
+	bash scripts/run_cloudflare_backend_perf_smoke.sh
+
+cloudflare-free-preflight:
+	bash scripts/check_cloudflare_free_plan_readiness.sh
+
+cloudflare-edge-contract-preflight:
+	bash scripts/check_cloudflare_edge_proxy_contract.sh
 
 frontend-e2e-install:
 	cd frontend-web && npm run test:e2e:install
@@ -139,6 +157,9 @@ canlii-live-smoke:
 
 hygiene:
 	bash scripts/check_repository_hygiene.sh
+
+release-preflight:
+	bash scripts/release_preflight.sh
 
 git-secret-check:
 	bash scripts/git_secret_env.sh check

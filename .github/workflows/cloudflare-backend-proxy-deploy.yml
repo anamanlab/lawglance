@@ -27,6 +27,14 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Validate Cloudflare free-plan proxy readiness
+        env:
+          CLOUDFLARE_BACKEND_MODE: proxy
+        run: bash scripts/check_cloudflare_free_plan_readiness.sh
+
+      - name: Validate Cloudflare edge-proxy contract
+        run: bash scripts/check_cloudflare_edge_proxy_contract.sh
+
       - name: Validate Cloudflare credentials are configured
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

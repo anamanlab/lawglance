@@ -62,6 +62,8 @@ def test_release_gates_keeps_deterministic_frontend_step_order() -> None:
 
 def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "Validate Cloudflare edge-proxy contract" in workflow
+    assert "scripts/check_cloudflare_edge_proxy_contract.sh" in workflow
     for snippet in REQUIRED_BACKEND_POLICY_STEP_SNIPPETS:
         assert snippet in workflow
     assert "Validate backend-vercel source sync" in workflow

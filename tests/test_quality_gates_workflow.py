@@ -48,6 +48,8 @@ def test_quality_gates_enforces_hardened_synthetic_citation_toggle() -> None:
 
 def test_quality_gates_includes_dependency_review_and_ingestion_smoke() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "Validate Cloudflare edge-proxy contract" in workflow
+    assert "scripts/check_cloudflare_edge_proxy_contract.sh" in workflow
     for step_name in REQUIRED_SECURITY_AND_INGESTION_STEPS:
         assert step_name in workflow
     pattern = r"actions/dependency-review-action@[0-9a-f]{40}\b"

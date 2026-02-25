@@ -36,6 +36,11 @@ jobs:
             tests/test_export_policy_gate.py \
             tests/test_ops_alert_evaluator.py
 
+      - name: Backend typecheck
+        env:
+          PYTHONPATH: src
+        run: uv run mypy
+
       - name: Validate hardened runtime safety toggles
         env:
           PYTHONPATH: src
@@ -49,7 +54,7 @@ jobs:
           CANLII_API_KEY: release-gate-canlii-key
           EXPORT_POLICY_GATE_ENABLED: "true"
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "false"
-          CITATION_TRUSTED_DOMAINS: laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org
+          CITATION_TRUSTED_DOMAINS: laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.canada.ca,canlii.org,decisions.scc-csc.ca,decisions.fct-cf.gc.ca,decisions.fca-caf.gc.ca
         run: |
           uv run python - <<'PY'
           import os
@@ -76,11 +81,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend-web
 
-      - name: Frontend typecheck
-        run: npm run typecheck --prefix frontend-web
-
       - name: Frontend build
         run: npm run build --prefix frontend-web
+
+      - name: Frontend typecheck
+        run: npm run typecheck --prefix frontend-web
 
       - name: Frontend contract tests
         env:

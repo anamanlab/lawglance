@@ -21,10 +21,12 @@ REQUIRED_RELEASE_ARTIFACTS = [
 REQUIRED_FRONTEND_RELEASE_STEPS = [
     "Install frontend dependencies",
     "Frontend build",
+    "Frontend typecheck",
     "Frontend contract tests",
 ]
 REQUIRED_BACKEND_POLICY_STEP_SNIPPETS = [
     "Run backend policy and export guard tests",
+    "Backend typecheck",
     "tests/test_source_policy.py",
     "tests/test_export_policy_gate.py",
     "tests/test_ops_alert_evaluator.py",
@@ -50,12 +52,21 @@ def test_release_gates_runs_frontend_build_and_tests() -> None:
     assert "../artifacts/evals/frontend-test-summary.xml" in workflow
 
 
+def test_release_gates_keeps_deterministic_frontend_step_order() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    build_idx = workflow.index("Frontend build")
+    typecheck_idx = workflow.index("Frontend typecheck")
+    tests_idx = workflow.index("Frontend contract tests")
+    assert build_idx < typecheck_idx < tests_idx
+
+
 def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     for snippet in REQUIRED_BACKEND_POLICY_STEP_SNIPPETS:
         assert snippet in workflow
     assert "Validate backend-vercel source sync" in workflow
     assert "scripts/validate_backend_vercel_source_sync.py" in workflow
+    assert "uv run mypy" in workflow
 
 
 def test_release_gates_enforces_hardened_synthetic_citation_toggle() -> None:

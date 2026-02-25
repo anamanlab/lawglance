@@ -12,10 +12,12 @@ WORKFLOW_PATH = (
 REQUIRED_FRONTEND_QUALITY_STEPS = [
     "Install frontend dependencies",
     "Frontend build",
+    "Frontend typecheck",
     "Frontend contract tests",
 ]
 REQUIRED_SECURITY_AND_INGESTION_STEPS = [
     "Dependency review (PR)",
+    "Backend typecheck",
     "Validate backend-vercel source sync",
     "Run ingestion smoke checks",
     "Upload ingestion smoke artifact",
@@ -26,6 +28,14 @@ def test_quality_gates_runs_frontend_build_and_tests() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     for step_name in REQUIRED_FRONTEND_QUALITY_STEPS:
         assert step_name in workflow
+
+
+def test_quality_gates_keeps_deterministic_frontend_step_order() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    build_idx = workflow.index("Frontend build")
+    typecheck_idx = workflow.index("Frontend typecheck")
+    tests_idx = workflow.index("Frontend contract tests")
+    assert build_idx < typecheck_idx < tests_idx
 
 
 def test_quality_gates_enforces_hardened_synthetic_citation_toggle() -> None:
@@ -52,6 +62,14 @@ def test_quality_gates_has_concurrency_deduplication() -> None:
     assert "concurrency:" in workflow
     assert "quality-gates-${{ github.ref }}" in workflow
     assert "cancel-in-progress: true" in workflow
+
+
+def test_quality_gates_runs_backend_typecheck_before_unit_tests() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    typecheck_idx = workflow.index("Backend typecheck")
+    unit_tests_idx = workflow.index("Run unit tests")
+    assert typecheck_idx < unit_tests_idx
+    assert "uv run mypy" in workflow
 
 
 def test_quality_gates_pins_core_actions_to_commit_shas() -> None:

@@ -101,6 +101,27 @@
       "update_cadence": "daily"
     },
     {
+      "source_id": "SCC_DECISIONS",
+      "source_type": "case_law",
+      "instrument": "Supreme Court of Canada decisions JSON feed",
+      "url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/json/rss.do",
+      "update_cadence": "scheduled_incremental"
+    },
+    {
+      "source_id": "FC_DECISIONS",
+      "source_type": "case_law",
+      "instrument": "Federal Court decisions RSS feed",
+      "url": "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do",
+      "update_cadence": "scheduled_incremental"
+    },
+    {
+      "source_id": "FCA_DECISIONS",
+      "source_type": "case_law",
+      "instrument": "Federal Court of Appeal recent decisions listing",
+      "url": "https://decisions.fca-caf.gc.ca/fca-caf/en/nav.do?iframe=true",
+      "update_cadence": "scheduled_incremental"
+    },
+    {
       "source_id": "CANLII_CASE_BROWSE",
       "source_type": "case_law",
       "instrument": "CanLII caseBrowse API",

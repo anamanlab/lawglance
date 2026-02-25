@@ -7,6 +7,7 @@ from immcad_api.sources.canada_courts import (
     validate_decision_record,
 )
 from immcad_api.sources.canlii_client import CanLIIClient
+from immcad_api.sources.official_case_law_client import OfficialCaseLawClient
 from immcad_api.sources.required_sources import PRODUCTION_REQUIRED_SOURCE_IDS
 from immcad_api.sources.source_registry import (
     SourceRegistry,
@@ -18,6 +19,7 @@ __all__ = [
     "CourtDecisionRecord",
     "CourtPayloadValidation",
     "CanLIIClient",
+    "OfficialCaseLawClient",
     "PRODUCTION_REQUIRED_SOURCE_IDS",
     "SourceRegistry",
     "SourceRegistryEntry",

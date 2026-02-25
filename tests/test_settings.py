@@ -389,14 +389,39 @@ def test_load_settings_requires_gemini_key_in_hardened_modes(
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "ci"])
-def test_load_settings_requires_canlii_key_in_hardened_modes(
+def test_load_settings_allows_missing_canlii_key_with_official_sources_in_hardened_modes(
     monkeypatch: pytest.MonkeyPatch,
     environment: str,
 ) -> None:
     _set_hardened_env(monkeypatch, environment)
     monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    monkeypatch.delenv("ENABLE_OFFICIAL_CASE_SOURCES", raising=False)
 
-    with pytest.raises(ValueError, match="CANLII_API_KEY is required"):
+    settings = load_settings()
+    assert settings.enable_official_case_sources is True
+    assert settings.canlii_api_key is None
+
+
+def test_load_settings_disables_official_case_sources_by_default_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("ENABLE_OFFICIAL_CASE_SOURCES", raising=False)
+
+    settings = load_settings()
+    assert settings.enable_official_case_sources is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_requires_case_search_backend_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "false")
+
+    with pytest.raises(ValueError, match="Either CANLII_API_KEY or ENABLE_OFFICIAL_CASE_SOURCES=true is required"):
         load_settings()
 
 

@@ -22,6 +22,7 @@ Endpoints:
 - `CANLII_API_KEY` (optional; enables CanLII client attempts)
 - `CANLII_BASE_URL` (optional, default `https://api.canlii.org/v1`)
 - `ENABLE_CASE_SEARCH` (optional, default `true`; set `false` for Gemini-only MVP to disable `/api/search/cases` and `/api/export/cases`)
+- `ENABLE_OFFICIAL_CASE_SOURCES` (optional; defaults to `false` in development and `true` in `production`/`prod`/`ci`; enables SCC/FC/FCA public-feed search without CanLII)
 - `ENVIRONMENT` (optional; defaults to `development`, or `production` when `VERCEL_ENV=production`; use `production`/`prod`/`ci` for hardened mode)
 - `API_BEARER_TOKEN` (required when `ENVIRONMENT` is `production`, `prod`, or `ci`)
 - `API_RATE_LIMIT_PER_MINUTE` (optional, default `120`)
@@ -46,10 +47,10 @@ Endpoints:
 - If `ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS=false` and no grounded citations are available, chat returns a safe constrained response with low confidence and no citations.
 - Runtime citation enforcement accepts citations only when they are well-formed and match grounding-adapter candidates; ungrounded citations are dropped and the response is constrained safely.
 - Runtime citation enforcement also validates citation URL domains against `CITATION_TRUSTED_DOMAINS`.
-- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY`; `CANLII_API_KEY` is required only when `ENABLE_CASE_SEARCH=true`. If `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
+- Hardened mode (`production`/`prod`/`ci`) requires `GEMINI_API_KEY`; case search requires at least one backend (`ENABLE_OFFICIAL_CASE_SOURCES=true` or `CANLII_API_KEY`); if `ENABLE_OPENAI_PROVIDER=true`, `OPENAI_API_KEY` is also required.
 - Case-law fallback behavior is environment-sensitive:
-  - `development` (and non-prod environments): CanLII failures can return deterministic scaffold case data for integration continuity.
-  - `production`/`prod`/`ci`: CanLII failures return a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`; synthetic scaffold cases are disabled.
+  - `development` (and non-prod environments): official-feed search is disabled by default and CanLII failures can return deterministic scaffold case data for integration continuity.
+  - `production`/`prod`/`ci`: official SCC/FC/FCA feeds are enabled by default; when all configured case sources are unavailable, the API returns a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`.
 - CanLII integration uses metadata endpoints only and enforces plan limits (`5000/day`, `2 req/s`, `1 in-flight request`).
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.
 - `/ops/metrics` is treated as an operational endpoint and is protected by bearer auth whenever `API_BEARER_TOKEN` is set.

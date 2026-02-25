@@ -452,6 +452,7 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     monkeypatch.setenv("CANLII_API_KEY", "test-canlii-key")
     monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
     monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "false")
     hardened_client = TestClient(create_app())
 
     response = hardened_client.post(
@@ -470,6 +471,63 @@ def test_case_search_returns_source_unavailable_envelope_in_hardened_modes_when_
     assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_case_search_uses_official_sources_without_canlii_key(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    from datetime import date
+
+    from immcad_api.schemas import CaseSearchResponse, CaseSearchResult
+
+    def official_search(self, request):
+        del self, request
+        return CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-101",
+                    title="Example v Canada (Citizenship and Immigration)",
+                    citation="2026 FC 101",
+                    decision_date=date(2026, 2, 1),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/123456/index.do",
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.OfficialCaseLawClient.search_cases",
+        official_search,
+    )
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
+    monkeypatch.delenv("CANLII_API_KEY", raising=False)
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/search/cases",
+        headers={"Authorization": "Bearer secret-token"},
+        json={
+            "query": "citizenship",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"]
+    assert body["results"][0]["citation"] == "2026 FC 101"
 
 
 def test_ops_metrics_endpoint_exposes_observability_baseline(

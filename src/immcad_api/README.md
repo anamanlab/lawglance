@@ -56,8 +56,13 @@ Endpoints:
   - `production`/`prod`/`ci`: official SCC/FC/FCA feeds are enabled by default; when all configured case sources are unavailable, the API returns a structured `SOURCE_UNAVAILABLE` envelope with `trace_id`.
 - Official feeds are always the primary case-search source; CanLII is queried as a non-blocking fallback when official feeds are unavailable or return no matches.
 - `POST /api/search/cases` returns export-friendly metadata (`source_id`, `document_url`) alongside each result.
+- `source_id` values are registry-driven (`data/sources/canada-immigration/registry.json`) and export eligibility is enforced by source policy.
 - `POST /api/export/cases` requires explicit per-request consent (`user_approved=true`) before any download is attempted.
 - `POST /api/export/cases` rejects missing or `false` approval with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
+- `POST /api/export/cases` enforces exact source-host matching for `document_url` (subdomain aliases are rejected).
+- `POST /api/export/cases` rejects non-PDF upstream responses with `422 VALIDATION_ERROR` and `policy_reason=source_export_non_pdf_payload` when `format=pdf`.
+- successful `POST /api/export/cases` responses stream binary content and include `x-trace-id`, `x-export-policy-reason`, and `content-disposition` headers.
+- `/ops/metrics` includes `request_metrics.export.audit_recent` with per-export consent/audit events (trace ID, client ID, source/case, host, approval flag, outcome, policy reason).
 - Official SCC/FC/FCA search uses in-process cache with stale-while-refresh behavior to reduce tail latency and temporary upstream feed outages.
 - CanLII integration uses metadata endpoints only and enforces plan limits (`5000/day`, `2 req/s`, `1 in-flight request`).
 - Rate limiting uses Redis when available; otherwise it falls back to in-memory limiting.

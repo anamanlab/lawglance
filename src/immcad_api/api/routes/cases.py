@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from urllib.parse import urlparse, urlunparse
 
@@ -21,6 +22,9 @@ from immcad_api.telemetry import RequestMetrics
 
 class ExportTooLargeError(Exception):
     """Raised when an export payload exceeds configured bounds."""
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _download_export_payload(
@@ -83,6 +87,60 @@ def build_case_router(
             outcome=outcome, policy_reason=policy_reason
         )
 
+    def _record_export_audit(
+        *,
+        request: Request,
+        payload: CaseExportRequest,
+        outcome: str,
+        policy_reason: str | None = None,
+        document_url: str | None = None,
+    ) -> None:
+        trace_id = getattr(request.state, "trace_id", "")
+        raw_client_id = getattr(request.state, "client_id", None)
+        client_id = str(raw_client_id).strip() if raw_client_id else None
+        target_url = document_url or str(payload.document_url)
+        document_host = (urlparse(target_url).hostname or "").lower() or None
+        event_payload = {
+            "trace_id": trace_id,
+            "client_id": client_id,
+            "source_id": payload.source_id,
+            "case_id": payload.case_id,
+            "document_host": document_host,
+            "user_approved": payload.user_approved,
+            "outcome": outcome,
+            "policy_reason": policy_reason,
+        }
+        LOGGER.info("case_export_audit_event %s", event_payload)
+        if request_metrics is None:
+            return
+        request_metrics.record_export_audit_event(
+            trace_id=trace_id,
+            client_id=client_id,
+            source_id=payload.source_id,
+            case_id=payload.case_id,
+            document_host=document_host,
+            user_approved=payload.user_approved,
+            outcome=outcome,
+            policy_reason=policy_reason,
+        )
+
+    def _record_export_event(
+        *,
+        request: Request,
+        payload: CaseExportRequest,
+        outcome: str,
+        policy_reason: str | None = None,
+        document_url: str | None = None,
+    ) -> None:
+        _record_export_metric(outcome=outcome, policy_reason=policy_reason)
+        _record_export_audit(
+            request=request,
+            payload=payload,
+            outcome=outcome,
+            policy_reason=policy_reason,
+            document_url=document_url,
+        )
+
     def _error_response(
         *,
         status_code: int,
@@ -105,12 +163,17 @@ def build_case_router(
             headers={"x-trace-id": trace_id},
         )
 
-    def _is_url_allowed_for_source(document_url: str, source_url: str) -> bool:
-        document_host = (urlparse(document_url).hostname or "").lower()
+    def _allowed_hosts_for_source(source_url: str) -> set[str]:
         source_host = (urlparse(source_url).hostname or "").lower()
-        if not document_host or not source_host:
+        if not source_host:
+            return set()
+        return {source_host}
+
+    def _is_url_allowed_for_source(document_url: str, allowed_hosts: set[str]) -> bool:
+        document_host = (urlparse(document_url).hostname or "").lower()
+        if not document_host or not allowed_hosts:
             return False
-        return document_host == source_host or document_host.endswith(f".{source_host}")
+        return document_host in allowed_hosts
 
     def _safe_download_filename(*, source_id: str, case_id: str, fmt: str) -> str:
         safe_source = re.sub(r"[^A-Za-z0-9_.-]+", "-", source_id).strip("-") or "source"
@@ -133,6 +196,12 @@ def build_case_router(
             )
         )
 
+    def _is_pdf_payload(*, payload_bytes: bytes, media_type: str) -> bool:
+        normalized_media_type = media_type.split(";", 1)[0].strip().lower()
+        if payload_bytes.startswith(b"%PDF-"):
+            return True
+        return normalized_media_type == "application/pdf"
+
     @router.post("/search/cases", response_model=CaseSearchResponse)
     def search_cases(
         payload: CaseSearchRequest, request: Request, response: Response
@@ -149,7 +218,9 @@ def build_case_router(
         trace_id = getattr(request.state, "trace_id", "")
         source_entry = source_registry.get_source(payload.source_id)
         if source_entry is None:
-            _record_export_metric(
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="blocked",
                 policy_reason="source_not_in_registry_for_export",
             )
@@ -161,8 +232,11 @@ def build_case_router(
                 policy_reason="source_not_in_registry_for_export",
             )
 
+        allowed_hosts = _allowed_hosts_for_source(str(source_entry.url))
         if not payload.user_approved:
-            _record_export_metric(
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="blocked",
                 policy_reason="source_export_user_approval_required",
             )
@@ -181,7 +255,9 @@ def build_case_router(
                 source_policy=source_policy,
             )
             if not export_allowed:
-                _record_export_metric(
+                _record_export_event(
+                    request=request,
+                    payload=payload,
                     outcome="blocked",
                     policy_reason=policy_reason,
                 )
@@ -193,10 +269,10 @@ def build_case_router(
                     policy_reason=policy_reason,
                 )
 
-        if not _is_url_allowed_for_source(
-            str(payload.document_url), str(source_entry.url)
-        ):
-            _record_export_metric(
+        if not _is_url_allowed_for_source(str(payload.document_url), allowed_hosts):
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="blocked",
                 policy_reason="export_url_not_allowed_for_source",
             )
@@ -218,9 +294,12 @@ def build_case_router(
                 max_download_bytes=export_max_download_bytes,
             )
         except ExportTooLargeError as exc:
-            _record_export_metric(
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="too_large",
                 policy_reason="source_export_payload_too_large",
+                document_url=request_url,
             )
             return _error_response(
                 status_code=413,
@@ -230,9 +309,12 @@ def build_case_router(
                 policy_reason="source_export_payload_too_large",
             )
         except httpx.HTTPError as exc:
-            _record_export_metric(
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="fetch_failed",
                 policy_reason="source_export_fetch_failed",
+                document_url=request_url,
             )
             return _error_response(
                 status_code=503,
@@ -242,10 +324,13 @@ def build_case_router(
                 policy_reason="source_export_fetch_failed",
             )
 
-        if not _is_url_allowed_for_source(final_url, str(source_entry.url)):
-            _record_export_metric(
+        if not _is_url_allowed_for_source(final_url, allowed_hosts):
+            _record_export_event(
+                request=request,
+                payload=payload,
                 outcome="blocked",
                 policy_reason="export_redirect_url_not_allowed_for_source",
+                document_url=final_url,
             )
             return _error_response(
                 status_code=422,
@@ -255,7 +340,32 @@ def build_case_router(
                 policy_reason="export_redirect_url_not_allowed_for_source",
             )
 
-        _record_export_metric(outcome="allowed", policy_reason=policy_reason)
+        if payload.format == "pdf" and not _is_pdf_payload(
+            payload_bytes=payload_bytes,
+            media_type=media_type,
+        ):
+            _record_export_event(
+                request=request,
+                payload=payload,
+                outcome="blocked",
+                policy_reason="source_export_non_pdf_payload",
+                document_url=final_url,
+            )
+            return _error_response(
+                status_code=422,
+                trace_id=trace_id,
+                code="VALIDATION_ERROR",
+                message="Case export response did not contain a valid PDF payload",
+                policy_reason="source_export_non_pdf_payload",
+            )
+
+        _record_export_event(
+            request=request,
+            payload=payload,
+            outcome="allowed",
+            policy_reason=policy_reason,
+            document_url=final_url,
+        )
         filename = _safe_download_filename(
             source_id=payload.source_id,
             case_id=payload.case_id,

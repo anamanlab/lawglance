@@ -23,6 +23,16 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     metrics.record_export_outcome(
         outcome="fetch_failed", policy_reason="source_export_fetch_failed"
     )
+    metrics.record_export_audit_event(
+        trace_id="trace-1",
+        client_id="203.0.113.10",
+        source_id="SCC_DECISIONS",
+        case_id="scc-2024-3",
+        document_host="decisions.scc-csc.ca",
+        user_approved=True,
+        outcome="allowed",
+        policy_reason="source_export_allowed",
+    )
 
     clock["now"] = 160.0
     snapshot = metrics.snapshot()
@@ -44,6 +54,19 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert snapshot["export"]["policy_reasons"]["source_export_allowed"] == 1
     assert snapshot["export"]["policy_reasons"]["source_export_blocked_by_policy"] == 1
     assert snapshot["export"]["policy_reasons"]["source_export_fetch_failed"] == 1
+    assert len(snapshot["export"]["audit_recent"]) == 1
+    assert snapshot["export"]["audit_recent"][0]["trace_id"] == "trace-1"
+    assert snapshot["export"]["audit_recent"][0]["client_id"] == "203.0.113.10"
+    assert snapshot["export"]["audit_recent"][0]["source_id"] == "SCC_DECISIONS"
+    assert snapshot["export"]["audit_recent"][0]["case_id"] == "scc-2024-3"
+    assert snapshot["export"]["audit_recent"][0]["document_host"] == "decisions.scc-csc.ca"
+    assert snapshot["export"]["audit_recent"][0]["user_approved"] is True
+    assert snapshot["export"]["audit_recent"][0]["outcome"] == "allowed"
+    assert (
+        snapshot["export"]["audit_recent"][0]["policy_reason"]
+        == "source_export_allowed"
+    )
+    assert snapshot["export"]["audit_recent"][0]["timestamp_utc"].endswith("Z")
     assert snapshot["latency_ms"]["sample_count"] == 2
     assert snapshot["latency_ms"]["p50"] == pytest.approx(250.0)
     assert snapshot["latency_ms"]["p95"] == pytest.approx(385.0)
@@ -68,6 +91,7 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["export"]["fetch_failures"] == 0
     assert snapshot["export"]["too_large"] == 0
     assert snapshot["export"]["policy_reasons"] == {}
+    assert snapshot["export"]["audit_recent"] == []
     assert snapshot["latency_ms"]["sample_count"] == 0
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0

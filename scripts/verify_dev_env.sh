@@ -8,6 +8,13 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+git_secret_available() {
+  if command_exists git-secret; then
+    return 0
+  fi
+  git secret --version >/dev/null 2>&1
+}
+
 failures=0
 warnings=0
 
@@ -75,6 +82,22 @@ if command_exists uv; then
   ok "uv found: $(uv --version)"
 else
   fail "uv is not installed."
+fi
+
+if command_exists gpg; then
+  ok "gpg is available: $(gpg --version | head -n1)"
+else
+  warn "gpg is not installed (optional unless you modify encrypted repo-stored env bundles)."
+fi
+
+if git_secret_available; then
+  ok "git-secret is available: $(git secret --version)"
+else
+  if [[ -d .gitsecret ]]; then
+    warn "git-secret is not installed, but .gitsecret/ metadata exists. Install git-secret only if you need to reveal/edit encrypted repo-stored env bundles (see docs/release/git-secret-runbook.md)."
+  else
+    warn "git-secret is not installed (optional for IMMCAD)."
+  fi
 fi
 
 if [[ $failures -eq 0 ]]; then

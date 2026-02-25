@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import re
 
 from immcad_api.policy.compliance import (
     DEFAULT_TRUSTED_CITATION_DOMAINS,
@@ -10,6 +11,7 @@ from immcad_api.policy.compliance import (
 
 
 _UNSTABLE_MODEL_TOKENS = ("preview", "experimental", "exp")
+_HARDENED_ENVIRONMENT_PATTERN = re.compile(r"^(production|prod|ci)(?:[-_].+)?$")
 
 
 @dataclass(frozen=True)
@@ -124,10 +126,16 @@ def resolve_runtime_environment() -> str:
     return "development"
 
 
+def is_hardened_environment(environment: str) -> bool:
+    normalized = environment.strip().lower()
+    if not normalized:
+        return False
+    return _HARDENED_ENVIRONMENT_PATTERN.fullmatch(normalized) is not None
+
+
 def load_settings() -> Settings:
     environment = resolve_runtime_environment()
-    environment_normalized = environment.lower()
-    hardened_environment = environment_normalized in {"production", "prod", "ci"}
+    hardened_environment = is_hardened_environment(environment)
     api_bearer_token = parse_api_bearer_token()
     openai_api_key = parse_str_env("OPENAI_API_KEY")
     gemini_api_key = parse_str_env("GEMINI_API_KEY")

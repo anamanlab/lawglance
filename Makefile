@@ -1,8 +1,9 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
 TS ?=
+GIT_SECRET_ARGS ?=
 
 setup:
 	./scripts/setup_dev_env.sh
@@ -99,6 +100,21 @@ canlii-live-smoke:
 
 hygiene:
 	bash scripts/check_repository_hygiene.sh
+
+git-secret-check:
+	bash scripts/git_secret_env.sh check
+
+git-secret-reveal:
+	bash scripts/git_secret_env.sh reveal $(GIT_SECRET_ARGS)
+
+git-secret-hide:
+	bash scripts/git_secret_env.sh hide $(GIT_SECRET_ARGS)
+
+git-secret-list:
+	bash scripts/git_secret_env.sh list $(GIT_SECRET_ARGS)
+
+git-secret-changes:
+	bash scripts/git_secret_env.sh changes $(GIT_SECRET_ARGS)
 
 quality: lint-api typecheck test arch-validate docs-audit source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 

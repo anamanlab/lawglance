@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, deque
+from datetime import datetime, timezone
 import math
 from threading import Lock
 import time
@@ -12,10 +13,13 @@ class RequestMetrics:
         self,
         *,
         max_latency_samples: int = 2048,
+        max_export_audit_events: int = 256,
         time_fn: Callable[[], float] | None = None,
     ) -> None:
         if max_latency_samples < 1:
             raise ValueError("max_latency_samples must be >= 1")
+        if max_export_audit_events < 1:
+            raise ValueError("max_export_audit_events must be >= 1")
         self._time_fn = time_fn or time.monotonic
         self._started_at = self._time_fn()
         self._lock = Lock()
@@ -30,6 +34,9 @@ class RequestMetrics:
         self._export_fetch_failures = 0
         self._export_too_large = 0
         self._export_policy_reasons: Counter[str] = Counter()
+        self._export_audit_events: deque[dict[str, object]] = deque(
+            maxlen=max_export_audit_events
+        )
         self._latencies_ms: deque[float] = deque(maxlen=max_latency_samples)
 
     def record_api_response(self, *, status_code: int, duration_seconds: float) -> None:
@@ -64,6 +71,36 @@ class RequestMetrics:
             if policy_reason:
                 self._export_policy_reasons[policy_reason] += 1
 
+    def record_export_audit_event(
+        self,
+        *,
+        trace_id: str,
+        client_id: str | None,
+        source_id: str,
+        case_id: str,
+        document_host: str | None,
+        user_approved: bool,
+        outcome: str,
+        policy_reason: str | None = None,
+    ) -> None:
+        event: dict[str, object] = {
+            "timestamp_utc": datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "trace_id": trace_id,
+            "client_id": client_id,
+            "source_id": source_id,
+            "case_id": case_id,
+            "document_host": document_host,
+            "user_approved": user_approved,
+            "outcome": outcome,
+        }
+        if policy_reason:
+            event["policy_reason"] = policy_reason
+        with self._lock:
+            self._export_audit_events.append(event)
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             elapsed_seconds = max(self._time_fn() - self._started_at, 1e-9)
@@ -78,6 +115,7 @@ class RequestMetrics:
             export_fetch_failures = self._export_fetch_failures
             export_too_large = self._export_too_large
             export_policy_reasons = dict(self._export_policy_reasons)
+            export_audit_events = list(self._export_audit_events)
             latencies = list(self._latencies_ms)
 
         request_rate_per_minute = (api_requests / elapsed_seconds) * 60.0
@@ -110,6 +148,7 @@ class RequestMetrics:
                 "fetch_failures": export_fetch_failures,
                 "too_large": export_too_large,
                 "policy_reasons": export_policy_reasons,
+                "audit_recent": export_audit_events,
             },
             "latency_ms": {
                 "sample_count": len(latencies),

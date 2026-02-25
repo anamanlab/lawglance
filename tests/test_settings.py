@@ -49,6 +49,19 @@ def test_load_settings_requires_bearer_token_in_production(
         load_settings()
 
 
+@pytest.mark.parametrize("environment", ["production-us-east", "prod_blue", "ci-smoke"])
+def test_load_settings_treats_environment_variants_as_hardened(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("API_BEARER_TOKEN", raising=False)
+    monkeypatch.delenv("IMMCAD_API_BEARER_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="IMMCAD_API_BEARER_TOKEN is required"):
+        load_settings()
+
+
 def test_load_settings_defaults_to_production_when_vercel_env_is_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

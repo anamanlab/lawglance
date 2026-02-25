@@ -265,15 +265,26 @@ export function ChatShell({
         if (!exportResult.ok) {
           const errorCopy = ERROR_COPY[exportResult.error.code];
           const errorDetail = exportResult.error.message || errorCopy.detail;
+          const policyReason = exportResult.policyReason;
+          const isPolicyBlocked = exportResult.error.code === "POLICY_BLOCKED";
+          const policyBlockedMessage =
+            policyReason === "source_export_user_approval_required"
+              ? "Case export requires explicit user approval before download."
+              : "Case export was blocked by source policy for this source.";
           const statusMessage = showOperationalPanels
-            ? `${errorCopy.title}: ${errorDetail} (Trace ID: ${exportResult.traceId ?? "Unavailable"})`
-            : "Case export is temporarily unavailable. Please try again shortly.";
+            ? `${errorCopy.title}: ${errorDetail}${
+                policyReason ? ` (Policy: ${policyReason})` : ""
+              } (Trace ID: ${exportResult.traceId ?? "Unavailable"})`
+            : isPolicyBlocked
+              ? policyBlockedMessage
+              : "Case export is temporarily unavailable. Please try again shortly.";
           setRelatedCasesStatus(statusMessage);
           setSupportContext({
             endpoint: "/api/export/cases",
             status: "error",
             traceId: exportResult.traceId,
             code: exportResult.error.code,
+            policyReason,
             traceIdMismatch: exportResult.traceIdMismatch,
           });
           return;
@@ -304,6 +315,7 @@ export function ChatShell({
           endpoint: "/api/export/cases",
           status: "success",
           traceId: exportResult.traceId,
+          policyReason: exportResult.data.policyReason,
           traceIdMismatch: false,
         });
       } finally {

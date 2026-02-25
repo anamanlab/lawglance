@@ -153,6 +153,7 @@ Production/CI policy:
 - `EXPORT_MAX_DOWNLOAD_BYTES` controls export payload caps (default `10485760`, i.e. 10 MB).
 - `GET /ops/metrics` requires a valid bearer token in every environment.
 - Never commit `.env`; use platform secrets managers and short rotation windows for tokens.
+- If the team adopts `git-secret` for encrypted repo-stored env bundles, use it only for approved non-production/bootstrap workflows and follow `docs/release/git-secret-runbook.md` (do not replace GitHub/Vercel runtime secrets).
 
 ## Redis (optional but recommended)
 
@@ -211,6 +212,7 @@ Notes:
 - `pull` creates a local backup unless `--no-backup` is provided.
 - `validate` loads required keys from `<project-dir>/.env.example` and falls back to repo-root `.env.example`, plus explicit `--required` keys.
 - backup files are namespaced by project directory in `.env-backups/` to avoid collisions.
+- `git-secret` (if used) complements this workflow by encrypting repo-stored env bundles; it does not replace Vercel environment variables or `scripts/vercel_env_sync.py`.
 
 ## Troubleshooting
 

@@ -5,6 +5,7 @@
 - User clarified to continue step-by-step in a multi-agent dirty worktree and ignore unrelated concurrent edits.
 - Review feedback highlighted that archive module path changes must also preserve internal importability after root-shim removals.
 - User correction: initial auth fix was too superficial because it patched only frontend behavior without fully reconciling backend env alias handling and test/env drift paths.
+- User correction: do a stricter self-review ("do not lie, find issues/bugs and make further improvements") before finalizing plans or implementations.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -23,3 +24,4 @@
 - For shell gate scripts, add explicit behavioral tests for success/failure/error exit-code branches to prevent CI contract regressions.
 - Close checklist gates only after running the exact verification commands; idempotence regressions (for example TOC spacing drift) are easiest to catch with targeted tests before full-suite runs.
 - When typecheck is part of release gates, keep the typechecker in dev dependencies and make local `typecheck` targets fail fast if the tool is missing.
+- Before marking work complete, run an explicit adversarial review pass on your own changes and patch any real issues found (incorrect commands, false-positive risks, or verification gaps).

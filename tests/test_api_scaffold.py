@@ -104,6 +104,35 @@ def test_case_search_disabled_returns_structured_unavailable_response(
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
+def test_create_app_fails_fast_when_case_assets_missing_in_hardened_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production-us-east")
+    monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS", "false")
+    monkeypatch.setenv("CITATION_TRUSTED_DOMAINS", "laws-lois.justice.gc.ca,canlii.org")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+    monkeypatch.setenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash")
+    monkeypatch.setenv("ENABLE_CASE_SEARCH", "true")
+    monkeypatch.setenv("ENABLE_OFFICIAL_CASE_SOURCES", "true")
+    monkeypatch.setenv("EXPORT_POLICY_GATE_ENABLED", "true")
+
+    def _missing_registry():
+        raise FileNotFoundError("registry missing")
+
+    monkeypatch.setattr("immcad_api.main.load_source_registry", _missing_registry)
+
+    with pytest.raises(
+        ValueError,
+        match="Case-search assets are required in hardened environments",
+    ):
+        create_app()
+
+
 def test_validation_error_uses_error_envelope() -> None:
     response = client.post(
         "/api/chat",
@@ -585,6 +614,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["refusal"]["total"] >= 1
     assert "fallback" in request_metrics
     assert "export" in request_metrics
+    assert "audit_recent" in request_metrics["export"]
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]

@@ -28,7 +28,7 @@ from immcad_api.services import (
     official_grounding_catalog,
     scaffold_grounded_citations,
 )
-from immcad_api.settings import load_settings
+from immcad_api.settings import is_hardened_environment, load_settings
 from immcad_api.sources import CanLIIClient, OfficialCaseLawClient, load_source_registry
 from immcad_api.sources.canlii_usage_limiter import build_canlii_usage_limiter
 from immcad_api.telemetry import ProviderMetrics, RequestMetrics, generate_trace_id
@@ -153,6 +153,10 @@ def create_app() -> FastAPI:
             source_registry = load_source_registry()
             source_policy = load_source_policy()
         except FileNotFoundError as exc:
+            if is_hardened_environment(settings.environment):
+                raise ValueError(
+                    "Case-search assets are required in hardened environments; missing source registry or source policy files"
+                ) from exc
             LOGGER.warning(
                 "Case-search assets missing; disabling case-search routes",
                 exc_info=exc,
@@ -259,6 +263,7 @@ def create_app() -> FastAPI:
                         content=error.model_dump(),
                         headers={"x-trace-id": request.state.trace_id},
                     )
+                request.state.client_id = client_id
 
                 allowed = rate_limiter.allow(client_id)
                 if not allowed:

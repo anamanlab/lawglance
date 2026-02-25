@@ -67,3 +67,12 @@ export const UNAUTHORIZED_ERROR = {
     trace_id: "error-trace-auth",
   },
 };
+
+export const EXPORT_POLICY_BLOCKED_ERROR = {
+  error: {
+    code: "POLICY_BLOCKED",
+    message: "Case export blocked by source policy (source_export_blocked_by_policy)",
+    trace_id: "error-trace-export-policy",
+    policy_reason: "source_export_blocked_by_policy",
+  },
+};

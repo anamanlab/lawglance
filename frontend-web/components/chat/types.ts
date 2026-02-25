@@ -29,6 +29,7 @@ export type SupportContext = {
   status: "success" | "error";
   traceId: string | null;
   code?: ApiErrorCode;
+  policyReason?: string | null;
   traceIdMismatch: boolean;
 };
 

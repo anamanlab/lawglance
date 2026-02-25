@@ -8,6 +8,7 @@ import {
   CASE_SEARCH_SUCCESS_RESPONSE,
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
+  EXPORT_POLICY_BLOCKED_ERROR,
   SOURCE_UNAVAILABLE_ERROR,
   UNAUTHORIZED_ERROR,
 } from "@/tests/fixtures/chat-contract-fixtures";
@@ -331,5 +332,50 @@ describe("chat shell contract behavior", () => {
     expect(linkClickSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Last endpoint: /api/export/cases")).toBeTruthy();
     expect(screen.getByText("Trace ID: trace-export-success")).toBeTruthy();
+    expect(screen.getByText("Last policy reason: source_export_allowed")).toBeTruthy();
+  });
+
+  it("shows policy-blocked export message without diagnostics mode", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(CASE_SEARCH_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-case-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(EXPORT_POLICY_BLOCKED_ERROR, {
+          status: 403,
+          headers: { "x-trace-id": "trace-export-policy" },
+        })
+      );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court examples for study permit refusals."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+    await screen.findByText("Sample Tribunal Decision");
+    await user.click(screen.getByRole("button", { name: "Export PDF" }));
+
+    expect(
+      await screen.findByText("Case export was blocked by source policy for this source.")
+    ).toBeTruthy();
   });
 });

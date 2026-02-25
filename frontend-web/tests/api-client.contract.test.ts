@@ -8,6 +8,7 @@ import {
 import {
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
+  EXPORT_POLICY_BLOCKED_ERROR,
   SOURCE_UNAVAILABLE_ERROR,
 } from "@/tests/fixtures/chat-contract-fixtures";
 
@@ -148,6 +149,29 @@ describe("api client chat contract", () => {
     expect(result.error.message).toBe("Authoritative source is unavailable.");
     expect(result.traceId).toBe("trace-header");
     expect(result.traceIdMismatch).toBe(true);
+    expect(result.policyReason).toBeNull();
+  });
+
+  it("parses export policy reason from error envelopes", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(EXPORT_POLICY_BLOCKED_ERROR, {
+        status: 403,
+        headers: { "x-trace-id": "trace-export-policy" },
+      })
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.exportCasePdf(CASE_EXPORT_PAYLOAD);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(403);
+    expect(result.error.code).toBe("POLICY_BLOCKED");
+    expect(result.policyReason).toBe("source_export_blocked_by_policy");
   });
 
   it("posts approved case export requests and returns binary payload metadata", async () => {
@@ -209,6 +233,7 @@ describe("api client chat contract", () => {
     }
     expect(result.status).toBe(422);
     expect(result.error.code).toBe("VALIDATION_ERROR");
+    expect(result.policyReason).toBe("source_export_user_approval_required");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

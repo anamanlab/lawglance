@@ -41,6 +41,61 @@ def test_repository_hygiene_script_fails_when_env_file_is_tracked(tmp_path: Path
     assert ".env is tracked in git" in result.stdout
 
 
+def test_repository_hygiene_script_fails_when_env_variant_file_is_tracked(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    (tmp_path / "backend-vercel").mkdir()
+    (tmp_path / "backend-vercel" / ".env.preview").write_text(
+        "SAFE_VALUE=1\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "backend-vercel/.env.preview"], cwd=tmp_path)
+    _run(["git", "commit", "-qm", "track env variant"], cwd=tmp_path)
+
+    result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
+
+    assert result.returncode == 1
+    assert "tracked plaintext .env" in result.stdout
+    assert "backend-vercel/.env.preview" in result.stdout
+
+
+def test_repository_hygiene_script_fails_when_gitsecret_random_seed_is_tracked(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    random_seed = tmp_path / ".gitsecret" / "keys" / "random_seed"
+    random_seed.parent.mkdir(parents=True)
+    random_seed.write_text("seed\n", encoding="utf-8")
+    _run(["git", "add", ".gitsecret/keys/random_seed"], cwd=tmp_path)
+    _run(["git", "commit", "-qm", "track random seed"], cwd=tmp_path)
+
+    result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
+
+    assert result.returncode == 1
+    assert ".gitsecret/keys/random_seed is tracked" in result.stdout
+
+
+def test_repository_hygiene_script_ignores_encrypted_secret_artifacts_in_regex_scan(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    (tmp_path / "backend-vercel").mkdir()
+    # Simulate encrypted artifact content that happens to match the plaintext secret regex.
+    simulated_secret = "sk-proj-" + ("a" * 36)
+    (tmp_path / "backend-vercel" / ".env.preview.secret").write_text(
+        f"{simulated_secret}\n",
+        encoding="utf-8",
+    )
+    _run(["git", "add", "backend-vercel/.env.preview.secret"], cwd=tmp_path)
+    _run(["git", "commit", "-qm", "track encrypted artifact"], cwd=tmp_path)
+
+    result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
+
+    assert result.returncode == 0
+    assert "[OK] Repository hygiene checks passed." in result.stdout
+
+
 def test_repository_hygiene_script_reports_git_grep_failures(tmp_path: Path) -> None:
     result = _run(["bash", str(SCRIPT_PATH)], cwd=tmp_path)
 

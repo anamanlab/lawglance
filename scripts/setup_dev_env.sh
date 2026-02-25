@@ -96,6 +96,27 @@ docker run --name immcad-redis -p 6379:6379 -d redis:7-alpine
 EOF
 fi
 
+print_step "Checking optional git-secret workflow tools"
+if command_exists gpg; then
+  echo "gpg detected: $(gpg --version | head -n1)"
+else
+  cat <<'EOF'
+gpg (GnuPG) is not installed.
+It is optional unless you need to work with encrypted repo-stored env bundles via git-secret.
+See: docs/release/git-secret-runbook.md
+EOF
+fi
+
+if command_exists git-secret || git secret --version >/dev/null 2>&1; then
+  echo "git-secret detected: $(git secret --version)"
+else
+  cat <<'EOF'
+git-secret is not installed (optional).
+Install it only if you need to reveal/edit encrypted repo-stored env bundles.
+Runbook: docs/release/git-secret-runbook.md
+EOF
+fi
+
 print_step "Setup complete"
 cat <<'EOF'
 Next steps:
@@ -104,4 +125,5 @@ Next steps:
 3. Start backend API: make api-dev
 4. Start frontend UI (new terminal): make frontend-install && make frontend-dev
 5. Legacy dev-only UI (optional): uv run streamlit run app.py
+6. Optional git-secret check (if using encrypted env bundles): make git-secret-check
 EOF

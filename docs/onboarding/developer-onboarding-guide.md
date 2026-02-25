@@ -138,6 +138,7 @@ Use the built-in scripts:
 Key troubleshooting docs:
 
 - `docs/development-environment.md`
+- `docs/release/git-secret-runbook.md` (only if the team is using encrypted repo-stored env bundles; does not replace GitHub/Vercel runtime secrets)
 
 ## 3. Project and Codebase Overview
 
@@ -307,6 +308,7 @@ This section is intentionally structured as a fill-in template because org-speci
 - `docs/release/canlii-compliance-runbook.md`
 - `docs/release/incident-observability-runbook.md`
 - `docs/release/legal-review-checklist.md`
+- `docs/release/git-secret-runbook.md` (if enabled for env bundle workflow)
 
 ### External docs (role-based)
 
@@ -417,6 +419,7 @@ Steps:
 - `docs/release/canlii-compliance-runbook.md`
 - `docs/release/legal-review-checklist.md`
 - `docs/release/incident-observability-runbook.md`
+- `docs/release/git-secret-runbook.md` (if enabled for env bundle workflow)
 
 ### Incident handling basics for new engineers
 

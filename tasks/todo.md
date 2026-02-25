@@ -1,3 +1,71 @@
+# Task Plan - 2026-02-25 - Parallel Audit Remediation (Export Safety + Hardened Env + Frontend Policy UX)
+
+## Current Focus
+- Close remaining production-risk gaps discovered during parallel audits: hardened environment guard bypass risk, export contract/docs parity gaps, and frontend policy-reason observability.
+
+## Plan
+- [x] Harden environment classification in settings so production-like labels still enforce all hardened runtime guards.
+- [x] Add regression tests for hardened environment label variants.
+- [x] Fail fast in hardened environments when case-search assets (registry/policy) are missing.
+- [x] Add per-export consent audit events (`trace_id`, `client_id`, source/case, host, user approval, outcome, policy reason) to `/ops/metrics`.
+- [x] Tighten export URL validation to exact source-host allowlists (no implicit subdomain acceptance).
+- [x] Emit structured `case_export_audit_event` logs for each export decision.
+- [x] Improve export API/docs parity:
+  - [x] document registry-driven `source_id` contract.
+  - [x] document successful export response headers and binary body behavior.
+  - [x] document non-PDF payload rejection behavior for `format=pdf`.
+- [x] Improve frontend export diagnostics:
+  - [x] parse/propagate `policy_reason` in API client failures.
+  - [x] expose policy reason in support context panel.
+  - [x] show explicit non-diagnostics message for policy-blocked export outcomes.
+- [x] Enforce PDF payload validation in backend export route and add regression coverage.
+- [x] Run verification:
+  - [x] `./scripts/venv_exec.sh pytest -q tests/test_settings.py tests/test_export_policy_gate.py`
+  - [x] `npm run test --prefix frontend-web -- tests/api-client.contract.test.ts tests/chat-shell.contract.test.tsx`
+  - [x] `npm run typecheck --prefix frontend-web`
+  - [x] `make quality`
+  - [x] `npm run test --prefix frontend-web`
+
+## Review
+- Hardened runtime classification now accepts production-like labels (for example `production-us-east`, `prod_blue`, `ci-smoke`) so all production safeguards remain enforced.
+  - Updated: `src/immcad_api/settings.py`, `backend-vercel/src/immcad_api/settings.py`
+  - Added test: `tests/test_settings.py::test_load_settings_treats_environment_variants_as_hardened`
+- Hardened runtime now fails startup when case-search assets are missing, instead of silently disabling case endpoints.
+  - Updated: `src/immcad_api/main.py`, `backend-vercel/src/immcad_api/main.py`
+  - Added test: `tests/test_api_scaffold.py::test_create_app_fails_fast_when_case_assets_missing_in_hardened_environment`
+- Export route now validates that `format=pdf` responses contain actual PDF payloads before returning downloads.
+  - Updated: `src/immcad_api/api/routes/cases.py`, `backend-vercel/src/immcad_api/api/routes/cases.py`
+  - Added test: `tests/test_export_policy_gate.py::test_case_export_policy_rejects_non_pdf_payload`
+- Export runtime now emits per-request consent audit events in operational metrics:
+  - Updated: `src/immcad_api/telemetry/request_metrics.py`, `backend-vercel/src/immcad_api/telemetry/request_metrics.py`
+  - Updated route wiring: `src/immcad_api/api/routes/cases.py`, `backend-vercel/src/immcad_api/api/routes/cases.py`
+  - Middleware now carries `client_id` on request state for audit attribution: `src/immcad_api/main.py`, `backend-vercel/src/immcad_api/main.py`
+  - Structured audit logs emitted via `case_export_audit_event` in route handlers: `src/immcad_api/api/routes/cases.py`, `backend-vercel/src/immcad_api/api/routes/cases.py`
+  - Added/updated tests:
+    - `tests/test_request_metrics.py`
+    - `tests/test_export_policy_gate.py`
+    - `tests/test_api_scaffold.py`
+- Export URL host checks now require exact source-host matching (subdomains rejected by default):
+  - Updated: `src/immcad_api/api/routes/cases.py`, `backend-vercel/src/immcad_api/api/routes/cases.py`
+  - Added test: `tests/test_export_policy_gate.py::test_case_export_policy_rejects_subdomain_host_not_in_source_allowlist`
+- Frontend now captures and surfaces export policy reasons in both diagnostics and user-safe messaging paths.
+  - Updated: `frontend-web/lib/api-client.ts`, `frontend-web/components/chat/chat-shell-container.tsx`, `frontend-web/components/chat/types.ts`, `frontend-web/components/chat/support-context-panel.tsx`
+  - Added/updated tests:
+    - `frontend-web/tests/api-client.contract.test.ts`
+    - `frontend-web/tests/chat-shell.contract.test.tsx`
+    - `frontend-web/tests/fixtures/chat-contract-fixtures.ts`
+- API/docs contract alignment improved for case search/export:
+  - Updated: `docs/architecture/api-contracts.md`, `src/immcad_api/README.md`, `backend-vercel/src/immcad_api/README.md`
+- Verification evidence:
+  - `./scripts/venv_exec.sh pytest -q tests/test_request_metrics.py tests/test_export_policy_gate.py tests/test_api_scaffold.py` -> `39 passed`
+  - `./scripts/venv_exec.sh pytest -q tests/test_api_scaffold.py tests/test_settings.py tests/test_export_policy_gate.py` -> `114 passed`
+  - `npm run test --prefix frontend-web -- tests/api-client.contract.test.ts tests/chat-shell.contract.test.tsx tests/backend-proxy.contract.test.ts` -> `18 passed`
+  - `npm run typecheck --prefix frontend-web` -> pass
+  - `make quality` -> pass (`326 passed` across python suite + quality scripts)
+  - `npm run test --prefix frontend-web` -> `39 passed`
+
+---
+
 # Review Evidence - 2026-02-25 - API/DOC Contract Alignment
 
 - Updated API contract docs in `docs/architecture/api-contracts.md`:
@@ -1213,3 +1281,100 @@
   - preserves platform-managed production secrets policy,
   - integrates with existing repository hygiene checks and Vercel env sync workflows,
   - includes optional (gated) CI `git-secret reveal` support only if needed.
+
+---
+
+# Task Plan - 2026-02-25 - Repository Hygiene Git-Secret Hardening (Phase 1 Execution)
+
+## Current Focus
+- Implement the first high-value hardening item from the `git-secret` adoption plan: make `scripts/check_repository_hygiene.sh` enforce `git-secret` safety invariants and avoid false positives on encrypted artifacts.
+
+## Plan
+- [x] Add failing tests for:
+- [x] tracked plaintext `.env` variant files (for example `backend-vercel/.env.preview`) must fail.
+- [x] tracked `.gitsecret/keys/random_seed` must fail.
+- [x] tracked `*.secret` artifacts must not trigger plaintext secret regex false positives.
+- [x] Patch `scripts/check_repository_hygiene.sh` with minimal behavior changes to satisfy new tests.
+- [x] Run targeted verification (`pytest`, `ruff`, script smoke).
+- [x] Perform adversarial self-review and patch follow-up issue(s) discovered during verification.
+
+## Review
+- Updated `scripts/check_repository_hygiene.sh`:
+  - adds tracked plaintext `.env*` detection (excluding `.env.example` templates and `*.secret` encrypted artifacts),
+  - blocks tracked `.gitsecret/keys/random_seed`,
+  - filters `.secret`/`.gitsecret` matches out of regex plaintext secret scan results to avoid encrypted-blob false positives.
+- Added regression coverage in `tests/test_repository_hygiene_script.py` for:
+  - tracked env variant fail path,
+  - tracked `random_seed` fail path,
+  - encrypted `*.secret` scan exclusion pass path.
+- Self-review issue found and fixed:
+  - the new test initially used a literal secret-shaped string that caused the repo hygiene script to flag the test source file itself;
+  - fixed by constructing the test token dynamically at runtime instead of storing the literal in source.
+- Verification (TDD red -> green):
+  - `./scripts/venv_exec.sh pytest -q tests/test_repository_hygiene_script.py` -> first run `3 failed, 3 passed` (expected RED), final run `6 passed`.
+  - `./scripts/venv_exec.sh ruff check tests/test_repository_hygiene_script.py` -> pass.
+  - `bash scripts/check_repository_hygiene.sh` -> `[OK] Repository hygiene checks passed.`
+
+---
+
+# Task Plan - 2026-02-25 - Git-Secret Runbook and Docs Alignment
+
+## Current Focus
+- Convert the reviewed `git-secret` guidance into an IMMCAD-specific runbook with production-safe guardrails and align setup/onboarding docs to reference it.
+
+## Plan
+- [x] Create `docs/release/git-secret-runbook.md` with:
+- [x] explicit allowed/not-allowed production scope for IMMCAD.
+- [x] mandatory offboarding + credential rotation guidance.
+- [x] hardened CI decrypt example (isolated `GNUPGHOME`, cleanup, version logging).
+- [x] IMMCAD-specific integration guidance for `scripts/vercel_env_sync.py`.
+- [x] Link the runbook from `README.md`, `docs/development-environment.md`, and `docs/onboarding/developer-onboarding-guide.md`.
+- [x] Run docs maintenance dry-run and repository hygiene check.
+
+## Review
+- Added `docs/release/git-secret-runbook.md`:
+  - production readiness position (adjunct workflow, not a replacement for GitHub/Vercel secret managers),
+  - maintainer setup / daily workflow / collaborator onboarding,
+  - offboarding workflow that requires credential rotation (not just `removeperson`),
+  - hardened CI example with isolated `GNUPGHOME`, cleanup trap, and version logging,
+  - IMMCAD-specific notes for env sync and local `.env-backups/`.
+- Updated docs to prevent misuse:
+  - `README.md` (production safety note linking to runbook)
+  - `docs/development-environment.md` (environment policy + Vercel sync notes)
+  - `docs/onboarding/developer-onboarding-guide.md` (troubleshooting/key docs references)
+- Verification:
+  - `./scripts/venv_exec.sh python scripts/doc_maintenance/main.py --dry-run` -> pass (`audited files: 55`)
+  - `bash scripts/check_repository_hygiene.sh` -> `[OK] Repository hygiene checks passed.`
+
+---
+
+# Task Plan - 2026-02-25 - Git-Secret Local Tooling Finalization
+
+## Current Focus
+- Finalize the IMMCAD `git-secret` workflow UX with local helper tooling (wrapper + Make targets) and non-blocking setup/verify guidance.
+
+## Plan
+- [x] Add `scripts/git_secret_env.sh` wrapper for consistent `git-secret` checks/commands with IMMCAD policy messaging.
+- [x] Add Make targets: `git-secret-check`, `git-secret-reveal`, `git-secret-hide`, `git-secret-list`, `git-secret-changes`.
+- [x] Add optional `gpg` / `git-secret` guidance to `scripts/setup_dev_env.sh`.
+- [x] Add optional `gpg` / `git-secret` checks to `scripts/verify_dev_env.sh` (warning-only behavior).
+- [x] Update `docs/release/git-secret-runbook.md` with the new Make helper commands.
+- [x] Run shell syntax checks and command verification.
+
+## Review
+- Added `scripts/git_secret_env.sh`:
+  - `check` mode prints `git-secret`/`gpg` availability and `.gitsecret/` initialization state,
+  - command modes (`reveal`, `hide`, `list`, `changes`) enforce tool presence and repo initialization before delegating to `git secret ...`,
+  - helper output reiterates IMMCAD policy that production runtime secrets remain in GitHub/Vercel secret managers.
+- Updated `Makefile` with `git-secret-*` helper targets and `GIT_SECRET_ARGS` passthrough variable.
+- Updated dev environment scripts:
+  - `scripts/setup_dev_env.sh` now reports optional `gpg` / `git-secret` tooling and points to `docs/release/git-secret-runbook.md`.
+  - `scripts/verify_dev_env.sh` now reports `gpg` / `git-secret` availability as warnings/OKs without making them hard requirements.
+- Updated runbook with `make git-secret-*` usage examples.
+- Verification:
+  - `chmod +x scripts/git_secret_env.sh && bash -n scripts/git_secret_env.sh scripts/setup_dev_env.sh scripts/verify_dev_env.sh` -> pass
+  - `bash scripts/git_secret_env.sh check` -> pass (reported `git-secret` missing as optional; `gpg` present)
+  - `make -n git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes` -> pass (expected command lines)
+  - `make git-secret-check` -> pass
+  - `./scripts/venv_exec.sh python scripts/doc_maintenance/main.py --dry-run` -> pass (`audited files: 55`)
+  - `bash scripts/check_repository_hygiene.sh` -> `[OK] Repository hygiene checks passed.`

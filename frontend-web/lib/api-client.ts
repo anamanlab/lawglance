@@ -89,6 +89,7 @@ export type ApiFailure = {
   status: number;
   traceId: string | null;
   traceIdMismatch: boolean;
+  policyReason: string | null;
   error: ApiError;
 };
 
@@ -98,6 +99,7 @@ type ParsedErrorEnvelope = {
   code: ApiErrorCode;
   message: string;
   traceId: string | null;
+  policyReason: string | null;
 };
 
 type ApiClientOptions = {
@@ -156,6 +158,10 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
     traceId: normalizeTraceId(
       typeof errorField.trace_id === "string" ? errorField.trace_id : null
     ),
+    policyReason:
+      typeof errorField.policy_reason === "string"
+        ? normalizeTraceId(errorField.policy_reason)
+        : null,
   };
 }
 
@@ -257,6 +263,7 @@ async function postJson<TPayload>(
       status: response.status,
       traceId: headerTraceId ?? bodyTraceId,
       traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
       error: parsedError
         ? {
             code: parsedError.code,
@@ -270,6 +277,7 @@ async function postJson<TPayload>(
       status: 0,
       traceId: null,
       traceIdMismatch: false,
+      policyReason: null,
       error: {
         code: "PROVIDER_ERROR",
         message: "Unable to reach the IMMCAD API endpoint.",
@@ -316,6 +324,7 @@ async function postCaseExport(
       status: 422,
       traceId: null,
       traceIdMismatch: false,
+      policyReason: "source_export_user_approval_required",
       error: {
         code: "VALIDATION_ERROR",
         message: "Case export requires explicit user approval before download.",
@@ -361,6 +370,7 @@ async function postCaseExport(
       status: response.status,
       traceId: headerTraceId ?? bodyTraceId,
       traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
       error: parsedError
         ? {
             code: parsedError.code,
@@ -374,6 +384,7 @@ async function postCaseExport(
       status: 0,
       traceId: null,
       traceIdMismatch: false,
+      policyReason: null,
       error: {
         code: "PROVIDER_ERROR",
         message: "Unable to reach the IMMCAD API endpoint.",

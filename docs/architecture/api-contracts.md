@@ -139,7 +139,7 @@ Response:
       "citation": "string",
       "decision_date": "YYYY-MM-DD",
       "url": "https://canlii.org/...",
-      "source_id": "SCC_DECISIONS|FC_DECISIONS|FCA_DECISIONS|CANLII_CASE_BROWSE",
+      "source_id": "string",
       "document_url": "https://..."
     }
   ]
@@ -151,6 +151,7 @@ Case-source behavior:
 - Official SCC/FC/FCA feeds are the primary search backend when enabled.
 - CanLII metadata search is queried as fallback when official feeds are unavailable or return no matches.
 - Each result includes `source_id` and `document_url` so `/api/export/cases` can enforce source-scoped export policy.
+- `source_id` values are registry-driven (see `data/sources/canada-immigration/registry.json`), and export eligibility is determined by source policy.
 
 CanLII compliance notes:
 
@@ -182,6 +183,8 @@ Approval policy:
 
 - `user_approved` is required for explicit per-request consent.
 - Missing or `false` approval is blocked before download, with `403 POLICY_BLOCKED` and `policy_reason=source_export_user_approval_required`.
+- `document_url` host must match the exact source host configured for `source_id` (subdomain aliases are rejected) to prevent cross-domain export fetches.
+- `format="pdf"` responses are validated as PDF payloads; non-PDF upstream responses are rejected with `422 VALIDATION_ERROR` and `policy_reason=source_export_non_pdf_payload`.
 
 Missing approval example:
 
@@ -195,6 +198,16 @@ Missing approval example:
   }
 }
 ```
+
+Success response:
+
+- Status: `200 OK`
+- Body: binary PDF stream.
+- Required headers:
+  - `x-trace-id`: request trace correlation ID.
+  - `x-export-policy-reason`: policy decision used for this export (for example `source_export_allowed`).
+  - `content-disposition`: attachment filename.
+  - `content-type`: source media type (typically `application/pdf`).
 
 ## `GET /ops/metrics`
 
@@ -241,7 +254,20 @@ Response:
         "source_export_allowed": 9,
         "source_export_blocked_by_policy": 2,
         "source_export_fetch_failed": 1
-      }
+      },
+      "audit_recent": [
+        {
+          "timestamp_utc": "2026-02-25T12:05:10Z",
+          "trace_id": "5f7d...",
+          "client_id": "203.0.113.10",
+          "source_id": "SCC_DECISIONS",
+          "case_id": "2024-scc-3",
+          "document_host": "decisions.scc-csc.ca",
+          "user_approved": true,
+          "outcome": "allowed",
+          "policy_reason": "source_export_allowed"
+        }
+      ]
     },
     "latency_ms": {
       "sample_count": 350,

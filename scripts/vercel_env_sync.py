@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -67,6 +68,8 @@ DEFAULT_PUSH_FILE_MAP = (
     (".env.preview", "preview"),
     (".env.development", "development"),
 )
+DEFAULT_VERCEL_CLI_NPX_SPEC = "vercel@50.23.2"
+_VERCEL_CMD_PREFIX_CACHE: Tuple[str, ...] | None = None
 
 
 def _print(msg: str) -> None:
@@ -168,8 +171,35 @@ def run_cmd(cmd: List[str], *, input_text: str | None = None, check: bool = True
     )
 
 
+def resolve_vercel_cmd_prefix() -> List[str]:
+    """Resolve a Vercel CLI command for both provisioned and fresh environments.
+
+    Preference order:
+    1. Local `vercel` binary if installed.
+    2. `npx --yes <spec>` fallback (default pinned via DEFAULT_VERCEL_CLI_NPX_SPEC).
+
+    Override fallback package spec with VERCEL_CLI_NPX_SPEC if needed.
+    """
+    global _VERCEL_CMD_PREFIX_CACHE
+
+    if _VERCEL_CMD_PREFIX_CACHE is not None:
+        return list(_VERCEL_CMD_PREFIX_CACHE)
+
+    installed_vercel = shutil.which("vercel")
+    if installed_vercel:
+        _VERCEL_CMD_PREFIX_CACHE = ("vercel",)
+        return ["vercel"]
+
+    npx_spec = (os.getenv("VERCEL_CLI_NPX_SPEC") or DEFAULT_VERCEL_CLI_NPX_SPEC).strip()
+    if not npx_spec:
+        npx_spec = DEFAULT_VERCEL_CLI_NPX_SPEC
+
+    _VERCEL_CMD_PREFIX_CACHE = ("npx", "--yes", npx_spec)
+    return list(_VERCEL_CMD_PREFIX_CACHE)
+
+
 def vercel_cmd(project_dir: Path, args: List[str]) -> List[str]:
-    return ["vercel", "--cwd", str(project_dir)] + args
+    return resolve_vercel_cmd_prefix() + ["--cwd", str(project_dir)] + args
 
 
 def load_linked_project(project_dir: Path) -> Dict[str, str] | None:
@@ -298,7 +328,7 @@ def op_analyze(args: argparse.Namespace) -> int:
         else:
             _print(f"  - {name}: missing")
 
-    version_cmd = ["vercel", "--version"]
+    version_cmd = resolve_vercel_cmd_prefix() + ["--version"]
     version = run_cmd(version_cmd, check=False)
     _print("\nVercel CLI status:")
     if version.returncode == 0:

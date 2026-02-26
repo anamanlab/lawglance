@@ -46,6 +46,15 @@ This is the canonical cross-layer path:
 - If refusal surge without policy incident reports: inspect recent policy-regex changes and replay jurisdiction suite.
 - If latency spike with low error rate: inspect upstream dependency latency and rate limiter saturation.
 
+Operational smoke bundle for Cloudflare free-tier path:
+
+```bash
+export IMMCAD_API_BASE_URL=https://immcad-api.arkiteto.dpdns.org
+export IMMCAD_FRONTEND_URL=https://immcad.arkiteto.dpdns.org
+export IMMCAD_API_BEARER_TOKEN='<token>'
+make free-tier-runtime-validate
+```
+
 ## 5) Recovery Exit Criteria
 
 - `errors.rate <= 0.02`

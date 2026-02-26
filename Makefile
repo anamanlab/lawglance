@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-native-secrets-sync backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health backend-cf-codespace-runtime-start backend-cf-codespace-runtime-stop backend-cf-codespace-runtime-health backend-origin-env-recover-from-vercel cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke chat-case-law-smoke free-tier-runtime-validate hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
@@ -53,6 +53,9 @@ backend-cf-native-dev: backend-cf-native-sync
 backend-cf-native-deploy: backend-cf-native-sync
 	cd backend-cloudflare && uv sync --dev && uv run pywrangler deploy
 
+backend-cf-native-secrets-sync:
+	bash scripts/sync_cloudflare_backend_native_secrets.sh
+
 backend-cf-perf-smoke:
 	bash scripts/run_cloudflare_backend_perf_smoke.sh
 
@@ -73,6 +76,18 @@ backend-cf-origin-stack-systemd-install:
 
 backend-cf-origin-stack-health:
 	bash scripts/check_cloudflare_named_origin_stack_health.sh --with-search
+
+backend-cf-codespace-runtime-start:
+	bash scripts/run_cloudflare_named_tunnel_codespace_runtime.sh
+
+backend-cf-codespace-runtime-stop:
+	bash scripts/stop_cloudflare_named_tunnel_codespace_runtime.sh
+
+backend-cf-codespace-runtime-health:
+	bash scripts/check_cloudflare_named_tunnel_codespace_runtime_health.sh --with-search --with-chat-case-law --with-canlii
+
+backend-origin-env-recover-from-vercel:
+	bash scripts/recover_backend_env_from_vercel.sh
 
 cloudflare-free-preflight:
 	bash scripts/check_cloudflare_free_plan_readiness.sh
@@ -172,6 +187,12 @@ canlii-key-verify:
 
 canlii-live-smoke:
 	bash scripts/run_canlii_live_smoke.sh
+
+chat-case-law-smoke:
+	bash scripts/run_chat_case_law_tool_smoke.sh
+
+free-tier-runtime-validate:
+	bash scripts/run_free_tier_runtime_validation.sh
 
 hygiene:
 	bash scripts/check_repository_hygiene.sh

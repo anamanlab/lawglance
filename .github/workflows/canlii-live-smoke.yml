@@ -41,3 +41,17 @@ jobs:
           CANLII_SMOKE_QUERY: ${{ github.event.inputs.query }}
           CANLII_SMOKE_DATABASE_ID: ${{ github.event.inputs.database_id }}
         run: bash scripts/run_canlii_live_smoke.sh
+
+      - name: Run free-tier runtime validation bundle
+        env:
+          IMMCAD_API_BASE_URL: ${{ secrets.IMMCAD_API_BASE_URL }}
+          IMMCAD_FRONTEND_URL: ${{ secrets.IMMCAD_FRONTEND_URL }}
+          IMMCAD_API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+          CANLII_SMOKE_QUERY: ${{ github.event.inputs.query }}
+          CANLII_SMOKE_DATABASE_ID: ${{ github.event.inputs.database_id }}
+        run: |
+          if [ -z "${IMMCAD_FRONTEND_URL}" ]; then
+            echo "IMMCAD_FRONTEND_URL is not set; using default https://immcad.arkiteto.dpdns.org"
+            export IMMCAD_FRONTEND_URL="https://immcad.arkiteto.dpdns.org"
+          fi
+          bash scripts/run_free_tier_runtime_validation.sh

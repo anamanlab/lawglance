@@ -296,6 +296,20 @@ printf '%s' "$IMMCAD_API_BEARER_TOKEN" | npx --yes wrangler@4.68.1 secret put IM
 printf '%s' "$API_BEARER_TOKEN" | npx --yes wrangler@4.68.1 secret put API_BEARER_TOKEN --config frontend-web/wrangler.jsonc
 ```
 
+For the Cloudflare native backend worker (future/optional path), sync backend runtime
+secrets from the current shell without overwriting unset secrets:
+
+```bash
+export CANLII_API_KEY='<canlii-key>'
+make backend-cf-native-secrets-sync
+```
+
+Important architecture note for the current free-tier production path:
+
+- Cloudflare backend proxy mode (`backend-cloudflare/wrangler.backend-proxy.jsonc`) does not run the IMMCAD backend runtime.
+- `CANLII_API_KEY`, `OPENAI_API_KEY`, and `GEMINI_API_KEY` must be set on the backend origin runtime (for example the VM/container/systemd host behind the Cloudflare proxy), not on the proxy Worker.
+- Frontend Cloudflare Worker still needs `IMMCAD_API_BEARER_TOKEN` (or matching `API_BEARER_TOKEN` alias) when backend bearer auth is enabled.
+
 4. Re-encrypt local file with `git secret hide`.
 
 Notes:

@@ -140,6 +140,13 @@ export IMMCAD_API_BEARER_TOKEN='<prod-token>'
 make ops-alert-eval
 ```
 
+Full free-tier runtime validation (health + search + chat case-law citations + lawyer-research + CanLII):
+
+```bash
+export IMMCAD_FRONTEND_URL=https://immcad.arkiteto.dpdns.org
+make free-tier-runtime-validate
+```
+
 Review `artifacts/ops/ops-alert-eval.json` for:
 - `cloudflare_free_api_projected_daily_request_utilization_warn`
 - `cloudflare_free_api_projected_daily_request_utilization_fail`
@@ -154,6 +161,7 @@ Review `artifacts/ops/ops-alert-eval.json` for:
 - Native backend canary attempt result is recorded (success path or blocker evidence).
 - `/healthz`, `/api/chat`, `/api/search/cases` return expected responses with auth token.
 - Optional perf smoke passes (`make backend-cf-perf-smoke`) and p95 remains within threshold.
+- Full runtime validation bundle passes (`make free-tier-runtime-validate`).
 - `make ops-alert-eval` passes (or only approved warnings) and Cloudflare free-tier API request projection remains below fail threshold.
 - `docs/release/known-issues.md` is updated with accepted residual risks and latest evidence.
 - Rollback target versions are recorded before go-live approval.

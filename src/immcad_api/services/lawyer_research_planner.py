@@ -32,7 +32,10 @@ _ISSUE_TAG_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("humanitarian_compassionate", re.compile(r"humanitarian|compassionate|h&c")),
     ("judicial_review", re.compile(r"judicial review")),
     ("removal_order", re.compile(r"removal order|deport|exclusion order")),
-    ("residency_obligation", re.compile(r"residency obligation|pr card|permanent resident")),
+    (
+        "residency_obligation",
+        re.compile(r"residency obligation|pr card|permanent resident"),
+    ),
 )
 _CITATION_PATTERN = re.compile(
     r"\b(?:19|20)\d{2}\s+(?:FCA|CAF|FC|SCC)\s+\d+\b",
@@ -42,6 +45,14 @@ _DOCKET_PATTERN = re.compile(
     r"\b[a-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}\b",
     re.IGNORECASE,
 )
+
+
+def _normalize_whitespace(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip())
+
+
+def _normalize_anchor(value: str) -> str:
+    return re.sub(r"\s*-\s*", "-", _normalize_whitespace(value))
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -71,9 +82,9 @@ def _extract_target_court(text: str) -> str | None:
 def _extract_anchor_references(text: str) -> list[str]:
     anchors: list[str] = []
     for match in _CITATION_PATTERN.finditer(text):
-        anchors.append(re.sub(r"\s+", " ", match.group(0).strip()))
+        anchors.append(_normalize_whitespace(match.group(0)))
     for match in _DOCKET_PATTERN.finditer(text):
-        anchors.append(re.sub(r"\s*-\s*", "-", match.group(0).strip()))
+        anchors.append(_normalize_anchor(match.group(0)))
     return _dedupe(anchors)
 
 
@@ -90,7 +101,7 @@ def _normalize_intake_list(
     for raw_item in raw_values:
         if not isinstance(raw_item, str):
             continue
-        normalized = re.sub(r"\s+", " ", raw_item.strip())
+        normalized = _normalize_whitespace(raw_item)
         if not normalized:
             continue
         values.append(normalized)
@@ -101,12 +112,36 @@ def _normalize_issue_tag(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
 
 
+def _normalize_optional_intake_string(
+    intake: dict[str, object],
+    *,
+    key: str,
+    to_lower: bool = False,
+) -> str | None:
+    raw_value = intake.get(key)
+    if not isinstance(raw_value, str):
+        return None
+    normalized = raw_value.strip()
+    if not normalized:
+        return None
+    if to_lower:
+        return normalized.lower()
+    return normalized
+
+
+def _profile_list(profile: dict[str, list[str] | str | None], *, key: str) -> list[str]:
+    raw_value = profile.get(key)
+    if isinstance(raw_value, list):
+        return list(raw_value)
+    return []
+
+
 def extract_matter_profile(
     matter_summary: str,
     *,
     intake: dict[str, object] | None = None,
 ) -> dict[str, list[str] | str | None]:
-    normalized = re.sub(r"\s+", " ", matter_summary.lower()).strip()
+    normalized = _normalize_whitespace(matter_summary.lower())
 
     issue_tags = [
         issue_tag
@@ -122,11 +157,7 @@ def extract_matter_profile(
 
     tokens = re.findall(r"[a-z0-9]+", normalized)
     fact_keywords = _dedupe(
-        [
-            token
-            for token in tokens
-            if len(token) >= 5 and token not in _STOPWORDS
-        ]
+        [token for token in tokens if len(token) >= 5 and token not in _STOPWORDS]
     )[:12]
     target_court = _extract_target_court(normalized)
     anchor_references = _extract_anchor_references(matter_summary)
@@ -141,13 +172,21 @@ def extract_matter_profile(
         ]
         issue_tags = _dedupe([*issue_tags, *intake_issue_tags])
 
-        raw_target_court = intake.get("target_court")
-        if isinstance(raw_target_court, str) and raw_target_court.strip():
-            target_court = raw_target_court.strip().lower()
+        intake_target_court = _normalize_optional_intake_string(
+            intake,
+            key="target_court",
+            to_lower=True,
+        )
+        if intake_target_court is not None:
+            target_court = intake_target_court
 
-        raw_posture = intake.get("procedural_posture")
-        if isinstance(raw_posture, str) and raw_posture.strip():
-            procedural_posture = raw_posture.strip().lower()
+        intake_posture = _normalize_optional_intake_string(
+            intake,
+            key="procedural_posture",
+            to_lower=True,
+        )
+        if intake_posture is not None:
+            procedural_posture = intake_posture
 
         intake_fact_keywords = [
             keyword.lower()
@@ -168,23 +207,24 @@ def extract_matter_profile(
             key="anchor_dockets",
             max_items=6,
         )
-        normalized_anchors = [
-            re.sub(r"\s*-\s*", "-", re.sub(r"\s+", " ", value.strip()))
-            for value in intake_anchors
-        ]
+        normalized_anchors = [_normalize_anchor(value) for value in intake_anchors]
         anchor_references = _dedupe([*anchor_references, *normalized_anchors])
 
-        raw_objective = intake.get("objective")
-        if isinstance(raw_objective, str) and raw_objective.strip():
-            objective = raw_objective.strip().lower()
+        intake_objective = _normalize_optional_intake_string(
+            intake,
+            key="objective",
+            to_lower=True,
+        )
+        if intake_objective is not None:
+            objective = intake_objective
 
-        raw_date_from = intake.get("date_from")
-        if isinstance(raw_date_from, str) and raw_date_from.strip():
-            date_from = raw_date_from.strip()
+        intake_date_from = _normalize_optional_intake_string(intake, key="date_from")
+        if intake_date_from is not None:
+            date_from = intake_date_from
 
-        raw_date_to = intake.get("date_to")
-        if isinstance(raw_date_to, str) and raw_date_to.strip():
-            date_to = raw_date_to.strip()
+        intake_date_to = _normalize_optional_intake_string(intake, key="date_to")
+        if intake_date_to is not None:
+            date_to = intake_date_to
 
     return {
         "issue_tags": issue_tags,
@@ -203,23 +243,20 @@ def build_research_queries(
     court: str | None = None,
     intake: dict[str, object] | None = None,
 ) -> list[str]:
-    normalized = re.sub(r"\s+", " ", matter_summary).strip()
+    normalized = _normalize_whitespace(matter_summary)
     profile = extract_matter_profile(normalized, intake=intake)
     target_court = (court or profile.get("target_court") or "").strip().lower()
-    profile_anchors = profile.get("anchor_references")
-    anchor_references = (
-        list(profile_anchors)
-        if isinstance(profile_anchors, list)
-        else _extract_anchor_references(normalized)
-    )
+    anchor_references = _profile_list(profile, key="anchor_references")
+    if not anchor_references:
+        anchor_references = _extract_anchor_references(normalized)
 
     queries = [normalized]
 
     for anchor in anchor_references:
         queries.append(f"{anchor} precedent")
 
-    issue_tags = profile.get("issue_tags") or []
-    if isinstance(issue_tags, list) and issue_tags:
+    issue_tags = _profile_list(profile, key="issue_tags")
+    if issue_tags:
         issue_fragment = " ".join(issue_tags[:2]).replace("_", " ")
         queries.append(f"{normalized} {issue_fragment}")
 
@@ -231,8 +268,8 @@ def build_research_queries(
         posture_fragment = procedural_posture.replace("_", " ")
         queries.append(f"{normalized} {posture_fragment} immigration")
 
-    fact_keywords = profile.get("fact_keywords") or []
-    if isinstance(fact_keywords, list) and fact_keywords:
+    fact_keywords = _profile_list(profile, key="fact_keywords")
+    if fact_keywords:
         queries.append(f"{' '.join(fact_keywords[:6])} immigration precedent")
 
     objective = profile.get("objective")

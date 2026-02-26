@@ -1,3 +1,246 @@
+# Task Plan - 2026-02-26 - Canada Document Intake + Filing Readiness
+
+## Current Focus
+- Plan and execute a secure, client-friendly bulk document upload workflow with OCR/quality checks, rule-aware organization, and filing package readiness outputs for Federal Court + IRB matters.
+
+## Plan
+- [x] Publish documentation-first package (feature spec, API contract draft, security/compliance checklist) before implementation.
+- [ ] Finalize V1 forum/rule matrix and implement deterministic readiness policy checks.
+- [ ] Add backend intake schemas/contracts for multi-file upload, document issues, readiness, and package generation.
+- [ ] Implement intake pipeline (text extraction/OCR signals, classification, normalized naming, issue detection).
+- [ ] Implement package builder (TOC/index ordering, disclosure checklist, cover-letter draft, readiness summary).
+- [ ] Add `/api/documents/*` routes with multipart handling, traceability, and consistent error envelopes.
+- [ ] Add upload security controls (file type/size/count limits) plus intake audit events.
+- [ ] Add frontend drag/drop intake panel with per-document status and readiness UX.
+- [ ] Run targeted backend/frontend verification and record evidence.
+
+## Review
+- Documentation-first deliverables completed:
+  - `docs/features/document-intake-filing-readiness.md` (user workflow, failure handling, acceptance criteria)
+  - `docs/architecture/document-intake-api-contracts-draft.md` (draft API contracts and issue/error codes)
+  - `docs/release/document-intake-security-compliance-checklist.md` (security/compliance and go-live readiness checks)
+- Detailed execution plan: `docs/plans/2026-02-26-document-intake-filing-readiness-implementation-plan.md`
+
+---
+
+# Task Plan - 2026-02-26 - Retrieval Decision-Date Window Enforcement
+
+## Current Focus
+- Make date windows enforceable across case search and lawyer research orchestration so returned precedents align with requested decision-date bounds.
+
+## Plan
+- [x] Add failing tests for CanLII and official-court clients to enforce `decision_date_from`/`decision_date_to`.
+- [x] Add failing orchestration tests to ensure intake date range is forwarded and defensively filtered.
+- [x] Extend `CaseSearchRequest` contract with optional decision-date window and validation.
+- [x] Implement decision-date filtering in source clients and lawyer research orchestration.
+- [x] Run targeted and broader backend/frontend verification and capture evidence.
+
+## Review
+- Backend contract updated:
+  - Added optional `decision_date_from` and `decision_date_to` to `CaseSearchRequest` with range validation (`decision_date_from <= decision_date_to`).
+- Retrieval path updates:
+  - `CanLIIClient` now filters candidate results by request decision-date window before limit truncation.
+  - `OfficialCaseLawClient` now filters parsed court records by request decision-date window before ranking.
+  - `LawyerCaseResearchService` now forwards intake date windows into internal `CaseSearchRequest` calls and applies a defensive post-search date-range filter before dedupe/ranking.
+- Verification evidence:
+  - `uv run pytest -q tests/test_canlii_client.py tests/test_official_case_law_client.py tests/test_lawyer_case_research_service.py` -> `36 passed`
+  - `uv run pytest -q tests/test_lawyer_research_schemas.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py tests/test_chat_service.py tests/test_api_scaffold.py` -> `84 passed`
+  - `cd frontend-web && npm run test -- --run` -> `69 passed`
+  - `cd frontend-web && npm run lint` -> pass
+  - `cd frontend-web && npm run typecheck` -> pass
+
+---
+
+# Task Plan - 2026-02-26 - Frontend Intake Gate For Broad Case-Law Queries
+
+## Current Focus
+- Improve reliability by requiring minimal structured intake before running broad manual lawyer-research queries in the frontend.
+
+## Plan
+- [x] Add a shared case-query specificity helper so hook and panel use one low-specificity definition.
+- [x] Enforce a frontend intake gate in manual case search for low-specificity queries when intake coverage is too sparse.
+- [x] Preserve backend validation UX by allowing broad queries to run when intake is provided.
+- [x] Extend frontend contract tests for the new gate and validation-path behavior.
+- [x] Run frontend verification and capture evidence.
+
+## Review
+- Added shared query-specificity utility:
+  - `frontend-web/components/chat/case-query-specificity.ts`
+  - Reused by both `related-case-panel` and `use-chat-logic`.
+- Added frontend intake gate behavior in manual lawyer-research:
+  - For low-specificity query text, require at least 2 intake signals (`objective`, `target court`, `procedural posture`, `issue tags`, citation/docket anchor) before dispatching `/api/research/lawyer-cases`.
+  - If unmet, no API call is made and a clear action message is shown:
+    - `Add at least two intake details (objective, target court, issue tags, or citation/docket anchor) before running broad case-law research queries.`
+- Preserved backend broad-query validation path when intake is present (frontend no longer blocks that path once intake minimum is satisfied).
+- Verification evidence:
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `20 passed`
+  - `cd frontend-web && npm run test -- --run` -> `70 passed`
+  - `cd frontend-web && npm run lint` -> pass
+  - `cd frontend-web && npm run typecheck` -> pass
+
+---
+
+# Task Plan - 2026-02-26 - Frontend Decision-Date Intake Wiring
+
+## Current Focus
+- Improve research specificity by exposing decision-date window intake controls in the frontend and wiring them into lawyer-research requests with client-side range validation.
+
+## Plan
+- [x] Add decision-date intake controls (`from`/`to`) to the case-law panel.
+- [x] Wire new intake controls into chat-state types and hooks.
+- [x] Include `date_from`/`date_to` in `/api/research/lawyer-cases` payloads.
+- [x] Add client-side invalid-range guard (`from` > `to`) to prevent malformed searches.
+- [x] Extend frontend tests and run verification.
+
+## Review
+- Added new intake controls in the related-case panel:
+  - `Decision date from`
+  - `Decision date to`
+- Wired date intake state and handlers through:
+  - `frontend-web/components/chat/use-chat-logic.ts`
+  - `frontend-web/components/chat/types.ts`
+  - `frontend-web/components/chat/chat-shell-container.tsx`
+- Request payload behavior:
+  - `date_from` / `date_to` now included in `intake` when provided.
+- Validation behavior:
+  - Search is blocked client-side when `Decision date from` is later than `Decision date to`.
+  - User sees: `Decision date range is invalid. 'From' date must be earlier than or equal to 'to' date.`
+- Verification evidence:
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `21 passed`
+  - `cd frontend-web && npm run test -- --run` -> `71 passed`
+  - `cd frontend-web && npm run lint` -> pass
+  - `cd frontend-web && npm run typecheck` -> pass
+
+---
+
+# Task Plan - 2026-02-26 - Lawyer Research Reliability + Structured Intake + Confidence Transparency
+
+## Current Focus
+- Improve legal research reliability and frontend guidance by collecting structured intake details before retrieval, making ranking more intent-aware, and surfacing realistic confidence with reasons.
+
+## Plan
+- [x] Add failing backend tests for structured intake schema/planner behavior and response confidence fields.
+- [x] Implement backend schema, planner, and orchestration updates for intake-aware query generation/ranking and confidence scoring.
+- [x] Add failing frontend tests for intake guidance and research confidence rendering in the case-law panel.
+- [x] Implement frontend UX updates for explicit intake feedback and confidence transparency.
+- [x] Run targeted backend/frontend verification and capture evidence.
+
+## Review
+- Backend reliability and intent-awareness updates:
+  - Added structured lawyer intake schema (`objective`, `target_court`, `procedural_posture`, `issue_tags`, citation/docket anchors, fact keywords, date window) and request contract support.
+  - Extended planner to merge structured intake into profile extraction and multi-query generation (including intake anchor and objective query variants).
+  - Added research confidence output (`research_confidence`, `confidence_reasons`) to lawyer research responses.
+  - Updated orchestration to consume intake, apply intake-aware court routing, and compute confidence from source quality, anchors, and result strength.
+- Frontend guidance and transparency updates:
+  - Added intake controls in case-law panel (`Research objective`, `Target court`, `Procedural posture`, `Issue tags`, `Citation or docket anchor`).
+  - Wired intake payload into `/api/research/lawyer-cases` requests without blocking existing flows.
+  - Added confidence card rendering (`Research confidence: HIGH/MEDIUM/LOW`) with concise reasons.
+- Continued feedback-loop enhancements:
+  - Added explicit intake-quality metadata in lawyer research responses: `intake_completeness` and `intake_hints`.
+  - Implemented backend intake feedback scoring using court/objective/posture/issue-tag/anchor/fact-keyword coverage with concrete missing-field hints.
+  - Extended frontend case panel to display `Intake quality: HIGH/MEDIUM/LOW` and missing-input guidance from backend.
+  - Kept manual search non-blocking while surfacing actionable intake guidance for higher-confidence outcomes.
+- Verification evidence:
+  - `uv run pytest -q tests/test_lawyer_research_schemas.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py` -> `23 passed`
+  - `uv run pytest -q tests/test_lawyer_research_schemas.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py tests/test_chat_service.py tests/test_api_scaffold.py` -> `81 passed`
+  - `uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/lawyer_research_planner.py src/immcad_api/services/lawyer_case_research_service.py tests/test_lawyer_research_schemas.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py` -> pass
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `19 passed`
+  - `cd frontend-web && npm run test -- --run tests/api-client.contract.test.ts tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `33 passed`
+  - `cd frontend-web && npm run test -- --run` -> `69 passed`
+  - `cd frontend-web && npm run lint` -> pass
+  - `cd frontend-web && npm run typecheck` -> pass
+  - `uv run pytest -q` -> `483 passed`, `1 failed` (`tests/test_prompt_compatibility.py::test_legacy_prompt_constants_match_policy_prompt_constants`, pre-existing prompt-compat mismatch unrelated to intake/confidence changes)
+  - `uv run pytest -q tests/test_lawyer_research_schemas.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py` -> `19 passed`
+  - `uv run pytest -q tests/test_lawyer_research_schemas.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py tests/test_chat_service.py tests/test_api_scaffold.py` -> `82 passed`
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx tests/api-client.contract.test.ts` -> `33 passed`
+
+---
+
+# Task Plan - 2026-02-26 - Frontend Case-Search Query Refinement UX Pass
+
+## Current Focus
+- Improve case-search interaction quality in the frontend by guiding users away from broad one-word queries and providing one-tap refinement suggestions.
+
+## Plan
+- [x] Add failing frontend UI test coverage for low-specificity query guidance and clickable refinement chips.
+- [x] Implement query-specificity analysis and refinement chip rendering in the case-law panel.
+- [x] Re-run frontend tests/lint/typecheck and document evidence.
+
+## Review
+- Added low-specificity guidance in the case-law panel so broad/generic queries receive immediate actionable feedback:
+  - `Query may be too broad. Add at least two anchors: program/issue and court or citation.`
+- Added one-tap refinement chips in the case-law panel (brand-styled buttons) generated from current query + matter profile anchors (issue tags, target court, citation seed).
+- Preserved existing explicit manual-search control and retrieval provenance behavior (`Auto-retrieved` vs `Manual case search`).
+- Verification evidence:
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.ui.test.tsx` -> `6 passed`
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx tests/home-page.rollout.test.tsx tests/api-client.contract.test.ts` -> `33 passed`
+  - `cd frontend-web && npm run test -- --run` -> `67 passed`
+  - `cd frontend-web && npm run lint` -> pass (`next lint`, no warnings/errors)
+  - `cd frontend-web && npm run typecheck` -> pass (`tsc --noEmit --incremental false`)
+
+---
+
+# Task Plan - 2026-02-26 - Research Retrieval and Precedent Relevance Overhaul (Backend-First)
+
+## Current Focus
+- Improve backend case-law retrieval quality, precedent relevance ranking, and query handling first, then align frontend workflow clarity so users can clearly distinguish conversation responses from case-law research outputs.
+
+## Plan
+- [x] Audit current retrieval/query/ranking/UX flows and identify root causes of weak precedent relevance and workflow confusion.
+- [x] Align on architecture direction with user (intent-gated auto retrieval + manual control retained).
+- [x] Produce and save approved design doc in `docs/plans/2026-02-26-research-precedent-retrieval-design.md`.
+- [x] Produce detailed implementation plan in `docs/plans/2026-02-26-research-precedent-retrieval-implementation-plan.md`.
+- [x] Execute backend-first implementation via TDD (intent gating, planner, ranking, validation hints, API contract updates).
+- [x] Execute frontend clarity implementation via TDD (workflow labels, retrieval provenance visibility, stale-query cues).
+- [x] Run targeted verification gates and document results.
+
+## Review
+- Backend-first implementation completed:
+  - Added graded case-query assessment with refinement hints and stricter generic-query detection (`help with immigration` now correctly flagged as broad).
+  - Updated `/api/search/cases` and `/api/research/lawyer-cases` to include actionable refinement hints in broad-query validation responses.
+  - Expanded lawyer research planner with compact citation/docket anchor queries (for example `2024 FC 101 precedent`, `A-1234-23 precedent`).
+  - Improved lawyer-case ranking to prioritize exact citation/docket anchors over generic token density.
+  - Added intent-gated chat `research_preview` metadata (`retrieval_mode=auto`) with graceful degradation when preview lookup fails.
+- Frontend clarity implementation completed:
+  - Added `research_preview` contract support in frontend API types and chat-state wiring so related cases can auto-hydrate from chat responses.
+  - Added explicit retrieval provenance labels in the case-law panel (`Auto-retrieved for this answer` vs `Manual case search`) to disambiguate workflow mode.
+  - Improved conversation/case-law separation with chat-area labeling (`Conversation answers`, `Chat workspace`) and updated case-law panel heading/copy.
+  - Normalized diagnostics API target display by trimming trailing slashes in `ChatShell` support context rendering.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_case_query_validation.py tests/test_lawyer_research_planner.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_api.py tests/test_case_search_service.py tests/test_chat_service.py tests/test_api_scaffold.py` -> `92 passed`
+  - `make lint` -> pass (`ruff check .`, all checks passed)
+  - `make test` -> partial failure (`tests/test_prompt_compatibility.py::test_legacy_prompt_constants_match_policy_prompt_constants`), unrelated to this backend retrieval change-set and already due to legacy/policy prompt divergence.
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx tests/api-client.contract.test.ts` -> `30 passed`
+  - `cd frontend-web && npm run test -- --run` -> `66 passed`
+  - `cd frontend-web && npm run lint` -> pass (`next lint`, no warnings/errors)
+  - `cd frontend-web && npm run typecheck` -> pass (`tsc --noEmit --incremental false`)
+
+---
+
+# Task Plan - 2026-02-26 - AI Assistant Architecture Improvement Audit
+
+## Current Focus
+- Audit IMMCAD’s current legal-assistant architecture (tooling, retrieval, reliability, policy controls) and produce prioritized improvement proposals grounded in both repo evidence and current external guidance.
+
+## Plan
+- [x] Review current backend/frontend architecture paths for chat, grounding, case-search, lawyer-research, policy, and telemetry.
+- [x] Research current best-practice guidance for agent tool-calling, evals/trace grading, legal-AI governance, and case-law source constraints.
+- [x] Produce a prioritized proposal document with implementation phases, acceptance metrics, and concrete next actions.
+
+## Review
+- Completed a repo-specific architecture audit across:
+  - backend orchestration (`src/immcad_api/main.py`, `services/*`, `sources/*`, `policy/*`, `telemetry/*`),
+  - frontend integration/runtime behavior (`frontend-web/lib/*`, `frontend-web/components/chat/*`).
+- Produced a new proposal document with:
+  - prioritized P0/P1/P2 architecture upgrades,
+  - measurable acceptance criteria,
+  - 90-day phased execution sequence,
+  - external references aligned to current guidance.
+- Output artifact:
+  - `docs/research/2026-02-26-ai-assistant-architecture-improvements.md`
+
+---
+
 # Task Plan - 2026-02-26 - Brand Guidelines Frontend Polish
 
 ## Current Focus
@@ -1558,3 +1801,100 @@
 - Grounding is mostly static/keyword-catalog based (`src/immcad_api/services/grounding.py`), so many queries lack relevant evidence and either produce weak answers or safe-fallbacks.
 - `CaseSearchService` only treats `SourceUnavailableError` as official-source fallback-safe (`src/immcad_api/services/case_search_service.py`), so other official-client errors can abort fallback behavior.
 - Lawyer research/export metadata can make relevant cases look unavailable or broken when source metadata/policy signals are incomplete (`src/immcad_api/services/lawyer_case_research_service.py`, `frontend-web/components/chat/related-case-panel.tsx`).
+
+---
+
+# Task Plan - 2026-02-26 - Cloudflare CLI Interactive Auth + Key Recovery Continuation
+
+## Current Focus
+- Install Cloudflare tunnel tooling in Codespaces, complete an interactive Cloudflare auth flow that works in a remote environment, and validate the path to safely cut over the Cloudflare proxy to a replacement backend origin using the recovered backend env (with `CANLII_API_KEY` already upserted).
+
+## Plan
+- [x] Install `cloudflared` CLI locally in Codespaces and verify version.
+- [x] Run interactive Cloudflare auth (`cloudflared tunnel login`) and confirm local credentials are created.
+- [x] Re-check Wrangler auth options for Codespaces (interactive callback workaround vs API token) and document the working path.
+- [x] Verify the recovered backend env file is ready for the replacement origin path without changing live Cloudflare routing.
+- [x] Add a short review entry with verification evidence and next cutover steps.
+
+## Review
+- Installed `cloudflared` in Codespaces (`2026.2.0`) and completed interactive `cloudflared tunnel login`; Cloudflare origin cert saved to `~/.cloudflared/cert.pem`.
+- Verified Cloudflare account/tunnel access with `cloudflared tunnel list`; existing named tunnel `a2f7845e-4751-4ba4-b8aa-160edeb69184` (previous production cutover tunnel) is present.
+- Confirmed Wrangler OAuth remains non-viable in Codespaces interactive mode for this session because `wrangler login` redirects to `localhost:8976` even when `--callback-host` is changed; this blocks browser callback to the remote Codespace without extra local port-forward choreography.
+- Built local runtime environment in Codespaces (`make setup`, installed `uv`) and started IMMCAD backend on `127.0.0.1:8002` using recovered `backend-vercel/.env.production.vercel` (contains recovered production env plus upserted `CANLII_API_KEY`).
+- Reconnected the existing named tunnel from Codespaces using a freshly fetched token file (`/tmp/immcad_named_tunnel.token`) and `cloudflared tunnel run --token-file ...`; Cloudflare pushed the expected remote config mapping `immcad-origin-tunnel.arkiteto.dpdns.org -> http://127.0.0.1:8002`.
+- Live Cloudflare recovery verification:
+  - `https://immcad-origin-tunnel.arkiteto.dpdns.org/healthz` -> `200` (`{"status":"ok","service":"IMMCAD API"}`)
+  - `https://immcad-api.arkiteto.dpdns.org/healthz` -> `200`
+  - `POST https://immcad.arkiteto.dpdns.org/api/search/cases` -> `200`, real FCA case returned (`2026 FCA 36`)
+  - `POST https://immcad-api.arkiteto.dpdns.org/api/research/lawyer-cases` (bearer from recovered env) -> `200`, structured FC case result returned
+- CanLII key verification:
+  - `make canlii-key-verify` with recovered env loaded -> `[OK] CanLII API key verified. caseDatabases returned: 406`
+- Temporary state warning:
+  - Production traffic is currently restored through a Codespaces-hosted backend + named tunnel connector. This is functional but not durable; it will drop if the Codespace sleeps/stops. Next step is replacing the lost VPS with a stable origin host and moving the recovered env there.
+
+### Follow-up Fix (2026-02-26) - FC `norma.lexum.com` Export Host Alias
+- Patched `case_document_resolver` host trust to allow the FC official-source host (`decisions.fct-cf.gc.ca`) to trust the current FC document host alias (`norma.lexum.com`) used in live Lexum links.
+- Added regression coverage:
+  - `tests/test_case_document_resolver.py` alias trust unit test
+  - `tests/test_case_export_security.py` approval + export success test for FC `norma.lexum.com` document URL
+- Verification:
+  - `./scripts/venv_exec.sh pytest -q tests/test_case_document_resolver.py tests/test_case_export_security.py` -> `6 passed`
+  - Restarted the Codespaces-hosted backend process serving Cloudflare traffic (same named tunnel)
+  - Live authenticated `/api/research/lawyer-cases` FC result now reports `pdf_status=available`, `export_allowed=true` for `https://norma.lexum.com/.../document.do`
+  - Live export flow (`/api/export/cases/approval` + `/api/export/cases`) for FC `norma.lexum.com` returned `200` with `application/pdf` and `%PDF-` payload
+
+### Follow-up Ops Hardening (2026-02-26) - Detached Codespaces Recovery Runtime
+- Moved the temporary Codespaces recovery backend + named tunnel connector from interactive TTY sessions to detached processes (reparented to PID 1) with PID/log/state files under `/tmp/immcad-codespace-named-origin`.
+- Validation after detached restart:
+  - `cloudflared tunnel info a2f7845e-4751-4ba4-b8aa-160edeb69184` shows active connector from Codespaces
+  - `GET https://immcad-api.arkiteto.dpdns.org/healthz` -> `200`
+  - `make canlii-key-verify` -> OK
+  - `IMMCAD_API_BASE_URL=https://immcad-api.arkiteto.dpdns.org make canlii-live-smoke` -> OK (`Results: 5`)
+  - `/api/chat` -> `200` structured response (`answer`, `confidence`, `fallback_used`)
+  - `/api/search/cases` -> real official results with export metadata
+  - `/api/research/lawyer-cases` -> FC result `pdf_status=available`, `export_allowed=true`
+
+### Next Execution Plan (2026-02-26) - Repeatable Recovery Ops + AI Case-Law Smoke
+- [x] Add a repeatable script to start the Codespaces-backed named-tunnel runtime (`uvicorn` + `cloudflared`) with PID/state/log files and post-start health checks.
+- [x] Add companion stop/health scripts so runtime lifecycle is deterministic and operator-friendly.
+- [x] Add a deterministic chat case-law smoke script that verifies `/api/chat` returns at least one case-law citation source for a known-good prompt.
+- [x] Wire new scripts into `Makefile` targets and run end-to-end verification (`start` -> `health` -> `chat smoke` -> `stop`).
+
+### Review (2026-02-26) - Recovery Ops Workflow Implemented
+- Added repeatable runtime lifecycle scripts:
+  - `scripts/run_cloudflare_named_tunnel_codespace_runtime.sh`
+  - `scripts/stop_cloudflare_named_tunnel_codespace_runtime.sh`
+  - `scripts/check_cloudflare_named_tunnel_codespace_runtime_health.sh`
+- Added deterministic chat case-law retrieval smoke:
+  - `scripts/run_chat_case_law_tool_smoke.sh`
+  - Asserts non-empty `/api/chat` answer and at least one case-law citation source (`FC_DECISIONS`/`FCA_DECISIONS`/`SCC_DECISIONS`/CanLII).
+- Added Make targets:
+  - `backend-cf-codespace-runtime-start`
+  - `backend-cf-codespace-runtime-stop`
+  - `backend-cf-codespace-runtime-health`
+  - `chat-case-law-smoke`
+- Verification:
+  - `bash -n` syntax checks passed for all new scripts.
+  - `make backend-cf-codespace-runtime-start` -> idempotent runtime detection works.
+  - `make backend-cf-codespace-runtime-health` -> passed (includes search + chat case-law + CanLII live smoke).
+  - `make chat-case-law-smoke` (with env/token) -> passed with case-law citation sources `FCA_DECISIONS`, `FC_DECISIONS`.
+
+### Review (2026-02-26) - Free-Tier Validation Bundle + Documentation
+- Added consolidated free-tier runtime validator:
+  - `scripts/run_free_tier_runtime_validation.sh`
+  - Checks backend health, frontend case-search, chat case-law citations, lawyer-research, and CanLII live smoke in one command.
+- Added Make target:
+  - `free-tier-runtime-validate`
+- Extended CI live-smoke workflow:
+  - `.github/workflows/canlii-live-smoke.yml` now runs `scripts/run_free_tier_runtime_validation.sh` after CanLII smoke.
+- Added free-tier operations documentation:
+  - `docs/release/free-tier-cloudflare-operations-runbook-2026-02-26.md`
+  - Updated `docs/release/pre-deploy-command-sheet-2026-02-25.md`
+  - Updated `docs/release/incident-observability-runbook.md`
+  - Updated `docs/release/known-issues.md` with active Codespaces runtime durability risk (`KI-2026-02-26-01`).
+- Added regression tests for new script/workflow contracts:
+  - `tests/test_canlii_live_smoke_workflow.py`
+  - `tests/test_free_tier_runtime_validation_script.py`
+- Verification:
+  - `bash scripts/run_free_tier_runtime_validation.sh` (with production env vars loaded) -> passed.
+  - `./scripts/venv_exec.sh pytest -q tests/test_canlii_live_smoke_workflow.py tests/test_free_tier_runtime_validation_script.py tests/test_release_preflight_script.py tests/test_cloudflare_free_plan_readiness_script.py` -> `10 passed`.

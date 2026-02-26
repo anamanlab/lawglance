@@ -8,6 +8,7 @@
 - Case-law chat integration work exposed a policy coupling: tool-generated official court citations can be dropped unless trusted-domain defaults include official feed hosts.
 - User correction (2026-02-25): E2E setup must be resilient on headless servers and use Context7 documentation when requested.
 - User correction (2026-02-25): For UI redesign requests, default implementation target to the active modern frontend (`frontend-web`) and verify before touching legacy Streamlit UI.
+- User correction (2026-02-26): Never run `apply_patch` through `exec_command`; always use the dedicated `apply_patch` tool for file edits.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -50,3 +51,6 @@
 - During edge-proxy migrations, keep error envelope and trace-header contracts aligned with frontend parsing (`error.code` + `trace_id` + `x-trace-id`) and maintain temporary client-side fallback for legacy proxy shapes.
 - For lawyer-research `source_status`, avoid hardcoded official source-id lists; prefer registry-driven classification so new official case-law sources are not misreported as unknown.
 - Treat edge proxy contract checks as a preflight gate (script + CI workflow step), not just a unit test, so release/deploy paths fail fast when worker headers/envelope drift from frontend expectations.
+- When a user explicitly requests interactive CLI setup/auth in a remote Codespace, execute the interactive flow first (and show live status) before proposing token-based automation; only pivot after proving callback constraints or completing the interactive step.
+- If the user says the runtime path is Cloudflare-only and not Vercel, use Vercel only as a secret-recovery source (if needed) and avoid proposing Vercel deploys as a primary fix path.
+- Never invoke `apply_patch` via shell execution; use the direct patch tool so edits remain deterministic and policy-compliant.

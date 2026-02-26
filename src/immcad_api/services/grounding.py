@@ -62,15 +62,24 @@ class KeywordGroundingAdapter:
         mode: str,
     ) -> list[Citation]:
         del locale, mode
-        tokens = set(re.findall(r"[a-z0-9]+", message.lower()))
+        normalized_message = re.sub(r"\s+", " ", message.lower()).strip()
+        tokens = set(re.findall(r"[a-z0-9]+", normalized_message))
 
-        baseline_citation = self._catalog[0][0].model_copy(deep=True)
-        selected: list[Citation] = [baseline_citation]
-        selected_keys = {(baseline_citation.source_id, baseline_citation.pin)}
+        selected: list[Citation] = []
+        selected_keys: set[tuple[str, str]] = set()
 
         scored: list[tuple[int, int, Citation]] = []
-        for index, (citation, keywords) in enumerate(self._catalog[1:], start=1):
-            score = sum(1 for keyword in keywords if keyword in tokens)
+        for index, (citation, keywords) in enumerate(self._catalog):
+            score = 0
+            for keyword in keywords:
+                if not keyword:
+                    continue
+                if " " in keyword:
+                    if keyword in normalized_message:
+                        score += 2
+                    continue
+                if keyword in tokens:
+                    score += 1
             if score <= 0:
                 continue
             scored.append((score, -index, citation))

@@ -13,6 +13,8 @@ from immcad_api.api.routes.case_query_validation import is_specific_case_query
         "IMM-1234-24",
         "2026 FC 101",
         "2023 SCC 5",
+        "JR on H&C",
+        "FC JR on H&C refusal",
     ],
 )
 def test_case_query_validation_accepts_specific_docket_and_citation_patterns(

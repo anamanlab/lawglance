@@ -69,6 +69,7 @@ def test_gemini_provider_uses_millisecond_timeout(monkeypatch) -> None:  # noqa:
     assert captured["timeout"] == 15_000
     assert response.answer == "OK"
     assert response.provider == "gemini"
+    assert response.citations == []
 
 
 def test_gemini_provider_clamps_timeout_to_one_second(monkeypatch) -> None:  # noqa: ANN001

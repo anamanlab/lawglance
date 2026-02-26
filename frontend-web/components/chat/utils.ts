@@ -1,4 +1,4 @@
-import type { ChatCitation } from "@/lib/api-client";
+import type { ChatCitation, FallbackUsed as ApiFallbackUsed } from "@/lib/api-client";
 import type {
   ChatMessage,
   MessageAuthor,
@@ -30,11 +30,15 @@ export function buildMessage(
     traceId = null,
     citations = [],
     isPolicyRefusal = false,
+    confidence,
+    fallbackUsed,
   }: {
     disclaimer?: string;
     traceId?: string | null;
     citations?: ChatCitation[];
     isPolicyRefusal?: boolean;
+    confidence?: "low" | "medium" | "high";
+    fallbackUsed?: ApiFallbackUsed;
   } = {}
 ): ChatMessage {
   return {
@@ -45,15 +49,17 @@ export function buildMessage(
     traceId,
     citations,
     isPolicyRefusal,
+    confidence,
+    fallbackUsed,
   };
 }
 
 export function buildStatusTone(status: SupportContext["status"] | null): string {
   if (status === "success") {
-    return "bg-[#eef2e7] text-[#5f7248] border-[#b8c6a6]";
+    return "bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)] border-[#b8c6a6]";
   }
   if (status === "error") {
-    return "bg-red-100 text-red-800 border-red-300";
+    return "bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)] border-[rgba(172,63,47,0.28)]";
   }
   return "bg-[#eeeae0] text-muted border-[rgba(176,174,165,0.75)]";
 }

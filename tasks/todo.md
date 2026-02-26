@@ -1,3 +1,55 @@
+# Task Plan - 2026-02-26 - Brand Guidelines Frontend Polish
+
+## Current Focus
+- Apply `brand-guidelines` refinements to the active Next.js frontend (`frontend-web`) for stronger Anthropic visual consistency while preserving existing behavior.
+
+## Plan
+- [x] Add reusable brand styling primitives (pills/buttons/surfaces) in `frontend-web/app/globals.css`.
+- [x] Apply the primitives to key chat-shell surfaces and remove scattered hardcoded color treatments.
+- [x] Fix mobile case-law drawer accessibility wiring (`aria-controls` target + dialog semantics).
+- [x] Run frontend lint + typecheck + targeted UI tests and record evidence.
+
+## Review
+- Implemented a focused brand-consistency pass using shared Anthropic styling primitives:
+  - added reusable `imm-pill-*` tone classes and `imm-btn-*` action classes in `frontend-web/app/globals.css`.
+  - reduced hardcoded color scattering by consuming these primitives in page header badges, chat header badges, composer controls, quick prompts, related-case actions/status chips, and diagnostics/status surfaces.
+- Improved mobile drawer accessibility wiring in `frontend-web/components/chat/chat-shell-container.tsx`:
+  - added `id="mobile-case-law-drawer"` to the drawer target used by `aria-controls`,
+  - when open, drawer now declares dialog semantics (`role="dialog"`, `aria-modal`, `aria-label`).
+- Verification evidence:
+  - `npm --prefix frontend-web run lint` -> pass (`next lint`, no warnings/errors)
+  - `npm --prefix frontend-web run typecheck` -> pass (`tsc --noEmit --incremental false`)
+  - `npm --prefix frontend-web run test -- tests/chat-shell.ui.test.tsx tests/home-page.rollout.test.tsx` -> pass (`7 passed`)
+
+---
+
+# Task Plan - 2026-02-25 - Frontend Editorial Legal Desk Redesign
+
+## Current Focus
+- Rebuild the active Next.js UI (`frontend-web`) into a distinctive editorial/legal-desk experience while preserving chat/case-search/export behavior.
+
+## Plan
+- [x] Document approved redesign direction and implementation scope (editorial / legal desk) in `docs/plans/2026-02-25-frontend-editorial-legal-desk-redesign-design.md`.
+- [x] Redesign page hero + chat shell layout framing for a non-generic editorial workspace feel.
+- [x] Redesign transcript, message bubbles, composer, and quick prompts as a cohesive legal-desk interaction surface.
+- [x] Redesign related-case and diagnostics panels to match the editorial system and preserve usability.
+- [x] Run frontend lint + typecheck and record evidence.
+
+## Review
+- Approved editorial/legal-desk redesign implemented across the active Next.js UI (`frontend-web`) with preserved chat, case-law search, export, and diagnostics behavior.
+- Added a reusable editorial design system layer in `frontend-web/app/globals.css` (`imm-paper-shell`, `imm-paper-card`, `imm-kicker`, `imm-ledger-textarea`, subtle page texture, fade-up motion).
+- Rebuilt page masthead and chat workspace framing for a stronger legal-research desk composition, including a workspace header/status summary.
+- Reworked transcript, message bubbles, source cards, composer, and quick prompts into a cohesive “dossier + ledger” interaction surface while preserving accessible names/labels used by tests.
+- Reworked case-law sidebar and diagnostics panel into matching editorial cards and preserved UI contract text for test compatibility.
+- Follow-up polish pass added reusable meta/status label primitives, a subtle column separator, transcript scrollbar styling + edge fades, and refined error-status tones while keeping behavior unchanged.
+- Mobile-first follow-up polish tightened phone layouts (single-column workspace stats, shorter transcript viewport, full-width primary actions, long diagnostics overflow handling) while preserving all contracts.
+- Verification evidence:
+  - `npm --prefix frontend-web run lint` -> pass (`next lint`, no warnings/errors)
+  - `npm --prefix frontend-web run typecheck` -> pass (`tsc --noEmit --incremental false`)
+  - `npm --prefix frontend-web run test` -> pass (`65 passed`)
+
+---
+
 # Task Plan - 2026-02-25 - Anthropic Brand Guidelines UI Pass
 
 ## Current Focus
@@ -58,7 +110,17 @@
 - Quota-risk mitigation implemented:
   - Added Cloudflare free-tier API request projection checks (warn/fail thresholds) to `config/ops_alert_thresholds.json` via derived metrics in `immcad_api.ops.alert_evaluator`.
   - Updated release runbook to run `make ops-alert-eval` as a Cloudflare free-tier budget check before/after deploy.
+  - Executed Vercel-free runtime cutover using Cloudflare Tunnel: local IMMCAD backend (`uvicorn` on `127.0.0.1:8001`, `ENABLE_CASE_SEARCH=true`) is now serving through Cloudflare backend proxy via a Cloudflare Quick Tunnel origin; backend proxy redeployed as `b7807e40-9c42-4a48-b683-f0967800079d` and live smokes for `/healthz`, `/api/search/cases`, and `/api/research/lawyer-cases` passed.
+  - Validated named Cloudflare Tunnel automation via Cloudflare API + `cloudflared` (remote-config tunnel create/token/config + connector startup), but public named-tunnel cutover remains blocked by DNS-route permissions in the current Cloudflare auth context.
+  - Attempted direct backend-proxy cutover to the named tunnel host (`a2f7845e-4751-4ba4-b8aa-160edeb69184.cfargotunnel.com`) and confirmed runtime timeouts (`504`) without a public DNS route; safely rolled back backend proxy origin to the working Quick Tunnel and re-verified live health/search/lawyer-research endpoints (`backend proxy version 6e68a3cc-216f-4f86-83aa-2dd7a4de592d`).
   - Added frontend proxy mitigation for transitional backend-origin gap: upstream `404` on `/api/research/lawyer-cases` now maps to structured `503 SOURCE_UNAVAILABLE`, with regression test coverage and frontend redeploy to Cloudflare (frontend version `30029410-c9b3-41d9-b452-e4dc67f9b596`).
+  - Recovered a temporary Cloudflare Quick Tunnel outage (`530 origin unregistered`) caused by process reaping after a non-interactive shell launch: restarted persistent `uvicorn` + `cloudflared`, redeployed backend proxy to a new Quick Tunnel origin, and re-verified live Cloudflare endpoints (`backend proxy version 227b8729-e83e-4276-976e-6a7d09954566`; backend `/healthz` 200 with `x-immcad-edge-proxy`, frontend `/api/search/cases` 200, frontend `/api/research/lawyer-cases` 200 on both custom domain and `workers.dev`).
+  - Hardened the Quick Tunnel bridge automation script to survive non-interactive shells by adding `--detach-mode auto|setsid|nohup` (`auto` selects `setsid` when available) and validated persistence with a throwaway bridge on port `8011` (`uvicorn` + `cloudflared` PIDs remained alive after script exit; local `/healthz` 200 from a fresh shell).
+  - Promoted the active backend bridge from temporary TTY-held processes to the script-managed detached launcher flow on port `8002` (`/tmp/immcad-cloudflare-bridge-managed/state.env`), redeployed backend proxy to the new Quick Tunnel origin (`e64e1742-f1d4-4d73-a37a-6237b7e0b060`), re-verified Cloudflare `healthz` and case search, then retired the old TTY sessions so runtime is no longer tied to the interactive agent session.
+  - Added a one-command named-tunnel cutover automation script (`scripts/finalize_cloudflare_named_tunnel_cutover.sh`) plus `make backend-cf-named-tunnel-doctor` / `make backend-cf-named-tunnel-cutover`; script reuses Wrangler OAuth for tunnel config updates, starts the named connector in detached mode, attempts DNS route creation via API token if present, falls back to `cloudflared tunnel route dns` (one-click `cloudflared tunnel login` if `cert.pem` is missing), redeploys backend proxy, runs live smokes, and auto-rolls back to the Quick Tunnel on cutover failure.
+  - Verified current blocker state via the new doctor/non-interactive flow: Wrangler OAuth can update `cfd_tunnel` config but cannot read/create zone DNS records (`code 10000 Authentication error`), and `~/.cloudflared/cert.pem` is currently missing, so the next successful path requires a one-time interactive `cloudflared tunnel login` browser approval.
+  - Completed the named-tunnel production cutover after one-click `cloudflared tunnel login`: `cloudflared tunnel route dns` created the route for `immcad-origin-tunnel.arkiteto.dpdns.org`, the cutover script redeployed the backend proxy to the named hostname (`cad122bd-f3e4-4361-aa16-ff59a69c2cc7`), and live Cloudflare endpoint checks passed (`/healthz`, frontend `/api/search/cases`, frontend `/api/research/lawyer-cases`).
+  - Fixed a false-negative cutover failure caused by local DNS resolver lag (public Cloudflare DNS had propagated, local resolver had not) by adding a public-DNS + `curl --resolve` reachability fallback in the named-tunnel cutover script, then reran the same one-command cutover successfully.
 
 ---
 
@@ -1427,3 +1489,72 @@
   - `make quality` -> pass (`453 passed`)
   - `npm run test --prefix frontend-web` -> pass (`65 passed`)
   - `npm run typecheck --prefix frontend-web` -> pass
+
+---
+
+# Task Plan - 2026-02-26 - Cloudflare Named Tunnel Systemd Hardening
+
+## Current Focus
+- Close the remaining Cloudflare-only production hardening blocker by migrating the local backend origin stack from detached user processes to reboot-persistent `systemd` services, while preserving live traffic on the named tunnel path and documenting operational decisions.
+
+## Plan
+- [x] Add `systemd` units for the local backend (`uvicorn`) and Cloudflare named tunnel connector, plus a grouping target for the origin stack.
+- [x] Add an installer/switchover script that persists the tunnel token securely, installs/enables units, retires detached Quick Tunnel fallback processes, and runs smoke checks.
+- [x] Add a health-check script and Make targets for repeatable operational validation.
+- [x] Execute the systemd switchover, verify live Cloudflare health/search/lawyer-research routes, and confirm the tunnel token is no longer exposed in process args.
+- [x] Update known-issues and lessons with the final state and token-file compatibility learnings.
+
+## Review
+- Added reboot-persistent Cloudflare origin supervision:
+  - `ops/systemd/immcad-backend-local.service`
+  - `ops/systemd/immcad-cloudflared-named-tunnel.service`
+  - `ops/systemd/immcad-cloudflare-origin-stack.target`
+- Added repeatable operations tooling:
+  - `scripts/install_cloudflare_named_tunnel_systemd_stack.sh`
+  - `scripts/check_cloudflare_named_origin_stack_health.sh`
+  - `Makefile` targets: `backend-cf-origin-stack-systemd-install`, `backend-cf-origin-stack-health`
+- Executed live switchover to systemd-managed services and retired detached Quick Tunnel fallback processes.
+- Security hardening during rollout:
+  - switched tunnel service from `cloudflared ... --token` to `--token-file` to avoid token exposure in `ps` / `systemctl status`
+  - installer now writes token file with `ec2-user:ec2-user` and `0600` after discovering `cloudflared` rejected a root-owned group-readable token file.
+- Validation evidence:
+  - `bash scripts/check_cloudflare_named_origin_stack_health.sh --with-search` -> pass
+  - `curl https://immcad-api.arkiteto.dpdns.org/healthz` -> `200`
+  - `POST https://immcad.arkiteto.dpdns.org/api/search/cases` -> `200`
+  - `POST https://immcad-api.arkiteto.dpdns.org/api/research/lawyer-cases` (authenticated) -> `200`, structured cases returned
+  - `POST https://immcad.arkiteto.dpdns.org/api/research/lawyer-cases` -> `200`, structured cases returned
+  - `ps -ef | rg 'cloudflared tunnel run'` shows `--token-file /etc/immcad/immcad_named_tunnel.token` (token hidden)
+  - `ps -ef | rg 'trycloudflare'` -> no matches (Quick Tunnel fallback retired)
+
+---
+
+# Task Plan - 2026-02-26 - Prompt / Frontend / Case-Law Reliability Stabilization
+
+## Current Focus
+- Review and remediate production-readiness gaps causing poor first impression, slow/opaque responses, weak answer correctness, and brittle case-law research behavior.
+
+## Plan
+- [x] Align prompt/runtime contract (remove unsupported chat-history claims or implement memory injection).
+- [ ] Fix citation semantics so frontend-displayed citations reflect verified grounding, not provider passthrough placeholders.
+- [x] Split frontend async state by workflow (chat vs case search vs export) so the composer stays responsive.
+- [x] Add slow-response detection UX (elapsed time, degraded-state messaging, trace-aware retry/cancel guidance).
+- [ ] Unify incident/degraded banners across chat + case-law + export failures; mount diagnostics panel when enabled.
+- [x] Run `/api/chat` blocking backend work in a threadpool to reduce event-loop contention.
+- [x] Harden case-search fallback behavior (official-source errors should not prevent CanLII fallback when available).
+- [ ] Revisit case-law query validation/planner interaction so valid matter summaries are not rejected too early.
+- [ ] Separate lawyer-research result visibility from export eligibility so useful cases do not appear “broken.”
+- [ ] Expand eval/regression coverage for prompt correctness, case-law reliability, and frontend slow-state UX.
+
+## Review (2026-02-26 - Batch 1 Progress)
+- Completed a first stabilization batch covering prompt/runtime contract accuracy, frontend async-state split, chat slow-response loading cues, chat degraded/fallback response labeling, `/api/chat` threadpool execution, and case-search fallback hardening for official-source `ApiError` failures.
+- Verification run: `uv run pytest -q tests/test_case_search_service.py tests/test_openai_provider.py tests/test_chat_service.py` (pass), `uv run pytest -q tests/test_api_scaffold.py::test_chat_endpoint_contract_shape tests/test_api_scaffold.py::test_chat_policy_block_response tests/test_api_scaffold.py::test_chat_case_law_query_uses_case_search_tool_citations tests/test_api_scaffold.py::test_chat_validation_error_for_unsupported_locale_and_mode` (pass), `npm --prefix frontend-web run typecheck` (pass), `npm --prefix frontend-web run test -- tests/message-list.performance.test.tsx` (pass).
+- Remaining high-priority gaps from this plan: citation semantics (provider passthrough vs verified references), unified error/degraded banner hierarchy, case-law query validation tuning, and retrieval-backed grounding improvements for answer correctness.
+
+## Review (Pre-Implementation Findings)
+- Frontend uses a single pending flag across chat, case search, and export flows (`frontend-web/components/chat/use-chat-logic.ts`), which disables unrelated interactions and makes long-running actions feel like the entire app is frozen.
+- Incident banner rendering is chat-error-only (`frontend-web/components/chat/status-banner.tsx`) while non-chat failures are reduced to sidebar helper text; `SupportContextPanel` is imported but currently not rendered in `frontend-web/components/chat/chat-shell-container.tsx`.
+- Prompt claims full chat-history continuity (`src/immcad_api/policy/prompts.py`) but backend runtime remains stateless for chat turns (`src/immcad_api/providers/prompt_builder.py`, `src/immcad_api/services/chat_service.py`, `src/immcad_api/schemas.py`).
+- OpenAI/Gemini providers currently return input grounding citations as response citations (`src/immcad_api/providers/openai_provider.py`, `src/immcad_api/providers/gemini_provider.py`), which can overstate answer grounding quality.
+- Grounding is mostly static/keyword-catalog based (`src/immcad_api/services/grounding.py`), so many queries lack relevant evidence and either produce weak answers or safe-fallbacks.
+- `CaseSearchService` only treats `SourceUnavailableError` as official-source fallback-safe (`src/immcad_api/services/case_search_service.py`), so other official-client errors can abort fallback behavior.
+- Lawyer research/export metadata can make relevant cases look unavailable or broken when source metadata/policy signals are incomplete (`src/immcad_api/services/lawyer_case_research_service.py`, `frontend-web/components/chat/related-case-panel.tsx`).

@@ -7,6 +7,7 @@
 - Reviewer-identified P1 mismatch confirmed a key risk: hardened-environment alias rules must be shared consistently between backend and frontend runtime codepaths.
 - Case-law chat integration work exposed a policy coupling: tool-generated official court citations can be dropped unless trusted-domain defaults include official feed hosts.
 - User correction (2026-02-25): E2E setup must be resilient on headless servers and use Context7 documentation when requested.
+- User correction (2026-02-25): For UI redesign requests, default implementation target to the active modern frontend (`frontend-web`) and verify before touching legacy Streamlit UI.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -40,6 +41,11 @@
 - For Cloudflare Python Worker rollouts, keep migration staged: land scaffold + workflow tests first, then validate with authenticated perf smoke (`make backend-cf-perf-smoke`) before attempting full traffic cutover.
 - Always run at least one real canary deploy attempt after scaffolding; local tests can pass while platform limits (for example Cloudflare Worker bundle-size `code: 10027`) block production viability.
 - When reporting a production blocker to the user, implement at least one concrete mitigation in the same pass (for example a preflight gate, safer fallback path, or runbook check), not just a diagnosis.
+- When launching long-lived local services/tunnels from tool-managed non-interactive shells, do not rely on plain background `nohup` alone; use a detached session mode (`setsid`) or persistent TTY/tmux/systemd supervision and verify the child PIDs remain alive from a fresh shell after the launcher exits.
+- During Cloudflare DNS/tunnel cutovers, local resolver propagation can lag behind public resolvers; gate cutover on reachability using public DNS answers plus `curl --resolve` fallback rather than local resolver-only checks.
+- For `cloudflared` named-tunnel systemd services, prefer `--token-file` over `--token` so tunnel tokens do not appear in `ps` output or `systemctl status`.
+- `cloudflared --token-file` can reject otherwise-readable files depending on ownership/mode expectations; on this host it worked with a runtime-user-owned token file (`ec2-user:ec2-user`, `0600`) and failed with a root-owned group-readable file.
+- Installer/preflight scripts for live tunnel rollouts should retry public health checks (short backoff) to tolerate brief tunnel reconnect windows during service restarts.
 - When wrapping synchronous service calls with `run_in_threadpool`, keep explicit `ApiError` handling in the route; otherwise `RateLimitError`/`SourceUnavailableError` can leak as raw 500s.
 - During edge-proxy migrations, keep error envelope and trace-header contracts aligned with frontend parsing (`error.code` + `trace_id` + `x-trace-id`) and maintain temporary client-side fallback for legacy proxy shapes.
 - For lawyer-research `source_status`, avoid hardcoded official source-id lists; prefer registry-driven classification so new official case-law sources are not misreported as unknown.

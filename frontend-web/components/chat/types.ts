@@ -1,6 +1,7 @@
 import type {
   ApiErrorCode,
   ChatCitation,
+  FallbackUsed as ApiFallbackUsed,
   LawyerCaseSupport,
 } from "@/lib/api-client";
 
@@ -11,9 +12,11 @@ export type ChatMessage = {
   author: MessageAuthor;
   content: string;
   disclaimer?: string;
+  confidence?: "low" | "medium" | "high";
   traceId?: string | null;
   citations?: ChatCitation[];
   isPolicyRefusal?: boolean;
+  fallbackUsed?: ApiFallbackUsed;
 };
 
 export type ChatShellProps = {
@@ -57,12 +60,15 @@ export type RelatedCasePanelProps = {
   statusToneClass?: string;
   supportStatus?: SupportContext["status"] | null;
   showDiagnostics?: boolean;
-  isSubmitting: boolean;
+  isChatSubmitting: boolean;
+  isCaseSearchSubmitting: boolean;
+  isExportSubmitting: boolean;
   submissionPhase: SubmissionPhase;
   caseSearchQuery: string;
   lastCaseSearchQuery: string | null;
   relatedCasesStatus: string;
   relatedCases: LawyerCaseSupport[];
+  matterProfile?: Record<string, string | string[] | null>;
   onCaseSearchQueryChange: (value: string) => void;
   onSearch: () => void;
   onExportCase: (result: LawyerCaseSupport) => void;

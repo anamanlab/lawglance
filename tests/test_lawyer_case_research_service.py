@@ -93,8 +93,8 @@ def test_orchestrator_marks_pdf_unavailable_when_source_metadata_not_loaded() ->
 
     assert response.cases[0].pdf_status == "unavailable"
     assert response.cases[0].pdf_reason == "document_url_unverified_source"
-    assert response.cases[0].export_allowed is False
-    assert response.cases[0].export_policy_reason == "source_export_metadata_missing"
+    assert response.cases[0].export_allowed is None
+    assert response.cases[0].export_policy_reason is None
 
 
 def test_orchestrator_does_not_mark_unknown_sources_as_official() -> None:

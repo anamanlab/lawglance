@@ -8,14 +8,22 @@ from immcad_api.services.case_search_service import CaseSearchService
 
 
 class _OfficialClient:
-    def __init__(self, response: CaseSearchResponse | None = None, fail: bool = False) -> None:
+    def __init__(
+        self,
+        response: CaseSearchResponse | None = None,
+        fail: bool = False,
+        error: Exception | None = None,
+    ) -> None:
         self.response = response
         self.fail = fail
+        self.error = error
         self.calls = 0
 
     def search_cases(self, request: CaseSearchRequest) -> CaseSearchResponse:
         del request
         self.calls += 1
+        if self.error is not None:
+            raise self.error
         if self.fail:
             raise SourceUnavailableError("official unavailable")
         if self.response is not None:
@@ -152,3 +160,34 @@ def test_case_search_service_keeps_official_result_when_canlii_is_rate_limited()
     assert official.calls == 1
     assert canlii.calls == 1
     assert response.results == []
+
+
+def test_case_search_service_falls_back_to_canlii_when_official_returns_other_api_error() -> None:
+    official = _OfficialClient(error=RateLimitError("official quota reached"))
+    canlii = _CanliiClient(
+        response=CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="canlii-3",
+                    title="CanLII after official rate limit",
+                    citation="2026 FC 3",
+                    decision_date=date(2026, 1, 3),
+                    url="https://www.canlii.org/en/ca/fct/doc/2026/2026fc3/2026fc3.html",
+                )
+            ]
+        )
+    )
+
+    service = CaseSearchService(canlii_client=canlii, official_client=official)
+    response = service.search(
+        CaseSearchRequest(
+            query="procedural fairness federal court",
+            jurisdiction="ca",
+            court="fc",
+            limit=2,
+        )
+    )
+
+    assert official.calls == 1
+    assert canlii.calls == 1
+    assert response.results[0].case_id == "canlii-3"

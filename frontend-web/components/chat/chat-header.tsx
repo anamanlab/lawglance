@@ -4,14 +4,24 @@ type ChatHeaderProps = {
 
 export function ChatHeader({ legalDisclaimer }: ChatHeaderProps): JSX.Element {
   return (
-    <header className="rounded-2xl border border-[rgba(217,119,87,0.35)] bg-gradient-to-r from-[#f8eee8] via-[#f6f2ea] to-[#edf3ea] p-4 text-sm text-warning shadow-[0_10px_24px_rgba(20,20,19,0.08)]">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-lg font-semibold text-ink">Canada immigration scope notice</p>
-        <span className="rounded-full border border-[rgba(217,119,87,0.35)] bg-[rgba(250,249,245,0.94)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-warning">
+    <header className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[rgba(176,174,165,0.42)] pb-4">
+      <div>
+        <h2 className="text-xl font-semibold leading-tight text-ink">
+          IMMCAD Assistant
+        </h2>
+        <p className="mt-1 text-[11px] leading-snug text-muted max-w-2xl">
+          {legalDisclaimer}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <span className="imm-pill imm-pill-orange">
           Informational only
         </span>
+        <span className="imm-pill imm-pill-blue">
+          Cite sources
+        </span>
       </div>
-      <p className="mt-2 leading-6 text-ink">{legalDisclaimer}</p>
     </header>
   );
 }

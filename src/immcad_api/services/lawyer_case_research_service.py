@@ -208,11 +208,6 @@ class LawyerCaseResearchService:
             else:
                 pdf_status, pdf_reason = "unavailable", "document_url_missing"
 
-        if pdf_status == "unavailable" and export_allowed is None and case_result.source_id:
-            export_allowed = False
-            if export_policy_reason is None:
-                export_policy_reason = "source_export_metadata_missing"
-
         return LawyerCaseSupport(
             case_id=case_result.case_id,
             title=case_result.title,

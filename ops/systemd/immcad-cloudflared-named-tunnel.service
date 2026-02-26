@@ -1,0 +1,22 @@
+[Unit]
+Description=IMMCAD Cloudflare named tunnel connector
+After=network-online.target immcad-backend-local.service
+Wants=network-online.target immcad-backend-local.service
+PartOf=immcad-cloudflare-origin-stack.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/IMMCAD
+ExecStartPre=/usr/bin/test -s /etc/immcad/immcad_named_tunnel.token
+ExecStartPre=/usr/bin/test -x /home/ec2-user/bin/cloudflared
+ExecStart=/home/ec2-user/bin/cloudflared tunnel run --token-file /etc/immcad/immcad_named_tunnel.token
+Restart=always
+RestartSec=3
+TimeoutStartSec=60
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=immcad-cloudflare-origin-stack.target

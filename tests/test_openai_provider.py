@@ -76,7 +76,7 @@ def test_openai_provider_prompt_includes_scope_and_grounding(monkeypatch) -> Non
 
     assert response.answer == "Informational answer"
     assert response.provider == "openai"
-    assert response.citations == citations
+    assert response.citations == []
     assert captured["api_key"] == "openai-key"
     assert captured["timeout"] == 12.0
     assert captured["temperature"] == 0.2

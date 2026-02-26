@@ -102,6 +102,7 @@ class OpenAIProvider:
         return ProviderResult(
             provider=self.name,
             answer=answer,
-            citations=citations,
+            # The provider currently returns plain text only; do not imply model-emitted citations.
+            citations=[],
             confidence="medium",
         )

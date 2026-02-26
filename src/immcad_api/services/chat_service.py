@@ -242,13 +242,26 @@ class ChatService:
                 )
             raise ProviderApiError(exc.message) from exc
 
+        provider_citations = routed.result.citations
+        citations_to_validate = provider_citations or citations
         answer, validated_citations, confidence = enforce_citation_requirement(
             routed.result.answer,
-            routed.result.citations,
+            citations_to_validate,
             grounded_citations=citations,
             trusted_domains=self.trusted_citation_domains,
         )
-        if routed.result.citations and not validated_citations:
+        if not provider_citations and citations:
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="provider_citations_absent_using_grounded_context",
+                locale=request.locale,
+                mode=request.mode,
+                message_length=len(request.message),
+                provider=routed.result.provider,
+                provider_citation_count=0,
+                candidate_citation_count=len(citations),
+            )
+        if provider_citations and not validated_citations:
             self._emit_audit_event(
                 trace_id=trace_id,
                 event_type="grounding_validation_failed",
@@ -256,9 +269,9 @@ class ChatService:
                 mode=request.mode,
                 message_length=len(request.message),
                 provider=routed.result.provider,
-                provider_citation_count=len(routed.result.citations),
+                provider_citation_count=len(provider_citations),
                 candidate_citation_count=len(citations),
-                rejected_citation_urls=_extract_rejected_citation_urls(routed.result.citations),
+                rejected_citation_urls=_extract_rejected_citation_urls(provider_citations),
             )
 
         fallback_provider = routed.result.provider if routed.fallback_used else None

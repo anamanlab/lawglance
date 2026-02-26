@@ -1,0 +1,19 @@
+[Unit]
+Description=IMMCAD Cloudflare Quick Tunnel Bridge (backend + tunnel + proxy redeploy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/IMMCAD
+ExecStartPre=/bin/bash -lc 'bash scripts/stop_cloudflare_quick_tunnel_bridge.sh /tmp/immcad-cloudflare-bridge-managed || true'
+ExecStart=/bin/bash -lc 'bash scripts/run_cloudflare_quick_tunnel_bridge.sh --port 8002 --state-dir /tmp/immcad-cloudflare-bridge-managed --detach-mode auto'
+ExecStop=/bin/bash -lc 'bash scripts/stop_cloudflare_quick_tunnel_bridge.sh /tmp/immcad-cloudflare-bridge-managed'
+TimeoutStartSec=240
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target

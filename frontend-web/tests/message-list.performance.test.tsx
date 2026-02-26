@@ -39,7 +39,9 @@ describe("message list long-thread behavior", () => {
     render(
       <MessageList
         endOfThreadRef={createRef<HTMLDivElement>()}
-        isSubmitting={false}
+        isChatSubmitting={false}
+        chatPendingElapsedSeconds={0}
+        isSlowChatResponse={false}
         messages={messages}
         submissionPhase="idle"
       />
@@ -56,7 +58,9 @@ describe("message list long-thread behavior", () => {
     const { rerender } = render(
       <MessageList
         endOfThreadRef={createRef<HTMLDivElement>()}
-        isSubmitting={false}
+        isChatSubmitting={false}
+        chatPendingElapsedSeconds={0}
+        isSlowChatResponse={false}
         messages={messages}
         submissionPhase="idle"
       />
@@ -65,7 +69,9 @@ describe("message list long-thread behavior", () => {
     rerender(
       <MessageList
         endOfThreadRef={createRef<HTMLDivElement>()}
-        isSubmitting={true}
+        isChatSubmitting={true}
+        chatPendingElapsedSeconds={3}
+        isSlowChatResponse={false}
         messages={messages}
         submissionPhase="chat"
       />

@@ -13,11 +13,11 @@ def test_keyword_grounding_adapter_includes_pr_card_sources_for_pr_card_query() 
     )
 
     assert citations
-    assert citations[0].source_id == "IRPA"
     assert any(citation.pin == "PR card renewal guide" for citation in citations)
+    assert len(citations) <= 3
 
 
-def test_keyword_grounding_adapter_always_returns_baseline_citation() -> None:
+def test_keyword_grounding_adapter_returns_no_citations_for_unmatched_query() -> None:
     adapter = KeywordGroundingAdapter(official_grounding_catalog(), max_citations=3)
 
     citations = adapter.citation_candidates(
@@ -26,6 +26,4 @@ def test_keyword_grounding_adapter_always_returns_baseline_citation() -> None:
         mode="standard",
     )
 
-    assert len(citations) == 1
-    assert citations[0].source_id == "IRPA"
-    assert citations[0].pin == "s. 11"
+    assert citations == []

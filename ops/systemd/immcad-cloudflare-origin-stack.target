@@ -1,0 +1,7 @@
+[Unit]
+Description=IMMCAD Cloudflare origin stack (local backend + named tunnel connector)
+After=network-online.target
+Wants=network-online.target immcad-backend-local.service immcad-cloudflared-named-tunnel.service
+
+[Install]
+WantedBy=multi-user.target

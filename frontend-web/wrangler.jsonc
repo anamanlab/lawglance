@@ -12,5 +12,8 @@
   },
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    "IMMCAD_API_BASE_URL": "https://immcad-api.arkiteto.dpdns.org"
   }
 }

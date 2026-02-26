@@ -52,6 +52,22 @@ class _FailingRouter:
 
 
 @dataclass
+class _NoCitationRouter:
+    def generate(self, *, message: str, citations, locale: str) -> RoutingResult:
+        del message, citations, locale
+        return RoutingResult(
+            result=ProviderResult(
+                provider="scaffold",
+                answer="Scaffold response",
+                citations=[],
+                confidence="low",
+            ),
+            fallback_used=False,
+            fallback_reason=None,
+        )
+
+
+@dataclass
 class _RecordingCaseSearchTool:
     response: CaseSearchResponse | None = None
     error: Exception | None = None
@@ -199,6 +215,26 @@ def test_chat_service_returns_grounded_response_when_adapter_supplies_citations(
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
     assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_uses_grounded_context_citations_when_provider_returns_none() -> None:
+    service = ChatService(
+        _NoCitationRouter(),
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-grounded-fallback-citations-001")
+
+    assert response.answer == "Scaffold response"
+    assert response.citations
+    assert response.citations[0].source_id == "IRPA"
+    assert response.confidence == "medium"
 
 
 def test_chat_service_rejects_invalid_case_search_tool_limit() -> None:

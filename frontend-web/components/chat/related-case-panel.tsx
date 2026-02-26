@@ -1,4 +1,83 @@
 import type { RelatedCasePanelProps } from "@/components/chat/types";
+import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
+
+const LOW_SPECIFICITY_HINT =
+  "Query may be too broad. Add at least two anchors: program/issue and court or citation.";
+
+const DEFAULT_QUERY_HINT =
+  "Tip: use program names, legal issues, court names, or citations for stronger case matches.";
+
+function normalizeIssueTag(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function toCourtLabel(value?: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  switch (value.trim().toLowerCase()) {
+    case "fc":
+      return "Federal Court";
+    case "fca":
+      return "Federal Court of Appeal";
+    case "scc":
+      return "Supreme Court";
+    default:
+      return value.trim().toUpperCase();
+  }
+}
+
+function buildRefinementSuggestions(params: {
+  query: string;
+  matterProfile?: Record<string, string | string[] | null>;
+}): string[] {
+  const { query, matterProfile } = params;
+  const baseQuery = query.trim().replace(/\s+/g, " ");
+  const suggestions: string[] = [];
+
+  if (baseQuery) {
+    suggestions.push(`${baseQuery} Federal Court`);
+    suggestions.push(`${baseQuery} procedural fairness`);
+    suggestions.push(`${baseQuery} 2024 FC 101`);
+  }
+
+  const issueTags = matterProfile?.issue_tags;
+  const normalizedIssueTags = Array.isArray(issueTags)
+    ? issueTags
+    : issueTags
+      ? [issueTags]
+      : [];
+  for (const issueTag of normalizedIssueTags) {
+    const displayTag = normalizeIssueTag(issueTag);
+    suggestions.push(baseQuery ? `${baseQuery} ${displayTag}` : `${displayTag} Federal Court`);
+  }
+
+  const courtLabel = toCourtLabel(matterProfile?.target_court as string | null | undefined);
+  if (courtLabel) {
+    suggestions.push(baseQuery ? `${baseQuery} ${courtLabel}` : `${courtLabel} precedent`);
+  }
+
+  const seen = new Set<string>();
+  const uniqueSuggestions: string[] = [];
+  for (const suggestion of suggestions) {
+    const compactSuggestion = suggestion.trim().replace(/\s+/g, " ");
+    if (!compactSuggestion || compactSuggestion.length > 120) {
+      continue;
+    }
+    if (baseQuery && compactSuggestion.toLowerCase() === baseQuery.toLowerCase()) {
+      continue;
+    }
+    const normalizedSuggestion = compactSuggestion.toLowerCase();
+    if (seen.has(normalizedSuggestion)) {
+      continue;
+    }
+    seen.add(normalizedSuggestion);
+    uniqueSuggestions.push(compactSuggestion);
+  }
+
+  return uniqueSuggestions.slice(0, 4);
+}
 
 function buildExportUnavailableReason(policyReason?: string | null): string {
   switch (policyReason) {
@@ -37,6 +116,70 @@ function buildPdfUnavailableReason(pdfReason?: string | null): string {
   }
 }
 
+function confidenceToneClass(confidence: "low" | "medium" | "high"): string {
+  if (confidence === "high") {
+    return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+  }
+  if (confidence === "medium") {
+    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+  }
+  return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+}
+
+function intakeToneClass(completeness: "low" | "medium" | "high"): string {
+  if (completeness === "high") {
+    return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+  }
+  if (completeness === "medium") {
+    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+  }
+  return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+}
+
+function toSourceBucket(sourceId?: string | null): "official" | "canlii" | "unknown" {
+  const normalizedSourceId = (sourceId ?? "").trim().toUpperCase();
+  if (!normalizedSourceId) {
+    return "unknown";
+  }
+  if (normalizedSourceId.startsWith("CANLII")) {
+    return "canlii";
+  }
+  if (
+    normalizedSourceId === "FC_DECISIONS" ||
+    normalizedSourceId === "FCA_DECISIONS" ||
+    normalizedSourceId === "SCC_DECISIONS"
+  ) {
+    return "official";
+  }
+  return "unknown";
+}
+
+function toOfficialSourceStatusLabel(status: string): string {
+  if (status === "ok") {
+    return "Official courts: available";
+  }
+  if (status === "unavailable") {
+    return "Official courts: unavailable";
+  }
+  if (status === "no_match") {
+    return "Official courts: no direct match";
+  }
+  return "Official courts: status unknown";
+}
+
+function toCanliiSourceStatusLabel(status: string): string {
+  if (status === "used") {
+    return "CanLII: used as supplement";
+  }
+  if (status === "unavailable") {
+    return "CanLII: unavailable";
+  }
+  if (status === "not_used") {
+    return "CanLII: not used";
+  }
+  return "CanLII: status unknown";
+}
+
 export function RelatedCasePanel({
   statusToneClass,
   supportStatus,
@@ -47,10 +190,30 @@ export function RelatedCasePanel({
   submissionPhase,
   caseSearchQuery,
   lastCaseSearchQuery,
+  relatedCasesRetrievalMode,
+  sourceStatus,
   onCaseSearchQueryChange,
   relatedCasesStatus,
+  researchConfidence,
+  confidenceReasons,
+  intakeCompleteness,
+  intakeHints,
   relatedCases,
   matterProfile,
+  intakeObjective,
+  intakeTargetCourt,
+  intakeProceduralPosture,
+  intakeIssueTags,
+  intakeAnchorReference,
+  intakeDateFrom,
+  intakeDateTo,
+  onIntakeObjectiveChange,
+  onIntakeTargetCourtChange,
+  onIntakeProceduralPostureChange,
+  onIntakeIssueTagsChange,
+  onIntakeAnchorReferenceChange,
+  onIntakeDateFromChange,
+  onIntakeDateToChange,
   onSearch,
   onExportCase,
   exportingCaseId,
@@ -62,15 +225,45 @@ export function RelatedCasePanel({
   const normalizedLastSearchQuery = (lastCaseSearchQuery ?? "").trim().toLowerCase();
   const hasResults = relatedCases.length > 0;
   const hasCaseSearchQuery = caseSearchQuery.trim().length >= 2;
+  const lowSpecificityQuery = isLowSpecificityCaseQuery(caseSearchQuery);
   const queryChangedSinceLastSearch =
     hasResults &&
     Boolean(normalizedCurrentQuery) &&
     Boolean(normalizedLastSearchQuery) &&
     normalizedCurrentQuery !== normalizedLastSearchQuery;
+  const retrievalModeLabel =
+    relatedCasesRetrievalMode === "auto"
+      ? "Auto-retrieved for this answer"
+      : relatedCasesRetrievalMode === "manual"
+        ? "Manual case search"
+        : null;
+  const sourceCounts = relatedCases.reduce(
+    (counts, result) => {
+      const sourceBucket = toSourceBucket(result.source_id);
+      if (sourceBucket === "official") {
+        counts.official += 1;
+      } else if (sourceBucket === "canlii") {
+        counts.canlii += 1;
+      } else {
+        counts.unknown += 1;
+      }
+      return counts;
+    },
+    { official: 0, canlii: 0, unknown: 0 }
+  );
+  const shouldShowSourceCard = Boolean(sourceStatus) || hasResults;
+  const officialStatus = sourceStatus?.official ?? (sourceCounts.official ? "ok" : "unknown");
+  const canliiStatus = sourceStatus?.canlii ?? (sourceCounts.canlii ? "used" : "unknown");
 
   const queryHint = queryChangedSinceLastSearch
     ? "Current query differs from the query used for the listed results."
-    : "Tip: use program names, legal issues, court names, or citations for stronger case matches.";
+    : lowSpecificityQuery
+      ? LOW_SPECIFICITY_HINT
+      : DEFAULT_QUERY_HINT;
+  const refinementSuggestions = buildRefinementSuggestions({
+    query: caseSearchQuery,
+    matterProfile,
+  });
 
   const issueTags = matterProfile?.issue_tags;
   const targetCourt = matterProfile?.target_court;
@@ -83,9 +276,9 @@ export function RelatedCasePanel({
       <div className="relative z-10">
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(176,174,165,0.42)] pb-3">
           <div>
-            <h2 className="text-lg font-semibold text-ink">Related case law</h2>
+            <h2 className="text-lg font-semibold text-ink">Case-law precedents</h2>
             <p className="mt-1 max-w-md text-xs leading-6 text-muted">
-              Discover official case law matching your query.
+              Conversation answers appear in the main thread; precedent results appear here.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -129,11 +322,139 @@ export function RelatedCasePanel({
             value={caseSearchQuery}
           />
           <p
-            className={`mt-2 text-[11px] leading-5 ${queryChangedSinceLastSearch ? "text-warning" : "text-muted"}`}
+            className={`mt-2 text-[11px] leading-5 ${queryChangedSinceLastSearch || lowSpecificityQuery ? "text-warning" : "text-muted"}`}
             id={caseSearchHintId}
           >
             {queryHint}
           </p>
+
+          <div className="mt-3 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(247,243,234,0.72)] p-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-muted">
+              Research intake (recommended)
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-muted">
+              Add context so ranking and confidence are grounded in your litigation objective.
+            </p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <label className="text-[11px] text-muted">
+                Research objective
+                <select
+                  aria-label="Research objective"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeObjectiveChange(event.target.value as typeof intakeObjective)}
+                  value={intakeObjective}
+                >
+                  <option value="">Not specified</option>
+                  <option value="support_precedent">Support precedent</option>
+                  <option value="distinguish_precedent">Distinguish precedent</option>
+                  <option value="background_research">Background research</option>
+                </select>
+              </label>
+              <label className="text-[11px] text-muted">
+                Target court
+                <select
+                  aria-label="Target court"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeTargetCourtChange(event.target.value)}
+                  value={intakeTargetCourt}
+                >
+                  <option value="">Not specified</option>
+                  <option value="fc">Federal Court (FC)</option>
+                  <option value="fca">Federal Court of Appeal (FCA)</option>
+                  <option value="scc">Supreme Court (SCC)</option>
+                </select>
+              </label>
+              <label className="text-[11px] text-muted">
+                Procedural posture
+                <select
+                  aria-label="Procedural posture"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) =>
+                    onIntakeProceduralPostureChange(event.target.value as typeof intakeProceduralPosture)
+                  }
+                  value={intakeProceduralPosture}
+                >
+                  <option value="">Not specified</option>
+                  <option value="judicial_review">Judicial review</option>
+                  <option value="appeal">Appeal</option>
+                  <option value="motion">Motion</option>
+                  <option value="application">Application</option>
+                </select>
+              </label>
+              <label className="text-[11px] text-muted">
+                Issue tags
+                <input
+                  aria-label="Issue tags"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeIssueTagsChange(event.target.value)}
+                  placeholder="procedural_fairness, inadmissibility"
+                  type="text"
+                  value={intakeIssueTags}
+                />
+              </label>
+              <label className="text-[11px] text-muted sm:col-span-2">
+                Citation or docket anchor
+                <input
+                  aria-label="Citation or docket anchor"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeAnchorReferenceChange(event.target.value)}
+                  placeholder="2024 FCA 77 or A-77-23"
+                  type="text"
+                  value={intakeAnchorReference}
+                />
+              </label>
+              <label className="text-[11px] text-muted">
+                Decision date from
+                <input
+                  aria-label="Decision date from"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeDateFromChange(event.target.value)}
+                  type="date"
+                  value={intakeDateFrom}
+                />
+              </label>
+              <label className="text-[11px] text-muted">
+                Decision date to
+                <input
+                  aria-label="Decision date to"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  disabled={disableCaseSearchControls}
+                  onChange={(event) => onIntakeDateToChange(event.target.value)}
+                  type="date"
+                  value={intakeDateTo}
+                />
+              </label>
+            </div>
+          </div>
+
+          {refinementSuggestions.length ? (
+            <div className="mt-3">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-muted">
+                Query refinements
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {refinementSuggestions.map((suggestion) => (
+                  <button
+                    className="imm-btn-secondary px-2.5 py-1 text-[11px]"
+                    disabled={disableCaseSearchControls}
+                    key={suggestion}
+                    onClick={() => {
+                      onCaseSearchQueryChange(suggestion);
+                    }}
+                    type="button"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-3 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <button
@@ -165,9 +486,64 @@ export function RelatedCasePanel({
         </div>
 
         {hasResults && lastCaseSearchQuery ? (
-          <p className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-6 text-muted">
-            Showing {relatedCases.length} related case{relatedCases.length === 1 ? "" : "s"} for: &quot;{lastCaseSearchQuery}&quot;
-          </p>
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-6 text-muted">
+            <p>
+              Showing {relatedCases.length} related case{relatedCases.length === 1 ? "" : "s"} for: &quot;{lastCaseSearchQuery}&quot;
+            </p>
+            {retrievalModeLabel ? (
+              <span className="mt-1 inline-flex rounded-full border border-[rgba(106,155,204,0.35)] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#436280]">
+                {retrievalModeLabel}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {shouldShowSourceCard ? (
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <span className="inline-flex rounded-full border border-[rgba(176,174,165,0.45)] bg-[#ebe8df] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Source transparency
+            </span>
+            <p className="mt-2">
+              {toOfficialSourceStatusLabel(officialStatus)} | {toCanliiSourceStatusLabel(canliiStatus)}
+            </p>
+            <p className="mt-1">
+              Results by source: Official {sourceCounts.official}, CanLII {sourceCounts.canlii}, Other {sourceCounts.unknown}
+            </p>
+          </div>
+        ) : null}
+
+        {researchConfidence ? (
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <span
+              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${confidenceToneClass(researchConfidence)}`}
+            >
+              Research confidence: {researchConfidence.toUpperCase()}
+            </span>
+            {confidenceReasons.length ? (
+              <ul className="mt-2 space-y-1">
+                {confidenceReasons.slice(0, 3).map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {intakeCompleteness ? (
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <span
+              className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${intakeToneClass(intakeCompleteness)}`}
+            >
+              Intake quality: {intakeCompleteness.toUpperCase()}
+            </span>
+            {intakeHints.length ? (
+              <ul className="mt-2 space-y-1">
+                {intakeHints.slice(0, 3).map((hint) => (
+                  <li key={hint}>{hint}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         ) : null}
 
         {hasResults ? (

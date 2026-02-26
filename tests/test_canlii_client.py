@@ -248,6 +248,46 @@ def test_canlii_returns_empty_results_for_long_unmatched_query(monkeypatch) -> N
     assert response.results == []
 
 
+def test_canlii_filters_results_by_decision_date_range(monkeypatch) -> None:
+    _FakeClient.reset()
+    payload = {
+        "cases": [
+            {
+                "caseId": "c-old",
+                "title": "Older Decision",
+                "citation": "2023 FC 7",
+                "decisionDate": "2023-02-01",
+                "url": "https://www.canlii.org/c-old",
+            },
+            {
+                "caseId": "c-new",
+                "title": "Newer Decision",
+                "citation": "2025 FC 17",
+                "decisionDate": "2025-06-01",
+                "url": "https://www.canlii.org/c-new",
+            },
+        ]
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(payload=payload),
+    )
+
+    client = CanLIIClient(api_key="test-key")
+    request = CaseSearchRequest(
+        query="decision",
+        jurisdiction="ca",
+        court="fct",
+        limit=5,
+        decision_date_from=date(2024, 1, 1),
+        decision_date_to=date(2025, 12, 31),
+    )
+    response = client.search_cases(request)
+
+    assert len(response.results) == 1
+    assert response.results[0].case_id == "c-new"
+
+
 def test_canlii_returns_rate_limited_when_daily_limit_hit() -> None:
     client = CanLIIClient(
         api_key="test-key",

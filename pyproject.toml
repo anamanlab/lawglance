@@ -35,6 +35,7 @@ dependencies = [
     "redis>=6.3.0",
     "streamlit==1.37.0",
     "uvicorn>=0.30.0",
+    "python-multipart>=0.0.9",
 ]
 
 [dependency-groups]

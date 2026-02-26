@@ -6,12 +6,18 @@ from urllib.parse import urlparse
 
 PdfStatus = Literal["available", "unavailable"]
 
+_HOST_ALIASES_BY_SOURCE_HOST: dict[str, frozenset[str]] = {
+    # FC decision feeds still use the historical decisions.fct-cf.gc.ca host, while
+    # some live document URLs resolve through Lexum's norma host.
+    "decisions.fct-cf.gc.ca": frozenset({"norma.lexum.com"}),
+}
+
 
 def allowed_hosts_for_source(source_url: str) -> set[str]:
     source_host = (urlparse(source_url).hostname or "").strip().lower()
     if not source_host:
         return set()
-    return {source_host}
+    return {source_host, *_HOST_ALIASES_BY_SOURCE_HOST.get(source_host, ())}
 
 
 def is_url_allowed_for_source(document_url: str, allowed_hosts: set[str]) -> bool:

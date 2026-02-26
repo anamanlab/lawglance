@@ -46,6 +46,9 @@ class Settings:
     citation_trusted_domains: tuple[str, ...]
     api_rate_limit_per_minute: int
     cors_allowed_origins: tuple[str, ...]
+    document_upload_max_bytes: int
+    document_upload_max_files: int
+    document_allowed_content_types: tuple[str, ...]
 
 
 def parse_str_env(name: str, default: str | None = None) -> str | None:
@@ -260,6 +263,24 @@ def load_settings() -> Settings:
     )
     if export_max_download_bytes < 1:
         raise ValueError("EXPORT_MAX_DOWNLOAD_BYTES must be >= 1")
+    document_upload_max_bytes = parse_int_env(
+        "DOCUMENT_UPLOAD_MAX_BYTES",
+        10 * 1024 * 1024,
+    )
+    if document_upload_max_bytes < 1:
+        raise ValueError("DOCUMENT_UPLOAD_MAX_BYTES must be >= 1")
+    document_upload_max_files = parse_int_env("DOCUMENT_UPLOAD_MAX_FILES", 25)
+    if document_upload_max_files < 1:
+        raise ValueError("DOCUMENT_UPLOAD_MAX_FILES must be >= 1")
+    document_allowed_content_types = parse_csv_env(
+        "DOCUMENT_ALLOWED_CONTENT_TYPES",
+        (
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/tiff",
+        ),
+    )
 
     raw_gemini_model = parse_str_env("GEMINI_MODEL")
     gemini_model = raw_gemini_model or "gemini-2.5-flash-lite"
@@ -328,4 +349,7 @@ def load_settings() -> Settings:
             "CORS_ALLOWED_ORIGINS",
             ("http://127.0.0.1:3000", "http://localhost:3000"),
         ),
+        document_upload_max_bytes=document_upload_max_bytes,
+        document_upload_max_files=document_upload_max_files,
+        document_allowed_content_types=document_allowed_content_types,
     )

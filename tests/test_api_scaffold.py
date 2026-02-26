@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from immcad_api.main import create_app  # noqa: E402
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT  # noqa: E402
 from immcad_api.errors import RateLimitError, SourceUnavailableError  # noqa: E402
 from immcad_api.providers import ProviderError, ProviderResult  # noqa: E402
+from immcad_api.schemas import LawyerCaseResearchResponse, LawyerCaseSupport  # noqa: E402
 
 
 client = TestClient(create_app())
@@ -62,6 +64,57 @@ def test_chat_policy_block_response() -> None:
     assert body["fallback_used"]["reason"] == "policy_block"
 
 
+def test_chat_endpoint_includes_research_preview_for_case_law_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _mock_research(self, request):
+        del self, request
+        return LawyerCaseResearchResponse(
+            matter_profile={"target_court": "fc"},
+            cases=[
+                LawyerCaseSupport(
+                    case_id="2024-FC-101",
+                    title="Example v Canada",
+                    citation="2024 FC 101",
+                    source_id="FC_DECISIONS",
+                    court="FC",
+                    decision_date=date(2024, 1, 15),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2024101/index.do",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/2024101/1/document.do",
+                    pdf_status="available",
+                    pdf_reason=None,
+                    export_allowed=True,
+                    export_policy_reason=None,
+                    relevance_reason="Matches precedent request and court target.",
+                    summary=None,
+                )
+            ],
+            source_status={"official": "ok", "canlii": "not_used"},
+        )
+
+    monkeypatch.setattr(
+        "immcad_api.services.lawyer_case_research_service.LawyerCaseResearchService.research",
+        _mock_research,
+    )
+    local_client = TestClient(create_app())
+
+    response = local_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Find case law precedent on inadmissibility decisions.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["research_preview"]["retrieval_mode"] == "auto"
+    assert body["research_preview"]["query"] == "Find case law precedent on inadmissibility decisions."
+    assert body["research_preview"]["cases"][0]["citation"] == "2024 FC 101"
+
+
 def test_case_search_contract_shape() -> None:
     response = client.post(
         "/api/search/cases",
@@ -99,6 +152,24 @@ def test_case_search_rejects_broad_stopword_query() -> None:
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["policy_reason"] == "case_search_query_too_broad"
     assert "specific terms" in body["error"]["message"]
+
+
+def test_case_search_rejects_generic_query_with_refinement_hints() -> None:
+    response = client.post(
+        "/api/search/cases",
+        json={
+            "query": "help with immigration",
+            "jurisdiction": "ca",
+            "court": "fct",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "case_search_query_too_broad"
+    assert "add a court" in body["error"]["message"].lower()
 
 
 def test_case_search_returns_rate_limited_error_envelope(

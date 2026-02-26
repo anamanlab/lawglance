@@ -18,6 +18,9 @@ from immcad_api.schemas import (
     CaseSearchResult,
     ChatRequest,
     Citation,
+    LawyerCaseResearchRequest,
+    LawyerCaseResearchResponse,
+    LawyerCaseSupport,
 )
 from immcad_api.services.chat_service import ChatService
 from immcad_api.services.grounding import StaticGroundingAdapter, scaffold_grounded_citations
@@ -78,6 +81,23 @@ class _RecordingCaseSearchTool:
         if self.error is not None:
             raise self.error
         return self.response or CaseSearchResponse(results=[])
+
+
+@dataclass
+class _RecordingLawyerResearchService:
+    response: LawyerCaseResearchResponse | None = None
+    error: Exception | None = None
+    requests: list[LawyerCaseResearchRequest] = field(default_factory=list)
+
+    def research(self, request: LawyerCaseResearchRequest) -> LawyerCaseResearchResponse:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return self.response or LawyerCaseResearchResponse(
+            matter_profile={},
+            cases=[],
+            source_status={"official": "no_match", "canlii": "not_used"},
+        )
 
 
 def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
@@ -535,3 +555,95 @@ def test_chat_service_accepts_citations_from_configured_trusted_domains() -> Non
     assert response.fallback_used.reason is None
     assert payload.message not in response.answer
     assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_includes_auto_research_preview_for_case_law_queries() -> None:
+    lawyer_research_service = _RecordingLawyerResearchService(
+        response=LawyerCaseResearchResponse(
+            matter_profile={"target_court": "fc"},
+            cases=[
+                LawyerCaseSupport(
+                    case_id="2024-FC-101",
+                    title="Example v Canada",
+                    citation="2024 FC 101",
+                    source_id="FC_DECISIONS",
+                    court="FC",
+                    decision_date=date(2024, 1, 15),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2024101/index.do",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/2024101/1/document.do",
+                    pdf_status="available",
+                    pdf_reason=None,
+                    export_allowed=True,
+                    export_policy_reason=None,
+                    relevance_reason="Matches cited precedent anchor and court target.",
+                    summary=None,
+                )
+            ],
+            source_status={"official": "ok", "canlii": "not_used"},
+        )
+    )
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+        lawyer_research_service=lawyer_research_service,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Find case law precedent on inadmissibility.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-chat-preview-001")
+
+    assert len(lawyer_research_service.requests) == 1
+    preview_request = lawyer_research_service.requests[0]
+    assert preview_request.matter_summary == payload.message
+    assert response.research_preview is not None
+    assert response.research_preview.retrieval_mode == "auto"
+    assert response.research_preview.query == payload.message
+    assert len(response.research_preview.cases) == 1
+    assert response.research_preview.cases[0].citation == "2024 FC 101"
+
+
+def test_chat_service_skips_auto_research_preview_for_non_case_prompt() -> None:
+    lawyer_research_service = _RecordingLawyerResearchService()
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+        lawyer_research_service=lawyer_research_service,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize IRPA section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-chat-preview-002")
+
+    assert lawyer_research_service.requests == []
+    assert response.research_preview is None
+
+
+def test_chat_service_still_returns_chat_answer_when_research_preview_errors() -> None:
+    lawyer_research_service = _RecordingLawyerResearchService(
+        error=SourceUnavailableError("Case-law sources unavailable"),
+    )
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+        lawyer_research_service=lawyer_research_service,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Find case law precedent on inadmissibility.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-chat-preview-003")
+
+    assert len(lawyer_research_service.requests) == 1
+    assert response.answer == "Scaffold response"
+    assert response.research_preview is None

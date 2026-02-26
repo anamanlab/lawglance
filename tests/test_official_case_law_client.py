@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import time
 from typing import Any
 
@@ -330,6 +331,49 @@ def test_official_case_law_client_uses_citation_year_when_decision_date_missing(
 
     assert response.results
     assert response.results[0].decision_date.isoformat() == "2025-01-01"
+
+
+def test_official_case_law_client_filters_results_by_decision_date_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'>
+  <channel>
+    <item>
+      <title>Older FC decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/100001/index.do</link>
+      <description>Neutral citation 2023 FC 11</description>
+      <pubDate>Mon, 01 Jan 2023 00:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Recent FC decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/100002/index.do</link>
+      <description>Neutral citation 2025 FC 22</description>
+      <pubDate>Mon, 01 Apr 2025 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    responses = {
+        "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do": fc_feed,
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    request = CaseSearchRequest(
+        query="decision",
+        jurisdiction="ca",
+        court="fc",
+        limit=5,
+        decision_date_from=date(2024, 1, 1),
+    )
+    response = client.search_cases(request)
+
+    assert len(response.results) == 1
+    assert response.results[0].citation == "2025 FC 22"
 
 
 def test_official_case_law_client_avoids_substring_token_false_positives(

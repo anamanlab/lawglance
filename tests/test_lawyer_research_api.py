@@ -42,6 +42,12 @@ def test_lawyer_research_endpoint_returns_structured_cases(
             "matter_summary": "Federal Court appeal about procedural fairness and inadmissibility",
             "jurisdiction": "ca",
             "court": "fc",
+            "intake": {
+                "objective": "support_precedent",
+                "issue_tags": ["procedural_fairness"],
+                "anchor_citations": ["2026 FC 101"],
+                "procedural_posture": "appeal",
+            },
             "limit": 3,
         },
     )
@@ -53,6 +59,10 @@ def test_lawyer_research_endpoint_returns_structured_cases(
     assert body["cases"][0]["pdf_status"] == "available"
     assert body["cases"][0]["source_id"] == "FC_DECISIONS"
     assert body["source_status"]["official"] == "ok"
+    assert body["research_confidence"] in {"medium", "high"}
+    assert body["confidence_reasons"]
+    assert body["intake_completeness"] in {"low", "medium", "high"}
+    assert isinstance(body["intake_hints"], list)
     assert response.headers["x-trace-id"]
 
 
@@ -97,6 +107,26 @@ def test_lawyer_research_endpoint_rejects_broad_stopword_query() -> None:
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["policy_reason"] == "case_search_query_too_broad"
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_lawyer_research_endpoint_rejects_generic_query_with_refinement_hints() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "help with immigration",
+            "jurisdiction": "ca",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "case_search_query_too_broad"
+    assert "add a court" in body["error"]["message"].lower()
 
 
 def test_lawyer_research_endpoint_handles_long_matter_summary_without_internal_error(

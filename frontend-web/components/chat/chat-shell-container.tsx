@@ -34,6 +34,19 @@ export function ChatShell({
     relatedCasesStatus,
     caseSearchQuery,
     lastCaseSearchQuery,
+    relatedCasesRetrievalMode,
+    sourceStatus,
+    researchConfidence,
+    confidenceReasons,
+    intakeCompleteness,
+    intakeHints,
+    intakeObjective,
+    intakeTargetCourt,
+    intakeProceduralPosture,
+    intakeIssueTags,
+    intakeAnchorReference,
+    intakeDateFrom,
+    intakeDateTo,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -45,6 +58,13 @@ export function ChatShell({
     onRetryLastRequest,
     onQuickPromptClick,
     onCaseSearchQueryChange,
+    onIntakeObjectiveChange,
+    onIntakeTargetCourtChange,
+    onIntakeProceduralPostureChange,
+    onIntakeIssueTagsChange,
+    onIntakeAnchorReferenceChange,
+    onIntakeDateFromChange,
+    onIntakeDateToChange,
   } = useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanels });
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -80,6 +100,7 @@ export function ChatShell({
     () => buildStatusTone(supportContext?.status ?? null),
     [supportContext]
   );
+  const endpointLabel = apiBaseUrl.trim().replace(/\/+$/, "") || "same-origin /api";
 
   return (
     <>
@@ -173,6 +194,8 @@ export function ChatShell({
                   isExportSubmitting={isExportSubmitting}
                   caseSearchQuery={caseSearchQuery}
                   lastCaseSearchQuery={lastCaseSearchQuery}
+                  relatedCasesRetrievalMode={relatedCasesRetrievalMode}
+                  sourceStatus={sourceStatus}
                   onCaseSearchQueryChange={onCaseSearchQueryChange}
                   onSearch={() => {
                     void runRelatedCaseSearch();
@@ -180,9 +203,27 @@ export function ChatShell({
                   relatedCases={relatedCases}
                   matterProfile={matterProfile}
                   relatedCasesStatus={relatedCasesStatus}
+                  researchConfidence={researchConfidence}
+                  confidenceReasons={confidenceReasons}
+                  intakeCompleteness={intakeCompleteness}
+                  intakeHints={intakeHints}
                   onExportCase={(caseResult) => {
                     void runCaseExport(caseResult);
                   }}
+                  intakeObjective={intakeObjective}
+                  intakeTargetCourt={intakeTargetCourt}
+                  intakeProceduralPosture={intakeProceduralPosture}
+                  intakeIssueTags={intakeIssueTags}
+                  intakeAnchorReference={intakeAnchorReference}
+                  intakeDateFrom={intakeDateFrom}
+                  intakeDateTo={intakeDateTo}
+                  onIntakeObjectiveChange={onIntakeObjectiveChange}
+                  onIntakeTargetCourtChange={onIntakeTargetCourtChange}
+                  onIntakeProceduralPostureChange={onIntakeProceduralPostureChange}
+                  onIntakeIssueTagsChange={onIntakeIssueTagsChange}
+                  onIntakeAnchorReferenceChange={onIntakeAnchorReferenceChange}
+                  onIntakeDateFromChange={onIntakeDateFromChange}
+                  onIntakeDateToChange={onIntakeDateToChange}
                   showDiagnostics={showOperationalPanels}
                   statusToneClass={statusToneClass}
                   submissionPhase={submissionPhase}
@@ -192,7 +233,7 @@ export function ChatShell({
 
                 {showOperationalPanels ? (
                   <SupportContextPanel
-                    endpointLabel={apiBaseUrl.trim() || "same-origin /api"}
+                    endpointLabel={endpointLabel}
                     supportContext={supportContext}
                   />
                 ) : null}

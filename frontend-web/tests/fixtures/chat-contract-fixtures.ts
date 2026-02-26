@@ -25,6 +25,53 @@ export const CHAT_SUCCESS_RESPONSE: ChatResponsePayload = {
   ],
 };
 
+export const CHAT_SUCCESS_WITH_RESEARCH_PREVIEW: ChatResponsePayload = {
+  answer: "I found a relevant Federal Court precedent and included it in the case-law panel.",
+  confidence: "high",
+  disclaimer:
+    "IMMCAD provides Canadian immigration information only and does not provide legal advice or representation.",
+  fallback_used: {
+    used: false,
+    provider: null,
+    reason: null,
+  },
+  citations: [
+    {
+      source_id: "FC_DECISIONS",
+      title: "Federal Court decision feed",
+      url: "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do",
+      pin: "2024 FC 101",
+      snippet: "Relevant FC precedent surfaced for this chat answer.",
+    },
+  ],
+  research_preview: {
+    retrieval_mode: "auto",
+    query: "Need precedent on inadmissibility findings in Federal Court",
+    source_status: {
+      official: "ok",
+      canlii: "not_used",
+    },
+    cases: [
+      {
+        case_id: "2024-FC-101",
+        title: "Auto Preview Decision",
+        citation: "2024 FC 101",
+        source_id: "FC_DECISIONS",
+        court: "FC",
+        decision_date: "2024-03-01",
+        url: "https://example.test/cases/auto-preview",
+        document_url: "https://example.test/cases/auto-preview/document.pdf",
+        pdf_status: "available",
+        pdf_reason: null,
+        export_allowed: true,
+        export_policy_reason: "source_export_allowed",
+        relevance_reason: "Auto-selected because citation anchor and target court match.",
+        summary: null,
+      },
+    ],
+  },
+};
+
 export const CHAT_POLICY_REFUSAL_RESPONSE: ChatResponsePayload = {
   answer:
     "I can provide general information, but I cannot provide personalized legal representation strategy.",
@@ -85,6 +132,16 @@ export const LAWYER_RESEARCH_SUCCESS_RESPONSE: LawyerCaseResearchResponsePayload
     official: "ok",
     canlii: "not_used",
   },
+  research_confidence: "medium",
+  confidence_reasons: [
+    "Official court sources returned relevant case-law results.",
+    "Confidence could improve with structured intake (court, issues, anchors).",
+  ],
+  intake_completeness: "medium",
+  intake_hints: [
+    "Add target court to narrow precedents (FC/FCA/SCC).",
+    "Add citation or docket anchor when available.",
+  ],
 };
 
 export const SOURCE_UNAVAILABLE_ERROR = {

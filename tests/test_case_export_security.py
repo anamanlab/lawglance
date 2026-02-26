@@ -92,3 +92,48 @@ def test_case_export_blocks_untrusted_redirect_hosts_before_payload_download(
     body = export_response.json()
     assert body["error"]["code"] == "VALIDATION_ERROR"
     assert body["error"]["policy_reason"] == "export_redirect_url_not_allowed_for_source"
+
+
+def test_case_export_allows_fc_norma_lexum_document_url_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(create_app())
+    document_url = "https://norma.lexum.com/fc-cf/decisions/en/123456/1/document.do"
+    approval_response = client.post(
+        "/api/export/cases/approval",
+        json={
+            "source_id": "FC_DECISIONS",
+            "case_id": "FC-2026-123456",
+            "document_url": document_url,
+            "user_approved": True,
+        },
+    )
+    assert approval_response.status_code == 200
+    approval_token = approval_response.json()["approval_token"]
+
+    def _mock_stream(method: str, url: str, timeout: float, follow_redirects: bool):
+        del method, timeout, follow_redirects
+        return _MockStreamResponse(
+            status_code=200,
+            url=url,
+            headers={"content-type": "application/pdf"},
+            body=b"%PDF-1.7\nfake-pdf\n",
+        )
+
+    monkeypatch.setattr("immcad_api.api.routes.cases.httpx.stream", _mock_stream)
+
+    export_response = client.post(
+        "/api/export/cases",
+        json={
+            "source_id": "FC_DECISIONS",
+            "case_id": "FC-2026-123456",
+            "document_url": document_url,
+            "format": "pdf",
+            "user_approved": True,
+            "approval_token": approval_token,
+        },
+    )
+
+    assert export_response.status_code == 200
+    assert export_response.headers["content-type"].startswith("application/pdf")
+    assert export_response.content.startswith(b"%PDF-1.7")

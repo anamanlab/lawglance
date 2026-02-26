@@ -19,12 +19,20 @@ export type FallbackUsed = {
   reason: "timeout" | "rate_limit" | "policy_block" | "provider_error" | null;
 };
 
+export type ChatResearchPreviewPayload = {
+  retrieval_mode: "auto" | "manual";
+  query: string;
+  source_status: Record<string, string>;
+  cases: LawyerCaseSupport[];
+};
+
 export type ChatResponsePayload = {
   answer: string;
   citations: ChatCitation[];
   confidence: "low" | "medium" | "high";
   disclaimer: string;
   fallback_used: FallbackUsed;
+  research_preview?: ChatResearchPreviewPayload | null;
 };
 
 export type CaseSearchRequestPayload = {
@@ -55,7 +63,20 @@ export type LawyerCaseResearchRequestPayload = {
   matter_summary: string;
   jurisdiction?: string;
   court?: string;
+  intake?: LawyerResearchIntakePayload;
   limit?: number;
+};
+
+export type LawyerResearchIntakePayload = {
+  objective?: "support_precedent" | "distinguish_precedent" | "background_research";
+  target_court?: string;
+  procedural_posture?: "judicial_review" | "appeal" | "motion" | "application";
+  issue_tags?: string[];
+  anchor_citations?: string[];
+  anchor_dockets?: string[];
+  fact_keywords?: string[];
+  date_from?: string;
+  date_to?: string;
 };
 
 export type LawyerCaseSupport = {
@@ -79,6 +100,10 @@ export type LawyerCaseResearchResponsePayload = {
   matter_profile: Record<string, string | string[] | null>;
   cases: LawyerCaseSupport[];
   source_status: Record<string, string>;
+  research_confidence: "low" | "medium" | "high";
+  confidence_reasons: string[];
+  intake_completeness: "low" | "medium" | "high";
+  intake_hints: string[];
 };
 
 export type CaseExportRequestPayload = {

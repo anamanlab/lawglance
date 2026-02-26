@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createApiClient } from "@/lib/api-client";
-import type { LawyerCaseSupport } from "@/lib/api-client";
+import type { LawyerCaseSupport, LawyerResearchIntakePayload } from "@/lib/api-client";
+import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
 import { ASSISTANT_BOOTSTRAP_TEXT, ERROR_COPY } from "@/components/chat/constants";
-import type { ChatErrorState, ChatMessage, SubmissionPhase, SupportContext } from "@/components/chat/types";
+import type {
+  CaseRetrievalMode,
+  ChatErrorState,
+  ChatMessage,
+  IntakeCompleteness,
+  ResearchConfidence,
+  ResearchObjective,
+  ResearchPosture,
+  ResearchSourceStatus,
+  SubmissionPhase,
+  SupportContext,
+} from "@/components/chat/types";
 import { buildMessage, buildSessionId, nextMessageId } from "@/components/chat/utils";
 
 function buildCaseExportUnavailableMessage(policyReason?: string | null): string {
@@ -44,6 +56,37 @@ function buildCaseSearchErrorStatusMessage(params: {
   return "Case-law search is temporarily unavailable. Please try again shortly.";
 }
 
+function parseCommaSeparatedValues(value: string, maxItems = 8): string[] {
+  const normalized = value
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const deduped = Array.from(new Set(normalized.map((item) => item.toLowerCase()))).map(
+    (key) => normalized.find((item) => item.toLowerCase() === key) ?? key
+  );
+  return deduped.slice(0, maxItems);
+}
+
+function normalizeIssueTag(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function splitAnchorReferences(value: string): { citations: string[]; dockets: string[] } {
+  const entries = parseCommaSeparatedValues(value, 10);
+  const citations = entries.filter((entry) =>
+    /\b\d{4}\s+(?:fc|fca|caf|scc|irb)\s+\d+\b/i.test(entry)
+  );
+  const dockets = entries
+    .filter((entry) => /^[A-Za-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}$/.test(entry))
+    .map((entry) => entry.replace(/\s*-\s*/g, "-"));
+  return { citations, dockets };
+}
+
+const BROAD_QUERY_INTAKE_GATE_MESSAGE =
+  "Add at least two intake details (objective, target court, issue tags, or citation/docket anchor) before running broad case-law research queries.";
+const INVALID_DECISION_DATE_RANGE_MESSAGE =
+  "Decision date range is invalid. 'From' date must be earlier than or equal to 'to' date.";
+
 export interface UseChatLogicProps {
   apiBaseUrl: string;
   legalDisclaimer: string;
@@ -68,6 +111,19 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [matterProfile, setMatterProfile] = useState<Record<string, string | string[] | null> | undefined>();
   const [caseSearchQuery, setCaseSearchQuery] = useState("");
   const [lastCaseSearchQuery, setLastCaseSearchQuery] = useState<string | null>(null);
+  const [relatedCasesRetrievalMode, setRelatedCasesRetrievalMode] = useState<CaseRetrievalMode>(null);
+  const [sourceStatus, setSourceStatus] = useState<ResearchSourceStatus>(null);
+  const [researchConfidence, setResearchConfidence] = useState<ResearchConfidence>(null);
+  const [confidenceReasons, setConfidenceReasons] = useState<string[]>([]);
+  const [intakeCompleteness, setIntakeCompleteness] = useState<IntakeCompleteness>(null);
+  const [intakeHints, setIntakeHints] = useState<string[]>([]);
+  const [intakeObjective, setIntakeObjective] = useState<ResearchObjective>("");
+  const [intakeTargetCourt, setIntakeTargetCourt] = useState("");
+  const [intakeProceduralPosture, setIntakeProceduralPosture] = useState<ResearchPosture>("");
+  const [intakeIssueTags, setIntakeIssueTags] = useState("");
+  const [intakeAnchorReference, setIntakeAnchorReference] = useState("");
+  const [intakeDateFrom, setIntakeDateFrom] = useState("");
+  const [intakeDateTo, setIntakeDateTo] = useState("");
   const [exportingCaseId, setExportingCaseId] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
   const [chatPendingElapsedSeconds, setChatPendingElapsedSeconds] = useState(0);
@@ -130,6 +186,12 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setMatterProfile(undefined);
       setRelatedCasesStatus("");
       setLastCaseSearchQuery(null);
+      setRelatedCasesRetrievalMode(null);
+      setSourceStatus(null);
+      setResearchConfidence(null);
+      setConfidenceReasons([]);
+      setIntakeCompleteness(null);
+      setIntakeHints([]);
       setExportingCaseId(null);
       setChatPendingElapsedSeconds(0);
       setIsChatSubmitting(true);
@@ -193,7 +255,36 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           return;
         }
 
+        const researchPreview = chatResponse.research_preview;
+        if (researchPreview) {
+          const previewQuery = researchPreview.query.trim() || promptToSubmit;
+          setCaseSearchQuery(previewQuery);
+          setLastCaseSearchQuery(previewQuery);
+          setRelatedCasesRetrievalMode(researchPreview.retrieval_mode ?? "auto");
+          setSourceStatus(researchPreview.source_status ?? null);
+          setResearchConfidence(null);
+          setConfidenceReasons([]);
+          setIntakeCompleteness(null);
+          setIntakeHints([]);
+
+          if (researchPreview.cases.length > 0) {
+            setRelatedCases(researchPreview.cases);
+            setRelatedCasesStatus(
+              "Auto-retrieved case-law precedents are shown below. Refine the query and run manual search if needed."
+            );
+            return;
+          }
+
+          const noPreviewMatchMessage =
+            researchPreview.source_status.official === "unavailable"
+              ? "Official case-law sources are temporarily unavailable. Please retry shortly."
+              : "No matching case-law records were auto-retrieved for this answer. You can run a manual search.";
+          setRelatedCasesStatus(noPreviewMatchMessage);
+          return;
+        }
+
         setCaseSearchQuery(promptToSubmit);
+        setSourceStatus(null);
         setRelatedCasesStatus("Ready to find related Canadian case law.");
       } finally {
         setIsChatSubmitting(false);
@@ -210,16 +301,75 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       return;
     }
 
+    const issueTags = parseCommaSeparatedValues(intakeIssueTags, 8)
+      .map(normalizeIssueTag)
+      .filter(Boolean);
+    const { citations: anchorCitations, dockets: anchorDockets } =
+      splitAnchorReferences(intakeAnchorReference);
+    const normalizedDateFrom = intakeDateFrom.trim();
+    const normalizedDateTo = intakeDateTo.trim();
+    if (normalizedDateFrom && normalizedDateTo && normalizedDateFrom > normalizedDateTo) {
+      setRelatedCasesStatus(INVALID_DECISION_DATE_RANGE_MESSAGE);
+      return;
+    }
+    const intakeSignalCount = [
+      intakeObjective ? 1 : 0,
+      intakeTargetCourt.trim() ? 1 : 0,
+      intakeProceduralPosture ? 1 : 0,
+      issueTags.length > 0 ? 1 : 0,
+      anchorCitations.length > 0 || anchorDockets.length > 0 ? 1 : 0,
+      normalizedDateFrom || normalizedDateTo ? 1 : 0,
+    ].reduce((total, next) => total + next, 0);
+    const lowSpecificityQuery = isLowSpecificityCaseQuery(query);
+    if (lowSpecificityQuery && intakeSignalCount < 2) {
+      setRelatedCasesStatus(BROAD_QUERY_INTAKE_GATE_MESSAGE);
+      return;
+    }
+
+    const intakePayload: LawyerResearchIntakePayload | undefined =
+      intakeObjective ||
+      intakeTargetCourt.trim() ||
+      intakeProceduralPosture ||
+      issueTags.length > 0 ||
+      anchorCitations.length > 0 ||
+      anchorDockets.length > 0 ||
+      normalizedDateFrom ||
+      normalizedDateTo
+        ? {
+            objective: intakeObjective || undefined,
+            target_court: intakeTargetCourt.trim() || undefined,
+            procedural_posture: intakeProceduralPosture || undefined,
+            issue_tags: issueTags.length ? issueTags : undefined,
+            anchor_citations: anchorCitations.length ? anchorCitations : undefined,
+            anchor_dockets: anchorDockets.length ? anchorDockets : undefined,
+            date_from: normalizedDateFrom || undefined,
+            date_to: normalizedDateTo || undefined,
+          }
+        : undefined;
+
+    const shouldPromptForIntake = lowSpecificityQuery && intakeSignalCount < 3;
+
     setIsCaseSearchSubmitting(true);
     setSubmissionPhase("cases");
     setExportingCaseId(null);
-    setRelatedCasesStatus("Running grounded lawyer case research...");
+    setSourceStatus(null);
+    setResearchConfidence(null);
+    setConfidenceReasons([]);
+    setIntakeCompleteness(null);
+    setIntakeHints([]);
+    setRelatedCasesStatus(
+      shouldPromptForIntake
+        ? "Running grounded lawyer case research... Add intake details next to improve confidence."
+        : "Running grounded lawyer case research..."
+    );
 
     try {
       const caseSearchResult = await apiClient.researchLawyerCases({
         session_id: sessionIdRef.current,
         matter_summary: query,
         jurisdiction: "ca",
+        court: intakeTargetCourt.trim() || undefined,
+        intake: intakePayload,
         limit: 5,
       });
 
@@ -245,6 +395,12 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setRelatedCases(caseSearchResult.data.cases);
       setMatterProfile(caseSearchResult.data.matter_profile);
       setLastCaseSearchQuery(query);
+      setRelatedCasesRetrievalMode("manual");
+      setSourceStatus(caseSearchResult.data.source_status ?? null);
+      setResearchConfidence(caseSearchResult.data.research_confidence);
+      setConfidenceReasons(caseSearchResult.data.confidence_reasons ?? []);
+      setIntakeCompleteness(caseSearchResult.data.intake_completeness);
+      setIntakeHints(caseSearchResult.data.intake_hints ?? []);
       const noMatchMessage =
         caseSearchResult.data.source_status.official === "unavailable"
           ? "Official case-law sources are temporarily unavailable. Please retry shortly."
@@ -260,7 +416,19 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setIsCaseSearchSubmitting(false);
       setSubmissionPhase("idle");
     }
-  }, [apiClient, caseSearchQuery, isSubmitting, showOperationalPanels]);
+  }, [
+    apiClient,
+    caseSearchQuery,
+    intakeAnchorReference,
+    intakeDateFrom,
+    intakeDateTo,
+    intakeIssueTags,
+    intakeObjective,
+    intakeProceduralPosture,
+    intakeTargetCourt,
+    isSubmitting,
+    showOperationalPanels,
+  ]);
 
   const runCaseExport = useCallback(
     async (caseResult: LawyerCaseSupport): Promise<void> => {
@@ -444,6 +612,34 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     [lastCaseSearchQuery, relatedCases.length]
   );
 
+  const onIntakeObjectiveChange = useCallback((value: ResearchObjective): void => {
+    setIntakeObjective(value);
+  }, []);
+
+  const onIntakeTargetCourtChange = useCallback((value: string): void => {
+    setIntakeTargetCourt(value);
+  }, []);
+
+  const onIntakeProceduralPostureChange = useCallback((value: ResearchPosture): void => {
+    setIntakeProceduralPosture(value);
+  }, []);
+
+  const onIntakeIssueTagsChange = useCallback((value: string): void => {
+    setIntakeIssueTags(value);
+  }, []);
+
+  const onIntakeAnchorReferenceChange = useCallback((value: string): void => {
+    setIntakeAnchorReference(value);
+  }, []);
+
+  const onIntakeDateFromChange = useCallback((value: string): void => {
+    setIntakeDateFrom(value);
+  }, []);
+
+  const onIntakeDateToChange = useCallback((value: string): void => {
+    setIntakeDateTo(value);
+  }, []);
+
   return {
     sessionId: sessionIdRef.current,
     textareaRef,
@@ -462,6 +658,19 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     relatedCasesStatus,
     caseSearchQuery,
     lastCaseSearchQuery,
+    relatedCasesRetrievalMode,
+    sourceStatus,
+    researchConfidence,
+    confidenceReasons,
+    intakeCompleteness,
+    intakeHints,
+    intakeObjective,
+    intakeTargetCourt,
+    intakeProceduralPosture,
+    intakeIssueTags,
+    intakeAnchorReference,
+    intakeDateFrom,
+    intakeDateTo,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -474,5 +683,12 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     onRetryLastRequest,
     onQuickPromptClick,
     onCaseSearchQueryChange,
+    onIntakeObjectiveChange,
+    onIntakeTargetCourtChange,
+    onIntakeProceduralPostureChange,
+    onIntakeIssueTagsChange,
+    onIntakeAnchorReferenceChange,
+    onIntakeDateFromChange,
+    onIntakeDateToChange,
   };
 }

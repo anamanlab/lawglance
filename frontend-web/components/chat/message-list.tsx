@@ -147,6 +147,12 @@ export function MessageList({
   return (
     <section className="imm-fade-up" style={{ animationDelay: "140ms" }}>
       <div className="relative z-10">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
+            Conversation answers
+          </p>
+          <span className="imm-pill imm-pill-neutral text-[10px]">Chat workspace</span>
+        </div>
         <div
           aria-busy={isChatSubmitting}
           aria-live="polite"

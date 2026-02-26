@@ -84,6 +84,10 @@ def test_orchestrator_returns_structured_source_status_when_sources_unavailable(
     assert response.cases == []
     assert response.source_status["official"] == "unavailable"
     assert response.source_status["canlii"] == "unavailable"
+    assert response.research_confidence == "low"
+    assert response.confidence_reasons
+    assert response.intake_completeness == "low"
+    assert response.intake_hints
 
 
 def test_orchestrator_marks_pdf_unavailable_when_source_metadata_not_loaded() -> None:
@@ -95,6 +99,10 @@ def test_orchestrator_marks_pdf_unavailable_when_source_metadata_not_loaded() ->
     assert response.cases[0].pdf_reason == "document_url_unverified_source"
     assert response.cases[0].export_allowed is None
     assert response.cases[0].export_policy_reason is None
+    assert response.research_confidence in {"medium", "high"}
+    assert response.confidence_reasons
+    assert response.intake_completeness in {"low", "medium", "high"}
+    assert response.intake_hints
 
 
 def test_orchestrator_does_not_mark_unknown_sources_as_official() -> None:
@@ -163,3 +171,156 @@ def test_orchestrator_uses_registry_for_official_source_classification() -> None
     assert response.cases
     assert response.source_status["official"] == "ok"
     assert response.source_status["canlii"] == "not_used"
+
+
+def test_orchestrator_ranking_prioritizes_exact_citation_match_over_token_density() -> None:
+    class _CitationRankingCaseSearchService:
+        def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+            del request
+            return CaseSearchResponse(
+                results=[
+                    CaseSearchResult(
+                        case_id="CIT-2024-101",
+                        title="Reference decision",
+                        citation="2024 FC 101",
+                        decision_date=date(2024, 5, 1),
+                        url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2024101/index.do",
+                        source_id="FC_DECISIONS",
+                        document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/2024101/1/document.do",
+                    ),
+                    CaseSearchResult(
+                        case_id="TOKEN-2026-999",
+                        title="Inadmissibility precedent guidance decision",
+                        citation="2026 FC 999",
+                        decision_date=date(2026, 1, 15),
+                        url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2026999/index.do",
+                        source_id="FC_DECISIONS",
+                        document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/2026999/1/document.do",
+                    ),
+                ]
+            )
+
+    service = LawyerCaseResearchService(case_search_service=_CitationRankingCaseSearchService())
+    request = LawyerCaseResearchRequest(
+        session_id="session-123456",
+        matter_summary="Need precedent guidance based on 2024 FC 101 inadmissibility decision",
+        jurisdiction="ca",
+        court="fc",
+        limit=2,
+    )
+
+    response = service.research(request)
+
+    assert response.cases
+    assert response.cases[0].citation == "2024 FC 101"
+    assert response.research_confidence in {"medium", "high"}
+    assert response.intake_completeness in {"low", "medium", "high"}
+
+
+def test_orchestrator_uses_structured_intake_for_anchor_confidence_reason() -> None:
+    service = LawyerCaseResearchService(case_search_service=_MockCaseSearchService())
+    request = LawyerCaseResearchRequest(
+        session_id="session-123456",
+        matter_summary="Need support precedent for inadmissibility in Federal Court",
+        jurisdiction="ca",
+        court="fc",
+        intake={
+            "objective": "support_precedent",
+            "anchor_citations": ["2026 FC 101"],
+            "issue_tags": ["inadmissibility"],
+            "procedural_posture": "judicial_review",
+        },
+        limit=2,
+    )
+
+    response = service.research(request)
+
+    assert response.cases
+    assert response.research_confidence in {"medium", "high"}
+    assert any("anchor" in reason.lower() for reason in response.confidence_reasons)
+    assert response.intake_completeness in {"medium", "high"}
+    assert not any("target court" in hint.lower() for hint in response.intake_hints)
+
+
+def test_orchestrator_returns_missing_intake_hints_for_sparse_input() -> None:
+    service = LawyerCaseResearchService(case_search_service=_MockCaseSearchService())
+    request = LawyerCaseResearchRequest(
+        session_id="session-123456",
+        matter_summary="Need precedent support for procedural fairness",
+        jurisdiction="ca",
+        limit=2,
+    )
+
+    response = service.research(request)
+
+    assert response.cases
+    assert response.intake_completeness == "low"
+    assert any("target court" in hint.lower() for hint in response.intake_hints)
+
+
+def test_orchestrator_passes_intake_date_range_to_case_search_requests() -> None:
+    search_service = _MockCaseSearchService()
+    service = LawyerCaseResearchService(case_search_service=search_service)
+    request = LawyerCaseResearchRequest(
+        session_id="session-123456",
+        matter_summary="Need precedent support for inadmissibility",
+        jurisdiction="ca",
+        intake={
+            "target_court": "fc",
+            "date_from": date(2024, 1, 1),
+            "date_to": date(2025, 12, 31),
+        },
+        limit=2,
+    )
+
+    service.research(request)
+
+    assert search_service.requests
+    assert all(search_request.decision_date_from == date(2024, 1, 1) for search_request in search_service.requests)
+    assert all(search_request.decision_date_to == date(2025, 12, 31) for search_request in search_service.requests)
+
+
+def test_orchestrator_filters_results_outside_requested_intake_date_range() -> None:
+    class _DateRangeCaseSearchService:
+        def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+            del request
+            return CaseSearchResponse(
+                results=[
+                    CaseSearchResult(
+                        case_id="old-1",
+                        title="Old case",
+                        citation="2023 FC 1",
+                        decision_date=date(2023, 5, 1),
+                        url="https://example.test/old",
+                        source_id="FC_DECISIONS",
+                        document_url="https://example.test/old.pdf",
+                    ),
+                    CaseSearchResult(
+                        case_id="new-1",
+                        title="New case",
+                        citation="2025 FC 2",
+                        decision_date=date(2025, 5, 1),
+                        url="https://example.test/new",
+                        source_id="FC_DECISIONS",
+                        document_url="https://example.test/new.pdf",
+                    ),
+                ]
+            )
+
+    service = LawyerCaseResearchService(case_search_service=_DateRangeCaseSearchService())
+    request = LawyerCaseResearchRequest(
+        session_id="session-123456",
+        matter_summary="Need precedent support for inadmissibility",
+        jurisdiction="ca",
+        intake={
+            "target_court": "fc",
+            "date_from": date(2024, 1, 1),
+            "date_to": date(2025, 12, 31),
+        },
+        limit=5,
+    )
+
+    response = service.research(request)
+
+    assert len(response.cases) == 1
+    assert response.cases[0].citation == "2025 FC 2"

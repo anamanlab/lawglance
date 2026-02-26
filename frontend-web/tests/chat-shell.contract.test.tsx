@@ -8,6 +8,7 @@ import {
   CASE_SEARCH_TOO_BROAD_ERROR,
   CHAT_POLICY_REFUSAL_RESPONSE,
   CHAT_SUCCESS_RESPONSE,
+  CHAT_SUCCESS_WITH_RESEARCH_PREVIEW,
   EXPORT_POLICY_BLOCKED_ERROR,
   LAWYER_RESEARCH_SUCCESS_RESPONSE,
   SOURCE_UNAVAILABLE_ERROR,
@@ -104,7 +105,19 @@ describe("chat shell contract behavior", () => {
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
 
     expect(await screen.findByText("Sample Tribunal Decision")).toBeTruthy();
+    expect(screen.getByText("Manual case search")).toBeTruthy();
+    expect(screen.getByText("Source transparency")).toBeTruthy();
+    expect(
+      screen.getByText("Official courts: available | CanLII: not used")
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Results by source: Official 1, CanLII 0, Other 0")
+    ).toBeTruthy();
     expect(screen.getByText("PDF available")).toBeTruthy();
+    expect(screen.getByText("Intake quality: MEDIUM")).toBeTruthy();
+    expect(
+      screen.getByText("Add target court to narrow precedents (FC/FCA/SCC).")
+    ).toBeTruthy();
     expect(
       screen.getByText(/appears relevant for FC precedent support/i)
     ).toBeTruthy();
@@ -113,6 +126,42 @@ describe("chat shell contract behavior", () => {
     ).toBeTruthy();
     expect(screen.getByText("Trace ID: trace-case-success")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("hydrates case-law panel from chat auto research preview before manual search", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_WITH_RESEARCH_PREVIEW, {
+        headers: { "x-trace-id": "trace-chat-preview" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Need precedent on inadmissibility findings in Federal Court"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_WITH_RESEARCH_PREVIEW.answer)).toBeTruthy();
+    expect(await screen.findByText("Auto Preview Decision")).toBeTruthy();
+    expect(screen.getByText("Auto-retrieved for this answer")).toBeTruthy();
+    expect(
+      screen.getByText("Official courts: available | CanLII: not used")
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Showing 1 related case for: "Need precedent on inadmissibility findings in Federal Court"'
+      )
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("allows editing the case-search query before running related case lookup", async () => {
@@ -159,6 +208,138 @@ describe("chat shell contract behavior", () => {
     expect(secondCallBody).toContain("Federal Court inadmissibility decision");
   });
 
+  it("collects structured intake fields and renders research confidence details", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_profile: {
+              issue_tags: ["procedural_fairness", "inadmissibility"],
+              target_court: "fca",
+              procedural_posture: "appeal",
+            },
+            cases: [
+              {
+                case_id: "fca-77",
+                title: "Example FCA Appeal Decision",
+                citation: "2024 FCA 77",
+                source_id: "FCA_DECISIONS",
+                court: "FCA",
+                decision_date: "2024-06-10",
+                url: "https://example.test/cases/fca-77",
+                document_url: "https://example.test/cases/fca-77/document.pdf",
+                pdf_status: "available",
+                pdf_reason: "document_url_trusted",
+                export_allowed: true,
+                export_policy_reason: "source_export_allowed",
+                relevance_reason: "Anchored to the provided citation and appeal posture.",
+              },
+            ],
+            source_status: {
+              official: "ok",
+              canlii: "not_used",
+            },
+            research_confidence: "high",
+            confidence_reasons: [
+              "Official court sources returned aligned precedent results.",
+              "At least one top result matches a citation/docket anchor.",
+            ],
+            intake_completeness: "high",
+            intake_hints: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-case-success" },
+          }
+        )
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Need precedents for procedural fairness appeals"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.selectOptions(screen.getByLabelText("Research objective"), "support_precedent");
+    await user.selectOptions(screen.getByLabelText("Target court"), "fca");
+    await user.type(
+      screen.getByLabelText("Issue tags"),
+      "procedural_fairness, inadmissibility"
+    );
+    await user.type(screen.getByLabelText("Citation or docket anchor"), "2024 FCA 77");
+    await user.type(screen.getByLabelText("Decision date from"), "2024-01-01");
+    await user.type(screen.getByLabelText("Decision date to"), "2025-12-31");
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCall = fetchMock.mock.calls[1];
+    const secondCallInit = secondCall?.[1] as RequestInit | undefined;
+    const secondCallBody =
+      typeof secondCallInit?.body === "string" ? secondCallInit.body : "";
+    expect(secondCallBody).toContain('"objective":"support_precedent"');
+    expect(secondCallBody).toContain('"target_court":"fca"');
+    expect(secondCallBody).toContain('"issue_tags":["procedural_fairness","inadmissibility"]');
+    expect(secondCallBody).toContain('"anchor_citations":["2024 FCA 77"]');
+    expect(secondCallBody).toContain('"date_from":"2024-01-01"');
+    expect(secondCallBody).toContain('"date_to":"2025-12-31"');
+    expect(await screen.findByText("Research confidence: HIGH")).toBeTruthy();
+    expect(screen.getByText("Intake quality: HIGH")).toBeTruthy();
+    expect(
+      screen.getByText("Official court sources returned aligned precedent results.")
+    ).toBeTruthy();
+  });
+
+  it("blocks manual case-law search when intake decision-date range is invalid", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Need precedent support for inadmissibility in Federal Court"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.type(screen.getByLabelText("Decision date from"), "2025-12-31");
+    await user.type(screen.getByLabelText("Decision date to"), "2024-01-01");
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(
+      await screen.findByText(
+        "Decision date range is invalid. 'From' date must be earlier than or equal to 'to' date."
+      )
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("renders policy refusal UX without case-search request", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       jsonResponse(CHAT_POLICY_REFUSAL_RESPONSE, {
@@ -194,7 +375,44 @@ describe("chat shell contract behavior", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows actionable query guidance when case search query is too broad", async () => {
+  it("requires structured intake details before broad manual case-law search", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find case law"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    const caseQueryInput = screen.getByLabelText("Case search query");
+    await user.clear(caseQueryInput);
+    await user.type(caseQueryInput, "to be");
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(
+      await screen.findByText(
+        "Add at least two intake details (objective, target court, issue tags, or citation/docket anchor) before running broad case-law research queries."
+      )
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows actionable backend query guidance when broad query includes intake", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         jsonResponse(CHAT_SUCCESS_RESPONSE, {
@@ -226,13 +444,17 @@ describe("chat shell contract behavior", () => {
     const caseQueryInput = screen.getByLabelText("Case search query");
     await user.clear(caseQueryInput);
     await user.type(caseQueryInput, "to be");
+    await user.selectOptions(screen.getByLabelText("Research objective"), "support_precedent");
+    await user.selectOptions(screen.getByLabelText("Target court"), "fc");
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
 
     expect(
-      await screen.findByText(
-        "Case-law query is too broad. Add specific terms such as program, issue, court, or citation."
-      )
-    ).toBeTruthy();
+      (
+        await screen.findAllByText(
+          "Case-law query is too broad. Add specific terms such as program, issue, court, or citation."
+        )
+      ).length
+    ).toBeGreaterThan(0);
   });
 
   it("renders structured error copy and mismatch warning when traces differ", async () => {
@@ -415,7 +637,9 @@ describe("chat shell contract behavior", () => {
     const exportButton = screen.getByRole("button", { name: "Export PDF" });
     expect((exportButton as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.getByText("Export unavailable for this source under policy.")
+      screen.getByText(
+        "Online case review is still available. Direct PDF export is unavailable for this source under policy."
+      )
     ).toBeTruthy();
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -563,8 +787,9 @@ describe("chat shell contract behavior", () => {
     await screen.findByText("Sample Tribunal Decision");
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
 
-    expect(
-      await screen.findByText("Case export was blocked by source policy for this source.")
-    ).toBeTruthy();
+    const policyBlockedMessages = await screen.findAllByText(
+      "Case export was blocked by source policy for this source."
+    );
+    expect(policyBlockedMessages.length).toBeGreaterThan(0);
   });
 });

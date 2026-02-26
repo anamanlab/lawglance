@@ -35,7 +35,7 @@ describe("home page rollout", () => {
 
     render(<HomePage />);
 
-    expect(screen.getByText("Canadian Immigration Information Assistant")).toBeTruthy();
+    expect(screen.getByText("Canadian Immigration Assistant")).toBeTruthy();
     expect(
       screen.getByText(
         "Understand official immigration pathways, requirements, and next steps with grounded information."

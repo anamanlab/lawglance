@@ -30,3 +30,12 @@ def test_resolve_pdf_status_marks_available_for_trusted_source_host() -> None:
     )
     assert status == "available"
     assert reason == "document_url_trusted"
+
+
+def test_resolve_pdf_status_marks_available_for_fc_norma_lexum_alias_host() -> None:
+    status, reason = resolve_pdf_status_with_reason(
+        document_url="https://norma.lexum.com/fc-cf/decisions/en/123456/1/document.do",
+        source_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en",
+    )
+    assert status == "available"
+    assert reason == "document_url_trusted"

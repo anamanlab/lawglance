@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 import re
 from typing import Protocol
 
@@ -29,6 +30,14 @@ _CANLII_SOURCE_PREFIX = "CANLII"
 _FALLBACK_OFFICIAL_SOURCE_IDS = frozenset(
     {"FC_DECISIONS", "FCA_DECISIONS", "SCC_DECISIONS"}
 )
+_CITATION_ANCHOR_PATTERN = re.compile(
+    r"\b(?:19|20)\d{2}\s+(?:SCC|FCA|CAF|FC)\s+\d+\b",
+    re.IGNORECASE,
+)
+_DOCKET_ANCHOR_PATTERN = re.compile(
+    r"\b[a-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}\b",
+    re.IGNORECASE,
+)
 
 
 class _CaseSearchProtocol(Protocol):
@@ -48,6 +57,15 @@ def _normalize_case_search_query(query: str) -> str | None:
     truncated = normalized[:_MAX_CASE_SEARCH_QUERY_LENGTH]
     trimmed = truncated.rsplit(" ", 1)[0].strip()
     return trimmed or truncated.strip()
+
+
+def _extract_reference_anchors(text: str) -> set[str]:
+    anchors: set[str] = set()
+    for match in _CITATION_ANCHOR_PATTERN.finditer(text):
+        anchors.add(re.sub(r"\s+", " ", match.group(0).strip().lower()))
+    for match in _DOCKET_ANCHOR_PATTERN.finditer(text):
+        anchors.add(re.sub(r"\s*-\s*", "-", match.group(0).strip().lower()))
+    return anchors
 
 
 class LawyerCaseResearchService:
@@ -159,8 +177,208 @@ class LawyerCaseResearchService:
         ):
             score += 3
 
+        profile_anchors = matter_profile.get("anchor_references")
+        if isinstance(profile_anchors, list) and profile_anchors:
+            reference_anchors = {
+                re.sub(r"\s*-\s*", "-", re.sub(r"\s+", " ", anchor.strip().lower()))
+                for anchor in profile_anchors
+                if isinstance(anchor, str) and anchor.strip()
+            }
+        else:
+            reference_anchors = _extract_reference_anchors(matter_summary.lower())
+        if reference_anchors:
+            normalized_citation = re.sub(r"\s+", " ", case_result.citation.strip().lower())
+            normalized_case_id = re.sub(r"\s*-\s*", "-", case_result.case_id.strip().lower())
+            if any(
+                anchor == normalized_case_id or anchor in normalized_citation
+                for anchor in reference_anchors
+            ):
+                score += 10
+
         score += max(0, case_result.decision_date.year - 2000) // 2
         return score
+
+    def _compute_research_confidence(
+        self,
+        *,
+        cases: list[LawyerCaseSupport],
+        source_status: dict[str, str],
+        matter_summary: str,
+        matter_profile: dict[str, list[str] | str | None],
+        intake_payload: dict[str, object] | None,
+    ) -> tuple[str, list[str]]:
+        reasons: list[str] = []
+        if not cases:
+            if source_status.get("official") == "unavailable":
+                reasons.append("Official court sources were unavailable during retrieval.")
+            else:
+                reasons.append(
+                    "No matching precedents were found for the provided summary and intake."
+                )
+            return "low", reasons
+
+        score = 0
+        if source_status.get("official") == "ok":
+            score += 2
+            reasons.append("Official court sources returned relevant case-law results.")
+        elif source_status.get("official") == "unavailable":
+            reasons.append(
+                "Official court sources were unavailable; confidence is constrained."
+            )
+
+        if source_status.get("canlii") == "used":
+            reasons.append("Some matches were sourced from CanLII metadata search results.")
+
+        top_cases = cases[:3]
+        top_case_anchors = {
+            re.sub(r"\s+", " ", case.citation.strip().lower()) for case in top_cases
+        } | {
+            re.sub(r"\s*-\s*", "-", case.case_id.strip().lower()) for case in top_cases
+        }
+        profile_anchors = matter_profile.get("anchor_references")
+        anchor_references = (
+            {
+                re.sub(r"\s*-\s*", "-", re.sub(r"\s+", " ", anchor.strip().lower()))
+                for anchor in profile_anchors
+                if isinstance(anchor, str) and anchor.strip()
+            }
+            if isinstance(profile_anchors, list)
+            else _extract_reference_anchors(matter_summary.lower())
+        )
+        if anchor_references and any(
+            anchor in top_anchor or anchor == top_anchor
+            for anchor in anchor_references
+            for top_anchor in top_case_anchors
+        ):
+            score += 2
+            reasons.append("At least one top result matches a citation/docket anchor.")
+
+        structured_intake_fields = 0
+        if isinstance(intake_payload, dict):
+            if intake_payload.get("objective"):
+                structured_intake_fields += 1
+            if intake_payload.get("target_court"):
+                structured_intake_fields += 1
+            if intake_payload.get("procedural_posture"):
+                structured_intake_fields += 1
+            if intake_payload.get("issue_tags"):
+                structured_intake_fields += 1
+            if intake_payload.get("anchor_citations") or intake_payload.get("anchor_dockets"):
+                structured_intake_fields += 1
+            if intake_payload.get("fact_keywords"):
+                structured_intake_fields += 1
+            if intake_payload.get("date_from") or intake_payload.get("date_to"):
+                structured_intake_fields += 1
+        if structured_intake_fields >= 2:
+            score += 1
+            reasons.append("Structured intake details improved retrieval specificity.")
+        elif structured_intake_fields == 0:
+            reasons.append(
+                "Confidence could improve with structured intake (court, issues, anchors)."
+            )
+
+        if len(cases) >= 3:
+            score += 1
+            reasons.append("Multiple supporting results were found for cross-checking.")
+
+        target_court = matter_profile.get("target_court")
+        if isinstance(target_court, str) and target_court:
+            target_label = target_court.upper()
+            if any((case.court or "").upper() == target_label for case in top_cases):
+                score += 1
+                reasons.append(f"Top results align with target court focus ({target_label}).")
+
+        if score >= 6:
+            confidence = "high"
+        elif score >= 3:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        if not reasons:
+            reasons.append("Confidence based on available retrieval signals.")
+        return confidence, reasons
+
+    def _compute_intake_feedback(
+        self,
+        *,
+        request: LawyerCaseResearchRequest,
+        matter_summary: str,
+        intake_payload: dict[str, object] | None,
+    ) -> tuple[str, list[str]]:
+        hints: list[str] = []
+        score = 0
+        has_target_court = bool(request.court and request.court.strip())
+        has_objective = False
+        has_posture = False
+        has_issue_tags = False
+        has_anchor = bool(_extract_reference_anchors(matter_summary.lower()))
+        has_fact_keywords = False
+
+        if isinstance(intake_payload, dict):
+            has_target_court = has_target_court or bool(
+                isinstance(intake_payload.get("target_court"), str)
+                and str(intake_payload.get("target_court")).strip()
+            )
+            has_objective = bool(
+                isinstance(intake_payload.get("objective"), str)
+                and str(intake_payload.get("objective")).strip()
+            )
+            has_posture = bool(
+                isinstance(intake_payload.get("procedural_posture"), str)
+                and str(intake_payload.get("procedural_posture")).strip()
+            )
+            issue_tags = intake_payload.get("issue_tags")
+            has_issue_tags = isinstance(issue_tags, list) and len(issue_tags) > 0
+            anchors = intake_payload.get("anchor_citations")
+            dockets = intake_payload.get("anchor_dockets")
+            has_anchor = has_anchor or (
+                (isinstance(anchors, list) and len(anchors) > 0)
+                or (isinstance(dockets, list) and len(dockets) > 0)
+            )
+            fact_keywords = intake_payload.get("fact_keywords")
+            has_fact_keywords = isinstance(fact_keywords, list) and len(fact_keywords) > 0
+
+        if has_target_court:
+            score += 1
+        else:
+            hints.append("Add target court to narrow precedents (FC/FCA/SCC).")
+
+        if has_objective:
+            score += 1
+        else:
+            hints.append(
+                "Select research objective (support/distinguish/background) to focus retrieval."
+            )
+
+        if has_posture:
+            score += 1
+
+        if has_issue_tags:
+            score += 1
+        else:
+            hints.append(
+                "Add issue tags (for example procedural_fairness, inadmissibility)."
+            )
+
+        if has_anchor:
+            score += 1
+        else:
+            hints.append("Add citation or docket anchor when available.")
+
+        if has_fact_keywords:
+            score += 1
+
+        if score >= 4:
+            completeness = "high"
+        elif score >= 2:
+            completeness = "medium"
+        else:
+            completeness = "low"
+
+        if not hints:
+            hints.append("Intake coverage is strong for focused precedent retrieval.")
+        return completeness, hints[:4]
 
     def _build_relevance_reason(
         self,
@@ -185,6 +403,38 @@ class LawyerCaseResearchService:
             "This case matches key terms from the matter summary and is a potential "
             f"precedent source for {court_fragment}."
         )
+
+    def _filter_results_by_decision_date_range(
+        self,
+        *,
+        results: list[CaseSearchResult],
+        decision_date_from: date | None,
+        decision_date_to: date | None,
+    ) -> list[CaseSearchResult]:
+        if decision_date_from is None and decision_date_to is None:
+            return results
+        return [
+            result
+            for result in results
+            if self._is_within_decision_date_range(
+                result.decision_date,
+                decision_date_from=decision_date_from,
+                decision_date_to=decision_date_to,
+            )
+        ]
+
+    def _is_within_decision_date_range(
+        self,
+        decision_date: date,
+        *,
+        decision_date_from: date | None,
+        decision_date_to: date | None,
+    ) -> bool:
+        if decision_date_from is not None and decision_date < decision_date_from:
+            return False
+        if decision_date_to is not None and decision_date > decision_date_to:
+            return False
+        return True
 
     def _to_support(
         self,
@@ -229,8 +479,29 @@ class LawyerCaseResearchService:
         )
 
     def research(self, request: LawyerCaseResearchRequest) -> LawyerCaseResearchResponse:
-        matter_profile = extract_matter_profile(request.matter_summary)
-        queries = build_research_queries(request.matter_summary, court=request.court)
+        intake_payload = (
+            request.intake.model_dump(mode="json", exclude_none=True)
+            if request.intake is not None
+            else None
+        )
+        matter_profile = extract_matter_profile(request.matter_summary, intake=intake_payload)
+        effective_court = request.court
+        if not effective_court and isinstance(intake_payload, dict):
+            intake_target_court = intake_payload.get("target_court")
+            if isinstance(intake_target_court, str) and intake_target_court.strip():
+                effective_court = intake_target_court.strip()
+        decision_date_from = request.intake.date_from if request.intake is not None else None
+        decision_date_to = request.intake.date_to if request.intake is not None else None
+        queries = build_research_queries(
+            request.matter_summary,
+            court=effective_court,
+            intake=intake_payload,
+        )
+        intake_completeness, intake_hints = self._compute_intake_feedback(
+            request=request,
+            matter_summary=request.matter_summary,
+            intake_payload=intake_payload,
+        )
         aggregated_results: list[CaseSearchResult] = []
 
         source_unavailable_errors = 0
@@ -243,7 +514,9 @@ class LawyerCaseResearchService:
                     CaseSearchRequest(
                         query=normalized_query,
                         jurisdiction=request.jurisdiction,
-                        court=request.court,
+                        court=effective_court,
+                        decision_date_from=decision_date_from,
+                        decision_date_to=decision_date_to,
                         limit=request.limit,
                     )
                 )
@@ -251,6 +524,12 @@ class LawyerCaseResearchService:
                 source_unavailable_errors += 1
                 continue
             aggregated_results.extend(response.results)
+
+        aggregated_results = self._filter_results_by_decision_date_range(
+            results=aggregated_results,
+            decision_date_from=decision_date_from,
+            decision_date_to=decision_date_to,
+        )
 
         if not aggregated_results:
             if source_unavailable_errors == len(queries):
@@ -263,10 +542,21 @@ class LawyerCaseResearchService:
                     "official": "no_match",
                     "canlii": "not_used",
                 }
+            research_confidence, confidence_reasons = self._compute_research_confidence(
+                cases=[],
+                source_status=source_status,
+                matter_summary=request.matter_summary,
+                matter_profile=matter_profile,
+                intake_payload=intake_payload,
+            )
             return LawyerCaseResearchResponse(
                 matter_profile=matter_profile,
                 cases=[],
                 source_status=source_status,
+                research_confidence=research_confidence,
+                confidence_reasons=confidence_reasons,
+                intake_completeness=intake_completeness,
+                intake_hints=intake_hints,
             )
 
         deduped: dict[tuple[str, str, str], CaseSearchResult] = {}
@@ -305,9 +595,20 @@ class LawyerCaseResearchService:
             "official": "ok" if official_used else "no_match",
             "canlii": "used" if canlii_used else "not_used",
         }
+        research_confidence, confidence_reasons = self._compute_research_confidence(
+            cases=cases,
+            source_status=source_status,
+            matter_summary=request.matter_summary,
+            matter_profile=matter_profile,
+            intake_payload=intake_payload,
+        )
 
         return LawyerCaseResearchResponse(
             matter_profile=matter_profile,
             cases=cases,
             source_status=source_status,
+            research_confidence=research_confidence,
+            confidence_reasons=confidence_reasons,
+            intake_completeness=intake_completeness,
+            intake_hints=intake_hints,
         )

@@ -59,8 +59,10 @@ describe("chat shell ui", () => {
       />
     );
 
-    expect(screen.getByText("Canada immigration scope notice")).toBeTruthy();
     expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
+    expect(screen.getAllByText(LEGAL_DISCLAIMER).length).toBeGreaterThan(0);
+    expect(screen.getByText("Informational only")).toBeTruthy();
+    expect(screen.getByText("Cite sources")).toBeTruthy();
     expect(
       screen.getAllByText("API target: https://api.immcad.test").length
     ).toBeGreaterThan(0);
@@ -202,5 +204,59 @@ describe("chat shell ui", () => {
     );
     expect(searchCasesButtonAfterResults.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("link", { name: "Sample Tribunal Decision" })).toBeTruthy();
+  });
+
+  it("shows low-specificity query guidance and applies refinement suggestion chips", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_RESPONSE, {
+        headers: { "x-trace-id": "trace-chat-success" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find case law"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+
+    const caseQueryInput = screen.getByLabelText(
+      "Case search query"
+    ) as HTMLInputElement;
+    expect(caseQueryInput.value).toBe("Find case law");
+    expect(
+      screen.getByText(
+        "Query may be too broad. Add at least two anchors: program/issue and court or citation."
+      )
+    ).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", { name: "Find case law Federal Court" })
+    );
+    expect(caseQueryInput.value).toBe("Find case law Federal Court");
+  });
+
+  it("renders structured research intake controls in the case-law panel", () => {
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    expect(screen.getByLabelText("Research objective")).toBeTruthy();
+    expect(screen.getByLabelText("Target court")).toBeTruthy();
+    expect(screen.getByLabelText("Issue tags")).toBeTruthy();
+    expect(screen.getByLabelText("Citation or docket anchor")).toBeTruthy();
+    expect(screen.getByLabelText("Decision date from")).toBeTruthy();
+    expect(screen.getByLabelText("Decision date to")).toBeTruthy();
   });
 });

@@ -26,6 +26,16 @@ export type ChatShellProps = {
 };
 
 export type SubmissionPhase = "idle" | "chat" | "cases" | "export";
+export type CaseRetrievalMode = "auto" | "manual" | null;
+export type ResearchConfidence = "low" | "medium" | "high" | null;
+export type IntakeCompleteness = "low" | "medium" | "high" | null;
+export type ResearchSourceStatus = Record<string, string> | null;
+export type ResearchObjective =
+  | "support_precedent"
+  | "distinguish_precedent"
+  | "background_research"
+  | "";
+export type ResearchPosture = "judicial_review" | "appeal" | "motion" | "application" | "";
 
 export type SupportContext = {
   endpoint:
@@ -66,10 +76,30 @@ export type RelatedCasePanelProps = {
   submissionPhase: SubmissionPhase;
   caseSearchQuery: string;
   lastCaseSearchQuery: string | null;
+  relatedCasesRetrievalMode: CaseRetrievalMode;
+  sourceStatus: ResearchSourceStatus;
   relatedCasesStatus: string;
+  researchConfidence: ResearchConfidence;
+  confidenceReasons: string[];
+  intakeCompleteness: IntakeCompleteness;
+  intakeHints: string[];
   relatedCases: LawyerCaseSupport[];
   matterProfile?: Record<string, string | string[] | null>;
+  intakeObjective: ResearchObjective;
+  intakeTargetCourt: string;
+  intakeProceduralPosture: ResearchPosture;
+  intakeIssueTags: string;
+  intakeAnchorReference: string;
+  intakeDateFrom: string;
+  intakeDateTo: string;
   onCaseSearchQueryChange: (value: string) => void;
+  onIntakeObjectiveChange: (value: ResearchObjective) => void;
+  onIntakeTargetCourtChange: (value: string) => void;
+  onIntakeProceduralPostureChange: (value: ResearchPosture) => void;
+  onIntakeIssueTagsChange: (value: string) => void;
+  onIntakeAnchorReferenceChange: (value: string) => void;
+  onIntakeDateFromChange: (value: string) => void;
+  onIntakeDateToChange: (value: string) => void;
   onSearch: () => void;
   onExportCase: (result: LawyerCaseSupport) => void;
   exportingCaseId: string | null;

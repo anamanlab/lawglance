@@ -21,9 +21,12 @@ from immcad_api.schemas import (
     CaseSearchResponse,
     CaseSearchResult,
     ChatRequest,
+    ChatResearchPreview,
     ChatResponse,
     Citation,
     FallbackUsed,
+    LawyerCaseResearchRequest,
+    LawyerCaseResearchResponse,
 )
 from immcad_api.services.grounding import GroundingAdapter, StaticGroundingAdapter
 
@@ -38,6 +41,10 @@ _CASE_SEARCH_TOOL_PATTERN = re.compile(
 
 class CaseSearchTool(Protocol):
     def search(self, request: CaseSearchRequest) -> CaseSearchResponse: ...
+
+
+class LawyerResearchTool(Protocol):
+    def research(self, request: LawyerCaseResearchRequest) -> LawyerCaseResearchResponse: ...
 
 
 def _extract_rejected_citation_urls(citations: list[object]) -> tuple[str, ...]:
@@ -64,9 +71,13 @@ class ChatService:
         trusted_citation_domains: tuple[str, ...] | list[str] | None = None,
         case_search_tool: CaseSearchTool | None = None,
         case_search_tool_limit: int = 3,
+        lawyer_research_service: LawyerResearchTool | None = None,
+        research_preview_limit: int = 3,
     ) -> None:
         if case_search_tool_limit < 1:
             raise ValueError("case_search_tool_limit must be >= 1")
+        if research_preview_limit < 1:
+            raise ValueError("research_preview_limit must be >= 1")
         self.provider_router = provider_router
         self.grounding_adapter = grounding_adapter or StaticGroundingAdapter()
         self.trusted_citation_domains = normalize_trusted_domains(
@@ -74,6 +85,8 @@ class ChatService:
         )
         self.case_search_tool = case_search_tool
         self.case_search_tool_limit = case_search_tool_limit
+        self.lawyer_research_service = lawyer_research_service
+        self.research_preview_limit = research_preview_limit
 
     def _should_use_case_search_tool(self, message: str) -> bool:
         return _CASE_SEARCH_TOOL_PATTERN.search(message) is not None
@@ -171,6 +184,65 @@ class ChatService:
 
         return tool_citations
 
+    def _build_research_preview(
+        self,
+        *,
+        request: ChatRequest,
+        trace_id: str | None,
+    ) -> ChatResearchPreview | None:
+        if self.lawyer_research_service is None:
+            return None
+        if not self._should_use_case_search_tool(request.message):
+            return None
+
+        try:
+            research_response = self.lawyer_research_service.research(
+                LawyerCaseResearchRequest(
+                    session_id=request.session_id,
+                    matter_summary=request.message,
+                    jurisdiction="ca",
+                    limit=self.research_preview_limit,
+                )
+            )
+        except ApiError as exc:
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="lawyer_research_preview_error",
+                locale=request.locale,
+                mode=request.mode,
+                message_length=len(request.message),
+                tool_name="lawyer_research",
+                tool_error_code=exc.code,
+            )
+            return None
+        except Exception:
+            self._emit_audit_event(
+                trace_id=trace_id,
+                event_type="lawyer_research_preview_error",
+                locale=request.locale,
+                mode=request.mode,
+                message_length=len(request.message),
+                tool_name="lawyer_research",
+                tool_error_code="unexpected_error",
+            )
+            return None
+
+        self._emit_audit_event(
+            trace_id=trace_id,
+            event_type="lawyer_research_preview_used",
+            locale=request.locale,
+            mode=request.mode,
+            message_length=len(request.message),
+            tool_name="lawyer_research",
+            tool_result_count=len(research_response.cases),
+        )
+        return ChatResearchPreview(
+            retrieval_mode="auto",
+            query=request.message,
+            source_status=research_response.source_status,
+            cases=research_response.cases[: self.research_preview_limit],
+        )
+
     def handle_chat(self, request: ChatRequest, *, trace_id: str | None = None) -> ChatResponse:
         if should_refuse_for_policy(request.message):
             self._emit_audit_event(
@@ -203,6 +275,10 @@ class ChatService:
         )
         if case_search_citations:
             citations = [*citations, *case_search_citations]
+        research_preview = self._build_research_preview(
+            request=request,
+            trace_id=trace_id,
+        )
 
         try:
             routed = self.provider_router.generate(
@@ -234,12 +310,13 @@ class ChatService:
                     citations=[],
                     confidence="low",
                     disclaimer=DISCLAIMER_TEXT,
-                    fallback_used=FallbackUsed(
-                        used=True,
-                        provider=exc.provider,
-                        reason="provider_error",
-                    ),
-                )
+                fallback_used=FallbackUsed(
+                    used=True,
+                    provider=exc.provider,
+                    reason="provider_error",
+                ),
+                research_preview=research_preview,
+            )
             raise ProviderApiError(exc.message) from exc
 
         provider_citations = routed.result.citations
@@ -287,6 +364,7 @@ class ChatService:
                 provider=fallback_provider,
                 reason=fallback_reason,
             ),
+            research_preview=research_preview,
         )
 
     def _emit_audit_event(

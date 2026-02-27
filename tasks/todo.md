@@ -1,5 +1,265 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-27 - Gemini Prompt Review + Hardening
+
+### Current Focus
+- Review current Gemini prompt stack and improve instruction quality, grounding robustness, and injection resistance without breaking existing behavior contracts.
+
+### Plan
+- [x] Audit active prompt text and prompt-builder formatting for ambiguity and failure risks.
+- [x] Rewrite prompt instructions with explicit output contract, citation discipline, and prompt-injection defenses.
+- [x] Update/extend prompt-focused tests to lock in revised behavior.
+- [x] Run targeted lint/tests and record verification evidence.
+
+### Review
+- Updated canonical runtime prompt text in `src/immcad_api/policy/prompts.py`:
+  - Added explicit instruction-priority hierarchy and context-boundary language.
+  - Added prompt-injection defense guidance (treat user/context text as untrusted; ignore conflicting embedded instructions).
+  - Strengthened grounding rules (no invented citations/statutes/case details; explicit handling when context is missing).
+  - Switched QA prompt to deterministic response sections (`Summary`, `Grounded Rules`, `Next Steps`, `Confidence and Escalation`).
+- Synced legacy compatibility prompt config in `config/prompts.yaml` with the same hardening updates.
+- Extended prompt regression tests in `tests/test_prompt_jurisdiction.py` to lock in:
+  - Instruction-priority + untrusted-context rules in system prompt.
+  - Deterministic QA sections + injection-guard rule in QA prompt.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_prompt_jurisdiction.py tests/test_prompt_compatibility.py tests/test_gemini_provider.py tests/test_openai_provider.py` -> `10 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/prompts.py tests/test_prompt_jurisdiction.py` -> `All checks passed!`
+  - `PYTHONPATH=src uv run python - <<'PY' ... yaml.safe_load(config/prompts.yaml) ... PY` -> `ok ['human prompt', 'qaprompt', 'system prompt']`
+
+## Task Plan - 2026-02-27 - Court-Source Storage/Persistence Runtime Audit
+
+### Current Focus
+- Audit court-source data lifecycle across registry, policy, checkpoints, caches, and document stores, then trace AI chat/research runtime usage and MVP risks.
+
+### Plan
+- [ ] Inventory court-source storage surfaces and infer retention/TTL behavior.
+- [ ] Trace how chat and lawyer-research services consume source data at runtime.
+- [ ] Enumerate current observability surfaces for source freshness, ingestion health, and runtime behavior.
+- [ ] Summarize top MVP risks with exact file+line evidence and remediation direction.
+
+### Review
+- Pending audit synthesis.
+
+## Task Plan - 2026-02-27 - Chat Thinking Transparency (Frontend)
+
+### Current Focus
+- Execute the approved chat-thinking transparency plan in `docs/plans/2026-02-27-chat-thinking-transparency-implementation-plan.md` using subagent-driven development with spec + quality review gates.
+
+### Plan
+- [x] Task 1: Add feature flag contract/plumbing for `NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE`.
+- [x] Task 2: Add activity timeline domain types/helpers.
+- [x] Task 3: Integrate timeline state in `use-chat-logic`.
+- [x] Task 4: Build inline activity strip UI.
+- [x] Task 5: Build expandable thinking drawer UI.
+- [x] Task 6: Gate timeline rendering with runtime feature flag.
+- [x] Task 7: Add timeline motion/reduced-motion/accessibility styling.
+- [x] Task 8: Final docs + verification (`test`, `lint`, `typecheck`).
+
+### Review
+- Task 1 complete:
+  - Implemented runtime flag plumbing + page wiring in `frontend-web/lib/runtime-config.ts` and `frontend-web/app/page.tsx`.
+  - Tightened `ChatShellProps` contract (`enableAgentThinkingTimeline` required) and updated affected tests.
+  - Added production invalid-input fallback test coverage for timeline flag.
+  - Verified with targeted frontend test runs + typecheck.
+- Task 2 complete:
+  - Added `AgentActivityStage`, `AgentActivityStatus`, `AgentActivityEvent`, and `AgentActivityMeta` in chat types.
+  - Added immutable activity helper module in `frontend-web/components/chat/agent-activity.ts`.
+  - Added contract tests in `frontend-web/tests/agent-activity.contract.test.ts`.
+- Task 3 complete:
+  - Added per-turn activity lifecycle state in `use-chat-logic` and mapped submit/success/error/policy/fallback transitions.
+  - Propagated activity turn ids into assistant messages and message-list payload diagnostics.
+  - Verified with `frontend-web` contract/UI tests for pending + latest timeline payload behavior.
+- Task 4 complete:
+  - Added `frontend-web/components/chat/activity-strip.tsx` for compact stage/status chips.
+  - Integrated strip rendering into assistant bubbles and pending processing state.
+  - Added UI assertion coverage for inline activity visibility while pending.
+- Task 5 complete:
+  - Added `frontend-web/components/chat/thinking-drawer.tsx` with per-turn Show/Hide details toggle.
+  - Wired drawer into assistant message rendering beneath inline activity chips.
+  - Added UI test coverage for toggle behavior and timeline-details visibility.
+- Task 6 complete:
+  - Confirmed timeline affordances are shown only when `enableAgentThinkingTimeline` is enabled.
+  - Added regression test covering disabled-flag behavior (`Show agent thinking` + inline activity hidden).
+- Task 7 complete:
+  - Added timeline animation class + running-state pulse with reduced-motion overrides in `app/globals.css`.
+  - Added `aria-live`/`aria-label` semantics for activity chips and timeline list entries.
+  - Added UI test assertion for status-labelled timeline entries.
+- Task 8 complete:
+  - Documented `NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE` in `.env.example` and `frontend-web/README.md`.
+  - Verification evidence:
+    - `cd frontend-web && npm run test -- tests/runtime-config.test.ts tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/home-page.rollout.test.tsx tests/agent-activity.contract.test.ts` -> 47 passed.
+    - `cd frontend-web && npm run lint` -> no warnings/errors.
+    - `cd frontend-web && npm run typecheck` -> pass.
+
+## Task Plan - 2026-02-27 - SCC/FC Official Search Integration Hardening
+
+### Current Focus
+- Improve SCC/FC immigration case retrieval quality and citation trust by using official search endpoints with safe fallback to existing feeds.
+
+### Plan
+- [x] Normalize Decisia mirror links (`norma.lexum.com`) to official court domains during parsing.
+- [x] Add parser support for Decisia search-result HTML list pages.
+- [x] Wire SCC/FC query-time retrieval to official `d/s/index.do` endpoints with feed fallback on errors.
+- [x] Add regression tests for URL canonicalization, search-result parsing, query-search preference, and fallback behavior.
+- [x] Re-run targeted lint/tests for parser and official client integration.
+
+### Review
+- Implemented host canonicalization + query-safe PDF URL derivation in `src/immcad_api/sources/canada_courts.py`.
+- Added `parse_decisia_search_results_html(...)` and integrated it into runtime retrieval for SCC/FC query searches in `src/immcad_api/sources/official_case_law_client.py`.
+- Runtime behavior now:
+  - SCC/FC: attempt official query endpoint first.
+  - Any SCC/FC query endpoint failure: fallback to existing registry feed path.
+  - FCA: unchanged fallback/feed behavior.
+- Regression coverage added in:
+  - `tests/test_canada_courts.py`
+  - `tests/test_official_case_law_client.py`
+- Verification evidence:
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/sources/canada_courts.py src/immcad_api/sources/official_case_law_client.py tests/test_canada_courts.py tests/test_official_case_law_client.py` -> `All checks passed!`
+  - `PYTHONPATH=src uv run pytest -q tests/test_canada_courts.py tests/test_official_case_law_client.py` -> `36 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_case_search_service.py` -> `5 passed`
+
+## Task Plan - 2026-02-27 - Official Court Ingestion Persistence Audit
+
+### Current Focus
+- Audit official court ingestion persistence behavior for MVP readiness: storage layers, retention, crawl model, and operational risk.
+
+### Plan
+- [x] Trace official court runtime data path and classify persistence (memory/cache/db/filesystem).
+- [x] Trace ingestion job persistence paths and retention semantics (checkpoint/cache lifecycle).
+- [x] Determine whether official court data supports historical crawl/backfill or only on-demand retrieval.
+- [x] Produce MVP readiness risks and recommendations with file-backed evidence.
+
+### Review
+- Runtime official-court retrieval (`OfficialCaseLawClient`) uses in-process memory cache only (fresh/stale TTL) and fetches source URLs directly on-demand; no DB/filesystem persistence for case records.
+- Ingestion jobs persist only checkpoint metadata (etag/last-modified/checksum/last_success_at) to state JSON and emit per-run report artifacts; decision payloads are not persisted for official court sources.
+- Historical crawl/backfill for official courts is not implemented; both ingestion and runtime operate on current feed snapshots. By contrast, federal-laws ingestion has dedicated JSONL materialization + per-act cache/checkpoints.
+- Key MVP risks captured: no durable historical corpus for official courts, runtime/ingestion decoupling, checkpoint path inconsistency between API defaults and workflow cache paths, and strict validation behavior that can fail entire source runs on partial record issues.
+
+## Task Plan - 2026-02-27 - SCC + FC Priority MVP Finalization
+
+### Current Focus
+- Finalize MVP around the two priority official court sources: `SCC_DECISIONS` and `FC_DECISIONS`.
+- Treat `FCA_DECISIONS` as non-blocking for MVP launch readiness unless it regresses SCC/FC paths.
+
+### Scope Lock (Decision)
+- [ ] Lock MVP acceptance criteria to SCC + FC production reliability and user transparency.
+- [ ] Keep FCA ingestion/search enabled but classify FCA issues as P1 only when they impact shared parser/runtime behavior.
+
+### Plan
+- [ ] Source reliability hardening (SCC/FC):
+  - [x] Add SCC/FC-specific smoke script assertions in CI (`/api/search/cases` + `/api/research/lawyer-cases`), including immigration-focused queries.
+  - [ ] Add regression tests for SCC/FC citation extraction/date handling edge cases from real feed shapes.
+  - [ ] Add explicit SCC/FC freshness SLO status mapping (`fresh`/`stale`/`missing`) with thresholds documented in runbook.
+- [ ] UX/source transparency completion:
+  - [x] Add an explicit navigation entry from main chat shell to `/sources`.
+  - [ ] Highlight SCC/FC as "priority courts" on `/sources` and in related-case status cards.
+  - [x] Surface checkpoint freshness timestamp and stale warning copy in user-visible UI.
+- [ ] AI-agent effectiveness improvements:
+  - [ ] Add SCC/FC-focused query refinement hints (court + issue + citation anchors) in research panel.
+  - [ ] Add failure-mode messaging that distinguishes `official unavailable` vs `no_match` for SCC/FC.
+  - [ ] Verify chat research-preview behavior stays grounded when SCC/FC is available.
+- [ ] Storage and observability:
+  - [ ] Persist/validate ingestion checkpoint path in all runtimes (`INGESTION_CHECKPOINT_STATE_PATH`) and document defaults.
+  - [x] Add ops log/metric slice for SCC/FC success rate and last-success age.
+  - [ ] Add release checklist item that blocks deploy when SCC/FC freshness is `missing`/`stale`.
+- [ ] Release gate and verification:
+  - [ ] Run targeted backend tests for official client, ingestion scheduling, source transparency, and lawyer research status mapping.
+  - [ ] Run frontend tests for `/sources` page, proxy mapping, and case sidebar source-status rendering.
+  - [ ] Run lint/typecheck and capture exact command evidence in this section before marking done.
+
+### Exit Criteria
+- [ ] SCC + FC both report `fresh` in `/api/sources/transparency` on production-like runtime.
+- [ ] SCC + FC case-law retrieval works in both manual research and chat-triggered preview flows.
+- [ ] Users can clearly see available priority sources and freshness state from main product navigation.
+- [ ] CI contains SCC/FC smoke coverage and fails on regression of source availability or grounding behavior.
+
+### Review
+- Pending implementation.
+
+## Task Plan - 2026-02-27 - MVP Case-Law Hardening + Source Transparency
+
+### Current Focus
+- Execute the MVP audit remediation for official case-law reliability (FC/FCA/SCC), ingestion freshness, and user-visible source transparency.
+
+### Plan
+- [x] Patch runtime official case-law client for redirect-safe fetches and null-safe decision-date filtering.
+- [x] Add regression tests for official runtime redirect handling and missing-decision-date filtering behavior.
+- [x] Include FCA in hourly Cloudflare ingestion schedule and update schedule tests/contracts.
+- [x] Add API source-coverage/status endpoint exposing courts/sources and checkpoint freshness metadata.
+- [x] Add frontend source-coverage page with clear court coverage and freshness visibility for end users.
+- [x] Run targeted backend + frontend tests/lint/typecheck and document verification evidence.
+
+### Review
+- Runtime reliability:
+  - Official runtime fetch now follows redirects in `OfficialCaseLawClient`.
+  - Decision-date filtering is null-safe when feed records are missing dates.
+  - Regression tests added in `tests/test_official_case_law_client.py`.
+- Ingestion freshness:
+  - FCA is now included in hourly Cloudflare ingestion scheduling.
+  - Schedule tests updated in `tests/test_cloudflare_ingestion_hourly_script.py`.
+- Source transparency:
+  - Added backend endpoint: `GET /api/sources/transparency`.
+  - Wired endpoint via app router and added checkpoint-path override (`INGESTION_CHECKPOINT_STATE_PATH`).
+  - Added frontend proxy route: `frontend-web/app/api/sources/transparency/route.ts`.
+  - Added user-facing page: `frontend-web/app/sources/page.tsx`.
+  - Added backend/frontend contract tests for new endpoint and page rendering.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_official_case_law_client.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py tests/test_source_transparency_api.py` -> `27 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/sources/official_case_law_client.py src/immcad_api/api/routes/source_transparency.py src/immcad_api/main.py src/immcad_api/api/routes/__init__.py src/immcad_api/schemas.py scripts/run_cloudflare_ingestion_hourly.py tests/test_official_case_law_client.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_source_transparency_api.py` -> `All checks passed!`
+  - `cd frontend-web && npm run test -- --run tests/source-transparency-route.contract.test.ts tests/source-transparency-page.contract.test.tsx tests/backend-proxy.contract.test.ts` -> `25 passed`
+  - `cd frontend-web && npx eslint app/api/sources/transparency/route.ts app/sources/page.tsx lib/backend-proxy.ts tests/source-transparency-route.contract.test.ts tests/source-transparency-page.contract.test.tsx tests/backend-proxy.contract.test.ts` -> pass
+  - `cd frontend-web && npm run typecheck` -> pass
+  - `PYTHONPATH=src uv run mypy src/immcad_api/sources/official_case_law_client.py src/immcad_api/api/routes/source_transparency.py src/immcad_api/main.py src/immcad_api/schemas.py .` -> fails due existing workspace module shadowing (`backend-cloudflare/python_modules/typing_extensions.py`), not introduced by these changes.
+
+## Task Plan - 2026-02-27 - Cloud-Only Deployment Baseline
+
+### Current Focus
+- Replace VPS/temp-machine dependency with a Cloudflare-native deployment baseline so any repo-authorized teammate can deploy from code + CI only.
+
+### Plan
+- [x] Validate architecture choices against current Cloudflare official docs (limits, secrets, CI/CD, configuration).
+- [x] Harden backend native deploy workflow to be repo-driven (`push` + `workflow_dispatch`) with secret-sync and required-secret checks.
+- [x] Add deterministic hardened backend runtime vars to `backend-cloudflare/wrangler.toml`.
+- [x] Switch frontend Cloudflare runtime upstream to backend native Worker URL and remove legacy fallback default.
+- [x] Add validator guardrails/tests to enforce cloud-only production wrangler baseline.
+- [x] Update developer/release docs with canonical cloud-only deployment path.
+- [ ] Deploy backend native + frontend and run live production smoke checks.
+
+### Review
+- In progress.
+
+## Task Plan - 2026-02-27 - Frontend Wiring Audit + Reliability Hardening
+
+### Current Focus
+- Verify that the frontend is wired end-to-end for case-law/document workflows and harden failure handling paths that can silently degrade UX.
+
+### Plan
+- [x] Audit frontend wiring across `use-chat-logic`, API client contracts, and related-case/document panels.
+- [x] Add regression test for support-matrix retry after transient failure.
+- [x] Fix support-matrix loader to avoid one-failure lockout and permit retry.
+- [x] Harden API error-envelope parsing for root-level `trace_id` / `policy_reason` fallback.
+- [x] Re-run targeted frontend contract tests, lint, and typecheck.
+
+### Review
+- Wiring status: confirmed connected (`ChatShell` -> `useChatLogic` -> `api-client` -> related-case/doc panels), including metadata rendering and document support matrix usage.
+- Issues found + fixed:
+  - `frontend-web/components/chat/use-chat-logic.ts`
+    - Replaced sticky support-matrix loaded flag with in-flight request guard.
+    - Result: transient `GET /api/documents/support-matrix` failures no longer permanently lock the session into fallback defaults.
+  - `frontend-web/lib/api-client.ts`
+    - Improved `parseErrorEnvelope(...)` to fall back to root-level `trace_id` and `policy_reason` when nested `error` object omits them.
+    - Result: better trace/policy diagnostics for mixed backend/proxy envelope shapes.
+- Test updates:
+  - `frontend-web/tests/chat-shell.contract.test.tsx`
+    - Added `retries support matrix fetch after a transient failure`.
+  - `frontend-web/tests/api-client.contract.test.ts`
+    - Added root envelope trace/policy fallback parser contract.
+
+### Verification evidence
+- `cd frontend-web && npm run test -- tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts` -> `39 passed`
+- `cd frontend-web && npx eslint components/chat/use-chat-logic.ts lib/api-client.ts tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts` -> pass
+- `cd frontend-web && npm run typecheck` -> pass
+
 ## Task Plan - 2026-02-27 - Cloudflare Hourly Ingestion Checkpoint Optimization
 
 ### Current Focus
@@ -82,6 +342,7 @@
 - [x] Confirm root cause from response payload/headers (Cloudflare Tunnel `1033`, unresolved origin tunnel host).
 - [x] Implement proxy mapping from upstream `530` tunnel outage HTML/plaintext to structured `503` JSON error with trace id.
 - [x] Implement chat-origin fallback routing (`IMMCAD_API_BASE_URL_FALLBACK`) for automatic retry when primary chat origin is unreachable/tunnel-down.
+- [x] Expand fallback-origin retry to critical JSON routes (search/research/export) with replay-safe request buffering.
 - [x] Add frontend backend-proxy contract tests for chat/search outage mapping.
 - [ ] Complete operational tunnel recovery (requires runtime tunnel token/secrets not present in this workspace).
 
@@ -95,6 +356,7 @@
     - Added `mapCloudflareTunnelOutageResponse(...)` and wired it into upstream response mapping path.
     - Tunnel `1033` responses now become structured `503` proxy errors with preserved trace id.
     - Added chat fallback-origin retry path using `backendFallbackBaseUrl` from runtime config.
+    - Expanded fallback-origin retry eligibility to `chat/search/research/export` routes and ensured replay-safe request buffering for those route bodies.
     - Added response header marker `x-immcad-origin-fallback: used` when fallback origin serves the request.
   - `frontend-web/lib/server-runtime-config.ts`
     - Added optional `IMMCAD_API_BASE_URL_FALLBACK` parsing and hardened-mode HTTPS validation.
@@ -106,15 +368,21 @@
   - Added chat-route contract test for `530` -> `503 PROVIDER_ERROR`.
   - Added case-search contract test for `530` -> `503 SOURCE_UNAVAILABLE`.
   - Added fallback-origin retry tests (primary tunnel outage and primary network failure).
+  - Added case-search fallback retry test for primary tunnel outage.
 - `frontend-web/tests/server-runtime-config.contract.test.ts`
   - Added fallback var parsing + hardened validation coverage.
 - `docs/development-environment.md`
   - Documented optional fallback var usage in Cloudflare env config section.
 - Verification:
-  - `npm run test --prefix frontend-web -- --run tests/backend-proxy.contract.test.ts tests/server-runtime-config.contract.test.ts` -> `37 passed`
+  - `npm run test --prefix frontend-web -- --run tests/backend-proxy.contract.test.ts tests/server-runtime-config.contract.test.ts` -> `38 passed`
   - `npm run lint --prefix frontend-web -- --file lib/backend-proxy.ts --file tests/backend-proxy.contract.test.ts` -> pass
   - `npm run lint --prefix frontend-web -- --file lib/server-runtime-config.ts --file tests/server-runtime-config.contract.test.ts` -> pass
   - `npm run typecheck --prefix frontend-web` -> pass
+  - Deployed `frontend-web` worker via `wrangler deploy` -> `Current Version ID: d39fe567-1024-4190-a15f-505766585119`
+  - Live probes:
+    - `POST /api/chat` -> `200` with `x-immcad-origin-fallback: used`
+    - `POST /api/search/cases` -> `200` with `x-immcad-origin-fallback: used`
+    - `POST /api/research/lawyer-cases` -> `503 SOURCE_UNAVAILABLE` with `x-immcad-origin-fallback: used` (expected if fallback backend route itself unavailable)
 
 ## Task Plan - 2026-02-27 - Cloudflare Environment Variable Migration Hardening
 
@@ -412,6 +680,46 @@
   - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
   - `make docs-audit` -> pass (`[docs-maintenance] audited files: 80`)
   - `PYTHONPATH=src uv run pytest -q tests/test_doc_maintenance.py` -> `13 passed`
+
+## Task Plan - 2026-02-27 - Frontend/API Court-Source Visibility Audit
+
+### Current Focus
+- Audit how users can discover available court sources (SCC/FC/FCA/superior court), which controls exist in frontend workflows, and which API endpoints expose source metadata.
+
+### Plan
+- [x] Locate frontend visibility surfaces for source/court availability.
+- [x] Trace frontend controls to backend request payloads and response fields.
+- [x] Enumerate source-metadata endpoints and fields exposed through API and proxy layers.
+- [x] Identify MVP UX gaps for source discoverability and court coverage clarity.
+
+### Review
+- Frontend visibility and control surfaces were mapped across:
+  - `/sources` transparency page.
+  - Case-law research sidebar controls in chat workflow.
+  - Per-result source/court badges and source-status summary chips.
+- API integration mapping confirmed:
+  - Dedicated source transparency endpoint (`GET /api/sources/transparency`) with policy + freshness metadata.
+  - Case search/research endpoints expose per-case source metadata and aggregate source-status.
+  - Next.js proxy routes forward all source-related endpoints to backend.
+- MVP gaps captured for user-facing clarity:
+  - No discoverable nav path to `/sources` from the main shell.
+  - No explicit superior-court coverage representation in controls or transparency payload/UI.
+  - Transparency UI omits several available metadata fields (policy flags, URLs, freshness seconds).
+
+## Task Plan - 2026-02-27 - MVP Case-Law Storage/Retrieval Audit
+
+### Current Focus
+- Audit where MVP case-law data lives, how runtime retrieval works, and whether SCC/FC/FCA data survives process restarts.
+
+### Plan
+- [ ] Inventory storage surfaces for ingested case-law data (filesystem artifacts, source registry, in-process cache, Chroma/legacy paths).
+- [ ] Trace runtime retrieval flow and citation/index behavior from API routes through source clients.
+- [ ] Assess restart persistence guarantees for FC/FCA/SCC and identify policy gates that shape storage/output behavior.
+- [ ] Map current tests to these flows and call out concrete coverage gaps.
+- [ ] Deliver findings with exact file/function references.
+
+### Review
+- In progress.
 
 ## Task Plan - 2026-02-27 - Step 4: Contract Regression Closure (Record Sections + Generate Gating)
 

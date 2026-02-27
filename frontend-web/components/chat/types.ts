@@ -20,6 +20,21 @@ export type ChatMessage = {
   fallbackUsed?: ApiFallbackUsed;
 };
 
+export type AgentActivityStage = "intake" | "retrieval" | "grounding" | "synthesis" | "delivery";
+export type AgentActivityStatus = "running" | "success" | "warning" | "error" | "blocked";
+export type AgentActivityMeta = Record<string, string | number | boolean | null>;
+export type AgentActivityEvent = {
+  id: string;
+  turnId: string;
+  stage: AgentActivityStage;
+  status: AgentActivityStatus;
+  label: string;
+  startedAt: string;
+  endedAt?: string;
+  details?: string;
+  meta?: AgentActivityMeta;
+};
+
 export type ChatShellProps = {
   apiBaseUrl: string;
   legalDisclaimer: string;

@@ -7,6 +7,7 @@ TUNNEL_ENV_SOURCE="${TUNNEL_ENV_SOURCE:-/tmp/immcad_named_tunnel.env}"
 TUNNEL_TOKEN_TARGET="${TUNNEL_TOKEN_TARGET:-/etc/immcad/immcad_named_tunnel.token}"
 QUICK_BRIDGE_STATE_DIR="${QUICK_BRIDGE_STATE_DIR:-/tmp/immcad-cloudflare-bridge-managed}"
 NAMED_TUNNEL_STATE_DIR="${NAMED_TUNNEL_STATE_DIR:-/tmp/immcad-named-tunnel-managed}"
+BACKEND_ENV_FILE="${BACKEND_ENV_FILE:-${ROOT_DIR}/ops/runtime/.env.backend-origin}"
 SKIP_SEARCH_SMOKE="0"
 KEEP_QUICK_FALLBACK="0"
 
@@ -92,8 +93,8 @@ if ! grep -q '^TUNNEL_TOKEN=' "$TUNNEL_ENV_SOURCE"; then
   echo "ERROR: $TUNNEL_ENV_SOURCE does not contain TUNNEL_TOKEN=" >&2
   exit 1
 fi
-if [ ! -f "$ROOT_DIR/backend-vercel/.env.production.vercel" ]; then
-  echo "ERROR: Backend env file missing: $ROOT_DIR/backend-vercel/.env.production.vercel" >&2
+if [ ! -f "$BACKEND_ENV_FILE" ]; then
+  echo "ERROR: Backend env file missing: $BACKEND_ENV_FILE" >&2
   exit 1
 fi
 if [ ! -x "$ROOT_DIR/scripts/venv_exec.sh" ]; then

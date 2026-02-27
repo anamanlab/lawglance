@@ -26,7 +26,7 @@ This guide standardizes local development for IMMCAD.
 - Python: `3.11+`
 - Package/runtime manager: `uv`
 - Node.js: `20+` (required for `frontend-web`)
-- Optional runtime: Redis for chat history cache
+- Optional runtime: Redis for cache-backed features including client-scoped document matter storage
 
 ## Quick start (recommended)
 
@@ -176,6 +176,11 @@ CITATION_TRUSTED_DOMAINS=laws-lois.justice.gc.ca,justice.gc.ca,canada.ca,ircc.ca
 
 ## Redis (optional but recommended)
 
+Redis-backed document matter storage:
+
+- When `REDIS_URL` is set, document intake matter state is persisted in Redis (default TTL 24h) for cross-worker readiness/package lookups.
+- When Redis is unavailable, backend falls back to in-memory matter storage for the running process.
+
 Run local Redis with Docker:
 
 ```bash
@@ -260,52 +265,68 @@ export IMMCAD_API_BEARER_TOKEN=<prod-token>
 REQUESTS=20 CONCURRENCY=5 MAX_P95_SECONDS=2.5 make backend-cf-perf-smoke
 ```
 
-## Legacy Vercel Environment Sync (Transitional)
+## Cloudflare Environment Configuration
 
-Use `scripts/vercel_env_sync.py` to analyze, pull, diff, validate, push, and backup Vercel variables for linked projects.
+Cloudflare is the primary deployment path. Configure runtime/env in three layers:
 
-This workflow is retained only for transitional operations while backend origin remains on legacy infrastructure. It is not the primary Cloudflare deployment path.
+1. Local backend origin runtime env file
+2. Cloudflare Worker non-secret vars (`vars` in Wrangler config)
+3. Cloudflare Worker secrets (`wrangler secret put`)
 
-Typical project directories in this repo:
+### 1) Prepare backend origin runtime env file
 
-- `frontend-web` (linked Vercel frontend project)
-- `backend-vercel` (linked Vercel backend project)
+Canonical runtime path:
 
-Project-scoped templates:
+- `ops/runtime/.env.backend-origin`
 
-- `frontend-web/.env.example`
-- `backend-vercel/.env.example`
-
-Run directly:
+Prepare from a source file:
 
 ```bash
-python scripts/vercel_env_sync.py analyze --project-dir frontend-web
-python scripts/vercel_env_sync.py pull --project-dir frontend-web --environment production
-python scripts/vercel_env_sync.py diff --project-dir backend-vercel --environment production
-python scripts/vercel_env_sync.py validate --project-dir backend-vercel --environment production
-python scripts/vercel_env_sync.py push --project-dir backend-vercel --file .env.production --environment production
-python scripts/vercel_env_sync.py backup --project-dir backend-vercel
+bash scripts/prepare_backend_origin_env.sh --from-file /secure/path/backend-origin.env
 ```
 
-Or use Make targets:
+Transitional import from legacy Vercel env artifact:
 
 ```bash
-make vercel-env-analyze PROJECT_DIR=frontend-web
-make vercel-env-pull PROJECT_DIR=frontend-web ENV=production
-make vercel-env-diff PROJECT_DIR=backend-vercel ENV=production
-make vercel-env-validate PROJECT_DIR=backend-vercel ENV=production
-make vercel-env-push-dry-run PROJECT_DIR=backend-vercel ENV=production
-make vercel-env-backup PROJECT_DIR=backend-vercel
-make vercel-env-restore PROJECT_DIR=backend-vercel TS=YYYYMMDD_HHMMSS
+make backend-origin-env-recover-from-vercel
 ```
 
-Notes:
+Validate and materialize default runtime env path:
 
-- `push` writes to Vercel; use `--dry-run` first. Without `--file`, `push` uses the script's default per-project file map (it can push multiple environments).
-- `pull` creates a local backup unless `--no-backup` is provided.
-- `validate` loads required keys from `<project-dir>/.env.example` and falls back to repo-root `.env.example`, plus explicit `--required` keys.
-- backup files are namespaced by project directory in `.env-backups/` to avoid collisions.
-- `git-secret` (if used) complements this workflow by encrypting repo-stored env bundles; it does not replace Cloudflare runtime secret bindings or `scripts/vercel_env_sync.py` in transitional scenarios.
+```bash
+make backend-origin-env-prepare
+```
+
+### 2) Validate Cloudflare Worker runtime vars
+
+`frontend-web/wrangler.jsonc` and `backend-cloudflare/wrangler.toml` must define:
+
+- `ENVIRONMENT`
+- `IMMCAD_ENVIRONMENT`
+- Optional emergency fallback for frontend chat proxy:
+  - `IMMCAD_API_BASE_URL_FALLBACK` (used when primary chat upstream is unavailable, for example tunnel `530/1033`)
+
+Both values must match and default to `production` for deploy configs.
+
+Run validation:
+
+```bash
+make cloudflare-env-validate
+```
+
+### 3) Sync Cloudflare Worker secrets
+
+Sync backend-native Worker secrets from your current shell:
+
+```bash
+make cloudflare-env-sync
+```
+
+This calls `scripts/sync_cloudflare_backend_native_secrets.sh` and updates only non-empty variables present in your shell.
+
+### Legacy Tooling Note
+
+`scripts/vercel_env_sync.py` and `make vercel-env-*` targets are retained only for emergency rollback/recovery workflows. They are not part of the Cloudflare-first deploy path.
 
 ## Troubleshooting
 

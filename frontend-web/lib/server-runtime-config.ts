@@ -4,6 +4,7 @@ const HARDENED_ENVIRONMENT_PATTERN = /^(production|prod|ci)(?:[-_].+)?$/;
 export type ServerRuntimeConfig = {
   backendBaseUrl: string;
   backendBearerToken: string | null;
+  backendFallbackBaseUrl?: string | null;
 };
 
 function normalizeValue(value: string | undefined): string | undefined {
@@ -92,14 +93,25 @@ function ensureProductionBearerTokenConfigured(
 
 export function getServerRuntimeConfig(): ServerRuntimeConfig {
   const configuredBackendBaseUrl = normalizeValue(process.env.IMMCAD_API_BASE_URL);
+  const configuredFallbackBaseUrl = normalizeValue(
+    process.env.IMMCAD_API_BASE_URL_FALLBACK
+  );
   const backendBaseUrl = configuredBackendBaseUrl ?? DEV_DEFAULT_BACKEND_BASE_URL;
   const hardenedEnvironment = isHardenedRuntimeEnvironment();
   ensureHardenedSafeBackendUrl(backendBaseUrl, hardenedEnvironment);
+  if (configuredFallbackBaseUrl) {
+    ensureHardenedSafeBackendUrl(configuredFallbackBaseUrl, hardenedEnvironment);
+  }
   const backendBearerToken = resolveBackendBearerToken();
   ensureProductionBearerTokenConfigured(backendBearerToken, hardenedEnvironment);
+  const backendFallbackBaseUrl =
+    configuredFallbackBaseUrl && configuredFallbackBaseUrl !== backendBaseUrl
+      ? configuredFallbackBaseUrl
+      : null;
 
   return {
     backendBaseUrl,
     backendBearerToken,
+    backendFallbackBaseUrl,
   };
 }

@@ -10,7 +10,7 @@ User=ec2-user
 Group=ec2-user
 WorkingDirectory=/home/ec2-user/IMMCAD
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/bin/bash -lc 'set -a; source /home/ec2-user/IMMCAD/backend-vercel/.env.production.vercel; set +a; export ENABLE_CASE_SEARCH=true; exec /home/ec2-user/IMMCAD/scripts/venv_exec.sh uvicorn immcad_api.main:app --app-dir src --host 127.0.0.1 --port 8002'
+ExecStart=/bin/bash -lc 'set -a; source /home/ec2-user/IMMCAD/ops/runtime/.env.backend-origin; set +a; export ENABLE_CASE_SEARCH=true; exec /home/ec2-user/IMMCAD/scripts/venv_exec.sh uvicorn immcad_api.main:app --app-dir src --host 127.0.0.1 --port 8002'
 Restart=always
 RestartSec=3
 TimeoutStartSec=90

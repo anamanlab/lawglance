@@ -19,6 +19,7 @@ The goal is to help users quickly understand:
 The current implementation is converging on a single production runtime:
 - Next.js chat UI in `frontend-web` (production path)
 - Python API backend in `src/immcad_api` (production path)
+- Document intake/readiness/package endpoints are available via frontend `/api/documents/*` proxy routes backed by backend `src/immcad_api/api/routes/documents.py`
 - Streamlit UI in `app.py` is now a legacy dev-only **thin API client** to `/api/chat`
 - Legacy local-RAG modules are archived under `legacy/local_rag/` for compatibility and historical evaluation workflows
 - CI quality gates include ingestion smoke, dependency review, jurisdiction suite, and repository hygiene

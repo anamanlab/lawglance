@@ -17,7 +17,7 @@ Usage:
 
 Options:
   --state-dir PATH       Runtime state directory (default: /tmp/immcad-codespace-named-origin)
-  --env-file PATH        Backend env file (default: backend-vercel/.env.production.vercel)
+  --env-file PATH        Backend env file (default: ops/runtime/.env.backend-origin)
   --token-file PATH      cloudflared token file (default: /tmp/immcad_named_tunnel.token)
   --backend-host HOST    Backend host bind (default: 127.0.0.1)
   --backend-port PORT    Backend port bind (default: 8002)
@@ -70,7 +70,7 @@ stop_pid_file() {
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="/tmp/immcad-codespace-named-origin"
-ENV_FILE="${ROOT_DIR}/backend-vercel/.env.production.vercel"
+ENV_FILE="${ROOT_DIR}/ops/runtime/.env.backend-origin"
 TOKEN_FILE="/tmp/immcad_named_tunnel.token"
 BACKEND_HOST="127.0.0.1"
 BACKEND_PORT="8002"

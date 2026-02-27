@@ -26,7 +26,8 @@ make cloudflare-edge-contract-preflight
 ```bash
 make quality
 make source-registry-validate
-make backend-vercel-sync-validate
+make backend-runtime-sync-validate
+make cloudflare-env-validate
 ```
 
 ```bash
@@ -42,7 +43,7 @@ Set backend origin explicitly for deployment:
 ```bash
 npx --yes wrangler@4.68.1 deploy \
   --config backend-cloudflare/wrangler.backend-proxy.jsonc \
-  --var BACKEND_ORIGIN:https://backend-vercel-eight-sigma.vercel.app \
+  --var BACKEND_ORIGIN:https://backend-origin.example \
   --keep-vars
 ```
 

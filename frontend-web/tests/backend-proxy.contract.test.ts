@@ -155,6 +155,7 @@ describe("backend proxy scaffold fallback behavior", () => {
     vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
       backendBaseUrl: "https://api.example.com",
       backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: null,
     }));
 
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -176,6 +177,90 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(forwardedHeaders.get("authorization")).toBe("Bearer proxy-token");
     expect(response.status).toBe(200);
     expect(response.headers.get("x-trace-id")).toBe("trace-upstream");
+  });
+
+  it("fails over chat requests to fallback origin when primary reports tunnel outage", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api-primary.example.com",
+      backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: "https://api-fallback.example.com",
+    }));
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("error code: 1033", {
+          status: 530,
+          headers: {
+            "content-type": "text/plain; charset=UTF-8",
+            "x-trace-id": "trace-primary-down",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ answer: "ok" }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-trace-id": "trace-fallback-ok",
+          },
+        })
+      );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/chat", { message: "hi" }),
+      "/api/chat"
+    );
+    const body = await response.json();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api-primary.example.com/api/chat"
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api-fallback.example.com/api/chat"
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-immcad-origin-fallback")).toBe("used");
+    expect(body.answer).toBe("ok");
+  });
+
+  it("fails over chat requests to fallback origin when primary network call throws", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api-primary.example.com",
+      backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: "https://api-fallback.example.com",
+    }));
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("network down"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ answer: "ok-network-fallback" }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-trace-id": "trace-fallback-network",
+          },
+        })
+      );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/chat", { message: "hi" }),
+      "/api/chat"
+    );
+    const body = await response.json();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api-primary.example.com/api/chat"
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api-fallback.example.com/api/chat"
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-immcad-origin-fallback")).toBe("used");
+    expect(body.answer).toBe("ok-network-fallback");
   });
 
   it("preserves binary export responses without text decoding", async () => {
@@ -273,6 +358,65 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(response.headers.get("x-trace-id")).toBe("trace-upstream-404");
     expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
     expect(body.error.message).toContain("lawyer case research");
+  });
+
+  it("maps Cloudflare tunnel 1033 outage responses to provider errors for chat", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("error code: 1033", {
+        status: 530,
+        headers: {
+          "content-type": "text/plain",
+          "x-immcad-trace-id": "trace-upstream-530",
+        },
+      })
+    );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/chat", { message: "hi" }),
+      "/api/chat"
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-trace-id")).toBe("trace-upstream-530");
+    expect(body.error.code).toBe("PROVIDER_ERROR");
+    expect(body.error.message).toContain("origin tunnel");
+  });
+
+  it("maps Cloudflare tunnel 1033 outage responses to source-unavailable for search routes", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        "<title>Cloudflare Tunnel error</title><p>error code: 1033</p>",
+        {
+          status: 530,
+          headers: {
+            "content-type": "text/html; charset=UTF-8",
+            "x-trace-id": "trace-upstream-530-search",
+          },
+        }
+      )
+    );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/search/cases", { query: "express entry", jurisdiction: "ca" }),
+      "/api/search/cases"
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-trace-id")).toBe("trace-upstream-530-search");
+    expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
+    expect(body.error.message).toContain("origin tunnel");
   });
 
   it("forwards multipart request bodies without text decoding", async () => {

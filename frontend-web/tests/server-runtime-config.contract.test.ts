@@ -44,6 +44,21 @@ describe("server runtime config token resolution", () => {
     );
   });
 
+  it("treats explicit ENVIRONMENT=development as non-hardened when NODE_ENV is production", () => {
+    delete process.env.VERCEL_ENV;
+    vi.stubEnv("ENVIRONMENT", "development");
+    vi.stubEnv("IMMCAD_ENVIRONMENT", "development");
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.IMMCAD_API_BASE_URL = "http://127.0.0.1:8000";
+    delete process.env.IMMCAD_API_BEARER_TOKEN;
+    delete process.env.API_BEARER_TOKEN;
+
+    const config = getServerRuntimeConfig();
+
+    expect(config.backendBaseUrl).toBe("http://127.0.0.1:8000");
+    expect(config.backendBearerToken).toBeNull();
+  });
+
   it("treats VERCEL preview as non-hardened even when NODE_ENV is production", () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("NODE_ENV", "production");
@@ -64,6 +79,44 @@ describe("server runtime config token resolution", () => {
     const config = getServerRuntimeConfig();
 
     expect(config.backendBaseUrl).toBe("http://127.0.0.1:8000");
+  });
+
+  it("includes fallback backend base URL when configured", () => {
+    process.env.ENVIRONMENT = "development";
+    process.env.IMMCAD_ENVIRONMENT = "development";
+    process.env.IMMCAD_API_BASE_URL = "https://api-primary.example.com";
+    process.env.IMMCAD_API_BASE_URL_FALLBACK = "https://api-fallback.example.com";
+
+    const config = getServerRuntimeConfig();
+
+    expect(config.backendBaseUrl).toBe("https://api-primary.example.com");
+    expect(config.backendFallbackBaseUrl).toBe(
+      "https://api-fallback.example.com"
+    );
+  });
+
+  it("drops fallback backend URL when it matches primary URL", () => {
+    process.env.ENVIRONMENT = "development";
+    process.env.IMMCAD_ENVIRONMENT = "development";
+    process.env.IMMCAD_API_BASE_URL = "https://api-primary.example.com";
+    process.env.IMMCAD_API_BASE_URL_FALLBACK = "https://api-primary.example.com";
+
+    const config = getServerRuntimeConfig();
+
+    expect(config.backendFallbackBaseUrl).toBeNull();
+  });
+
+  it("enforces https requirement for fallback backend URL in hardened environments", () => {
+    process.env.ENVIRONMENT = "production";
+    process.env.IMMCAD_ENVIRONMENT = "production";
+    process.env.IMMCAD_API_BASE_URL = "https://api-primary.example.com";
+    process.env.IMMCAD_API_BASE_URL_FALLBACK = "http://127.0.0.1:8000";
+    process.env.IMMCAD_API_BEARER_TOKEN = "token";
+    process.env.API_BEARER_TOKEN = "token";
+
+    expect(() => getServerRuntimeConfig()).toThrow(
+      "IMMCAD_API_BASE_URL must start with https:// in hardened environments."
+    );
   });
 
   it("enforces hardened requirements when ENVIRONMENT is production", () => {

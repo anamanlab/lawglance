@@ -14,6 +14,9 @@
     "enabled": true
   },
   "vars": {
-    "IMMCAD_API_BASE_URL": "https://immcad-api.arkiteto.dpdns.org"
+    "IMMCAD_API_BASE_URL": "https://immcad-api.arkiteto.dpdns.org",
+    "IMMCAD_API_BASE_URL_FALLBACK": "https://backend-vercel-eight-sigma.vercel.app",
+    "ENVIRONMENT": "production",
+    "IMMCAD_ENVIRONMENT": "production"
   }
 }

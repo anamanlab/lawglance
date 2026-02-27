@@ -131,9 +131,14 @@ function shouldCaptureFallbackRequestBody(upstreamPath: string): boolean {
   return upstreamPath === "/api/chat";
 }
 
+function canUseChatOriginFallback(upstreamPath: string): boolean {
+  return upstreamPath === "/api/chat";
+}
+
 function buildForwardedResponseHeaders(
   upstreamResponse: Response,
-  fallbackTraceId: string
+  fallbackTraceId: string,
+  usedFallbackOrigin: boolean = false
 ): Headers {
   const responseHeaders = new Headers();
   for (const headerName of FORWARDED_RESPONSE_HEADERS) {
@@ -144,6 +149,9 @@ function buildForwardedResponseHeaders(
   }
   const traceId = upstreamResponse.headers.get("x-trace-id") ?? fallbackTraceId;
   responseHeaders.set("x-trace-id", traceId);
+  if (usedFallbackOrigin) {
+    responseHeaders.set("x-immcad-origin-fallback", "used");
+  }
   return responseHeaders;
 }
 
@@ -202,6 +210,62 @@ function mapUpstreamNotFoundResponse(
   );
 }
 
+async function isCloudflareTunnelOutageResponse(
+  upstreamResponse: Response
+): Promise<boolean> {
+  if (upstreamResponse.status !== 530) {
+    return false;
+  }
+
+  const contentType = upstreamResponse.headers
+    .get("content-type")
+    ?.toLowerCase() ?? "";
+  if (
+    contentType &&
+    !contentType.includes("text/html") &&
+    !contentType.includes("text/plain")
+  ) {
+    return false;
+  }
+
+  let bodyText = "";
+  try {
+    bodyText = (await upstreamResponse.clone().text()).toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    bodyText.includes("error code: 1033") ||
+    bodyText.includes("cloudflare tunnel error") ||
+    bodyText.includes("unable to resolve it")
+  );
+}
+
+async function mapCloudflareTunnelOutageResponse(
+  upstreamResponse: Response,
+  upstreamPath: string,
+  fallbackTraceId: string
+): Promise<NextResponse | null> {
+  const isTunnelResolveFailure = await isCloudflareTunnelOutageResponse(
+    upstreamResponse
+  );
+  if (!isTunnelResolveFailure) {
+    return null;
+  }
+
+  const traceId =
+    upstreamResponse.headers.get("x-trace-id") ??
+    upstreamResponse.headers.get("x-immcad-trace-id") ??
+    fallbackTraceId;
+  const errorCode = resolveProxyErrorCode(upstreamPath);
+  return buildProxyErrorResponse(
+    503,
+    "IMMCAD backend origin tunnel is temporarily unavailable. Please retry shortly.",
+    traceId,
+    errorCode
+  );
+}
+
 function buildUpstreamRequestHeaders(
   request: NextRequest,
   options: {
@@ -244,10 +308,12 @@ async function forwardRequest(
   const traceId = randomUUID();
   let backendBaseUrl: string;
   let backendBearerToken: string | null;
+  let backendFallbackBaseUrl: string | null = null;
   try {
     const runtimeConfig = getServerRuntimeConfig();
     backendBaseUrl = runtimeConfig.backendBaseUrl;
     backendBearerToken = runtimeConfig.backendBearerToken;
+    backendFallbackBaseUrl = runtimeConfig.backendFallbackBaseUrl ?? null;
   } catch {
     if (isScaffoldFallbackAllowed()) {
       const scaffoldResponse = buildScaffoldFallbackResponse(
@@ -268,7 +334,14 @@ async function forwardRequest(
     );
   }
 
+  const shouldTryFallbackOrigin =
+    canUseChatOriginFallback(upstreamPath) &&
+    backendFallbackBaseUrl !== null &&
+    backendFallbackBaseUrl !== backendBaseUrl;
   const upstreamUrl = buildUpstreamUrl(backendBaseUrl, upstreamPath);
+  const fallbackUpstreamUrl = shouldTryFallbackOrigin
+    ? buildUpstreamUrl(backendFallbackBaseUrl!, upstreamPath)
+    : null;
   const headers = buildUpstreamRequestHeaders(request, {
     backendBearerToken,
     method,
@@ -284,18 +357,55 @@ async function forwardRequest(
     if (method === "POST" && requestBody instanceof ReadableStream) {
       requestInit.duplex = "half";
     }
-    const upstreamResponse = await fetch(upstreamUrl, requestInit);
+    let usedFallbackOrigin = false;
+    let upstreamResponse: Response;
+    try {
+      upstreamResponse = await fetch(upstreamUrl, requestInit);
+    } catch (primaryError) {
+      if (!fallbackUpstreamUrl) {
+        throw primaryError;
+      }
+      upstreamResponse = await fetch(fallbackUpstreamUrl, requestInit);
+      usedFallbackOrigin = true;
+    }
+    if (!usedFallbackOrigin && fallbackUpstreamUrl) {
+      const primaryTunnelOutage = await isCloudflareTunnelOutageResponse(
+        upstreamResponse
+      );
+      if (primaryTunnelOutage) {
+        upstreamResponse = await fetch(fallbackUpstreamUrl, requestInit);
+        usedFallbackOrigin = true;
+      }
+    }
     const mappedNotFoundResponse = mapUpstreamNotFoundResponse(
       upstreamResponse,
       upstreamPath,
       traceId
     );
     if (mappedNotFoundResponse) {
+      if (usedFallbackOrigin) {
+        mappedNotFoundResponse.headers.set("x-immcad-origin-fallback", "used");
+      }
       return mappedNotFoundResponse;
+    }
+    const mappedTunnelOutageResponse = await mapCloudflareTunnelOutageResponse(
+      upstreamResponse,
+      upstreamPath,
+      traceId
+    );
+    if (mappedTunnelOutageResponse) {
+      if (usedFallbackOrigin) {
+        mappedTunnelOutageResponse.headers.set("x-immcad-origin-fallback", "used");
+      }
+      return mappedTunnelOutageResponse;
     }
     const response = new NextResponse(upstreamResponse.body, {
       status: upstreamResponse.status,
-      headers: buildForwardedResponseHeaders(upstreamResponse, traceId),
+      headers: buildForwardedResponseHeaders(
+        upstreamResponse,
+        traceId,
+        usedFallbackOrigin
+      ),
     });
     if (!response.headers.get("content-type")) {
       response.headers.set("content-type", "application/octet-stream");

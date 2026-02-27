@@ -10,7 +10,7 @@ Usage:
   scripts/run_cloudflare_quick_tunnel_bridge.sh [options]
 
 Options:
-  --env-file PATH          Env file to source (default: backend-vercel/.env.production.vercel)
+  --env-file PATH          Env file to source (default: ops/runtime/.env.backend-origin)
   --host HOST              Local backend bind host (default: 127.0.0.1)
   --port PORT              Local backend port (default: 8001)
   --state-dir PATH         Runtime state/log directory (default: /tmp/immcad-cloudflare-bridge)
@@ -117,7 +117,7 @@ spawn_detached() {
 }
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ROOT_DIR}/backend-vercel/.env.production.vercel"
+ENV_FILE="${ROOT_DIR}/ops/runtime/.env.backend-origin"
 BACKEND_HOST="127.0.0.1"
 BACKEND_PORT="8001"
 STATE_DIR="/tmp/immcad-cloudflare-bridge"

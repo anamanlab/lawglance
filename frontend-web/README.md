@@ -32,11 +32,17 @@ For Cloudflare local preview, copy `.dev.vars.example` to `.dev.vars` and set re
 ## Architecture
 
 - `app/page.tsx`: frontend entry page and shell composition.
+- `app/api/documents/*`: proxy handlers for document intake/readiness/package endpoints.
 - `components/chat-shell.tsx`: compatibility export for the current chat shell API.
 - `components/chat/chat-shell-container.tsx`: stateful orchestration layer.
 - `components/chat/*.tsx`: presentational modules (header, thread, composer, case panel, support panel).
 - `lib/api-client.ts`: browser API contract client with trace/error envelope handling.
 - `lib/backend-proxy.ts`: server proxy and scaffold fallback behavior.
+
+Document proxy notes:
+
+- `lib/backend-proxy.ts` forwards `x-real-ip`, `x-forwarded-for`, `cf-connecting-ip`, and `true-client-ip` upstream to preserve backend client-scoped document matter lookups across proxy hops.
+- Readiness/package requests for a `matter_id` depend on consistent upstream client identity.
 
 ## Run
 

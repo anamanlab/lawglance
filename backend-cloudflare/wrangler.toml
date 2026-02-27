@@ -7,3 +7,7 @@ workers_dev = true
 
 [observability]
 enabled = true
+
+[vars]
+ENVIRONMENT = "production"
+IMMCAD_ENVIRONMENT = "production"

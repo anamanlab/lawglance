@@ -129,3 +129,49 @@ make backend-cf-codespace-runtime-stop
 make backend-cf-codespace-runtime-start
 make backend-cf-codespace-runtime-health
 ```
+
+## Incident Pattern: `/api/chat` returns `530` (`error code: 1033`)
+
+This indicates Cloudflare cannot resolve the configured named tunnel host for backend origin.
+
+Confirm signature:
+
+```bash
+curl -sS -D - -o /tmp/immcad-chat.out \
+  -X POST https://immcad.arkiteto.dpdns.org/api/chat \
+  -H 'content-type: application/json' \
+  --data '{"message":"ping","session_id":"incident-check"}' \
+  | sed -n '1,20p'
+head -n 3 /tmp/immcad-chat.out
+```
+
+If body contains `error code: 1033`, recover in this order:
+
+1. Restore runtime env + tunnel token on origin host.
+2. Restart named-tunnel runtime.
+3. Re-run health/smoke checks.
+
+```bash
+make backend-origin-env-recover-from-vercel
+# if needed: export TUNNEL_TOKEN='...'; printf '%s' "$TUNNEL_TOKEN" > /tmp/immcad_named_tunnel.token; chmod 600 /tmp/immcad_named_tunnel.token
+make backend-cf-codespace-runtime-start
+make backend-cf-codespace-runtime-health
+```
+
+If tunnel recovery is blocked and legal/ops approves temporary fallback, point backend proxy origin to a known healthy backend and redeploy proxy Worker.
+
+Required:
+
+- update `IMMCAD_BACKEND_ORIGIN` GitHub Actions secret
+- run `Cloudflare Backend Proxy Deploy` workflow
+
+Then re-check:
+
+```bash
+curl -fsS https://immcad-api.arkiteto.dpdns.org/healthz
+curl -sS -D - -o /tmp/immcad-chat-recheck.out \
+  -X POST https://immcad.arkiteto.dpdns.org/api/chat \
+  -H 'content-type: application/json' \
+  --data '{"message":"hello","session_id":"incident-recheck"}' \
+  | sed -n '1,20p'
+```

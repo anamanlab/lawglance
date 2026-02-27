@@ -1,4 +1,7 @@
 # Cloudflare local preview variables (wrangler dev / opennext preview)
 IMMCAD_API_BASE_URL=http://127.0.0.1:8000
+# Optional emergency fallback origin for chat proxy retries when primary is down.
+# IMMCAD_API_BASE_URL_FALLBACK=https://backup-origin.example
 IMMCAD_API_BEARER_TOKEN=replace-with-local-api-token
 ENVIRONMENT=development
+IMMCAD_ENVIRONMENT=development

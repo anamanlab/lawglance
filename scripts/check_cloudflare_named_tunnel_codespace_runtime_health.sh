@@ -81,7 +81,7 @@ BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
 BACKEND_PORT="${BACKEND_PORT:-8002}"
 API_BASE_URL="${API_BASE_URL:-https://immcad-api.arkiteto.dpdns.org}"
 FRONTEND_URL="${FRONTEND_URL:-https://immcad.arkiteto.dpdns.org}"
-ENV_FILE="${ENV_FILE:-${ROOT_DIR}/backend-vercel/.env.production.vercel}"
+ENV_FILE="${ENV_FILE:-${ROOT_DIR}/ops/runtime/.env.backend-origin}"
 
 if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
   echo "ERROR: backend pid is not running: ${BACKEND_PID}" >&2

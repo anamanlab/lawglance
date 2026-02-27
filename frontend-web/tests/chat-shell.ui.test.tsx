@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -190,6 +190,41 @@ describe("chat shell ui", () => {
     await waitFor(() => {
       expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("false");
     });
+  });
+
+  it("toggles assistant thinking drawer details when timeline is enabled", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_RESPONSE, {
+        headers: { "x-trace-id": "trace-thinking-drawer" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    await user.click(
+      await screen.findByRole("button", { name: "Show agent thinking" })
+    );
+    const timelineList = screen.getByRole("list", { name: "Timeline details" });
+    expect(timelineList).toBeTruthy();
+    expect(within(timelineList).getByText("Evaluating sources")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Hide details" })
+    ).toBeTruthy();
   });
 
   it("exposes accessibility landmarks and enables case search after chat success", async () => {

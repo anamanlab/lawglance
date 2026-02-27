@@ -1,6 +1,7 @@
 import { memo, type RefObject } from "react";
 
 import { ActivityStrip } from "@/components/chat/activity-strip";
+import { ThinkingDrawer } from "@/components/chat/thinking-drawer";
 import type {
   AgentActivityEvent,
   AgentActivityByTurn,
@@ -86,6 +87,9 @@ const MessageBubble = memo(function MessageBubble({
           <p className={`leading-7 ${isUser ? "text-[#faf9f5]" : "text-ink"}`}>{message.content}</p>
           {!isUser && enableAgentThinkingTimeline ? (
             <ActivityStrip events={activityEvents} />
+          ) : null}
+          {!isUser && enableAgentThinkingTimeline ? (
+            <ThinkingDrawer events={activityEvents} />
           ) : null}
 
           {message.author === "assistant" && message.fallbackUsed?.used ? (

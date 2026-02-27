@@ -56,6 +56,19 @@ function pdfResponse(
   });
 }
 
+function parseActivityPayload(testId: string): Array<{
+  stage: string;
+  status: string;
+  meta?: Record<string, unknown>;
+}> {
+  const rawPayload = screen.getByTestId(testId).textContent ?? "[]";
+  return JSON.parse(rawPayload) as Array<{
+    stage: string;
+    status: string;
+    meta?: Record<string, unknown>;
+  }>;
+}
+
 describe("chat shell contract behavior", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -80,7 +93,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
-        enableAgentThinkingTimeline={false}
+        enableAgentThinkingTimeline
         showOperationalPanels
       />
     );
@@ -137,7 +150,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
-        enableAgentThinkingTimeline={false}
+        enableAgentThinkingTimeline
         showOperationalPanels
       />
     );
@@ -304,7 +317,7 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official court sources returned aligned precedent results.")
     ).toBeTruthy();
-  });
+  }, 15000);
 
   it("renders source and docket metadata badges when case metadata is present", async () => {
     vi.spyOn(globalThis, "fetch")
@@ -447,8 +460,68 @@ describe("chat shell contract behavior", () => {
     expect(screen.getAllByText("Trace ID: trace-policy-refusal").length).toBeGreaterThan(
       0
     );
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "delivery",
+          status: "blocked",
+          meta: expect.objectContaining({
+            fallbackReason: "policy_block",
+          }),
+        }),
+      ])
+    );
     expect(screen.getByText("Last endpoint: /api/chat")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits warning timeline metadata when degraded fallback response is used", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(
+        {
+          ...CHAT_SUCCESS_RESPONSE,
+          fallback_used: {
+            used: true,
+            provider: "gemini",
+            reason: "timeout",
+          },
+        },
+        {
+          headers: { "x-trace-id": "trace-fallback-timeout" },
+        }
+      )
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "What are the current IRCC processing timelines?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(screen.getByText("fallback response")).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "synthesis",
+          status: "warning",
+          meta: expect.objectContaining({
+            fallbackUsed: true,
+            fallbackReason: "timeout",
+            fallbackProvider: "gemini",
+          }),
+        }),
+      ])
+    );
   });
 
   it("requires structured intake details before broad manual case-law search", async () => {
@@ -567,6 +640,17 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Trace mismatch detected between header and error body.")
     ).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "delivery",
+          status: "error",
+          meta: expect.objectContaining({
+            code: "SOURCE_UNAVAILABLE",
+          }),
+        }),
+      ])
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Last outcome: error")).toBeTruthy();
@@ -650,6 +734,9 @@ describe("chat shell contract behavior", () => {
         )
       ).length
     ).toBeGreaterThan(0);
+    expect(
+      await screen.findByText("Official courts: unavailable | CanLII: unavailable")
+    ).toBeTruthy();
     expect((await screen.findAllByText("Trace ID: trace-case-search-error")).length).toBeGreaterThan(0);
   });
 

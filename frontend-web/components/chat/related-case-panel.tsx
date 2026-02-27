@@ -137,24 +137,6 @@ function intakeToneClass(completeness: "low" | "medium" | "high"): string {
   return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
 }
 
-function toSourceBucket(sourceId?: string | null): "official" | "canlii" | "unknown" {
-  const normalizedSourceId = (sourceId ?? "").trim().toUpperCase();
-  if (!normalizedSourceId) {
-    return "unknown";
-  }
-  if (normalizedSourceId.startsWith("CANLII")) {
-    return "canlii";
-  }
-  if (
-    normalizedSourceId === "FC_DECISIONS" ||
-    normalizedSourceId === "FCA_DECISIONS" ||
-    normalizedSourceId === "SCC_DECISIONS"
-  ) {
-    return "official";
-  }
-  return "unknown";
-}
-
 function toOfficialSourceStatusLabel(status: string): string {
   if (status === "ok") {
     return "Official courts: available";
@@ -183,6 +165,10 @@ function toCanliiSourceStatusLabel(status: string): string {
 
 function formatIssueLabel(value: string): string {
   return value.replace(/_/g, " ");
+}
+
+function formatRuleScope(value: "base" | "conditional"): string {
+  return value === "conditional" ? "Conditional rule" : "Base rule";
 }
 
 function uploadStatusLabel(status: "pending" | "uploaded" | "needs_review" | "failed"): string {
@@ -285,23 +271,9 @@ export function RelatedCasePanel({
       : relatedCasesRetrievalMode === "manual"
         ? "Manual case search"
         : null;
-  const sourceCounts = relatedCases.reduce(
-    (counts, result) => {
-      const sourceBucket = toSourceBucket(result.source_id);
-      if (sourceBucket === "official") {
-        counts.official += 1;
-      } else if (sourceBucket === "canlii") {
-        counts.canlii += 1;
-      } else {
-        counts.unknown += 1;
-      }
-      return counts;
-    },
-    { official: 0, canlii: 0, unknown: 0 }
-  );
-  const shouldShowSourceCard = Boolean(sourceStatus) || hasResults;
-  const officialStatus = sourceStatus?.official ?? (sourceCounts.official ? "ok" : "unknown");
-  const canliiStatus = sourceStatus?.canlii ?? (sourceCounts.canlii ? "used" : "unknown");
+  const shouldShowSourceCard = Boolean(sourceStatus);
+  const officialStatus = sourceStatus?.official ?? "unknown";
+  const canliiStatus = sourceStatus?.canlii ?? "unknown";
 
   const queryHint = queryChangedSinceLastSearch
     ? "Current query differs from the query used for the listed results."
@@ -319,6 +291,9 @@ export function RelatedCasePanel({
     disableDocumentControls || !hasMatterId || !documentReadiness?.isReady;
   const disableCaseSearchControls = isChatSubmitting || isCaseSearchSubmitting;
   const disableExportControls = isChatSubmitting || isCaseSearchSubmitting || isExportSubmitting;
+  const unresolvedRequirementStatuses = (documentReadiness?.requirementStatuses ?? []).filter(
+    (requirementStatus) => requirementStatus.status !== "present"
+  );
 
   return (
     <section className="imm-paper-card imm-fade-up rounded-2xl p-4 md:p-5" style={{ animationDelay: "200ms" }}>
@@ -508,6 +483,21 @@ export function RelatedCasePanel({
               <p className="mt-1">
                 Warnings: {documentReadiness.warnings.map(formatIssueLabel).join(", ")}
               </p>
+            ) : null}
+            {unresolvedRequirementStatuses.length ? (
+              <div className="mt-2 rounded-md border border-[rgba(176,174,165,0.35)] bg-[rgba(247,243,234,0.64)] px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Rule guidance</p>
+                <ul className="mt-1 space-y-1">
+                  {unresolvedRequirementStatuses.slice(0, 4).map((requirementStatus) => (
+                    <li key={`${requirementStatus.item}-${requirementStatus.status}`}>
+                      <span className="font-semibold text-ink">
+                        {formatIssueLabel(requirementStatus.item)} ({formatRuleScope(requirementStatus.ruleScope)})
+                      </span>
+                      {requirementStatus.reason ? `: ${requirementStatus.reason}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </div>
 
@@ -750,9 +740,6 @@ export function RelatedCasePanel({
             </span>
             <p className="mt-2">
               {toOfficialSourceStatusLabel(officialStatus)} | {toCanliiSourceStatusLabel(canliiStatus)}
-            </p>
-            <p className="mt-1">
-              Results by source: Official {sourceCounts.official}, CanLII {sourceCounts.canlii}, Other {sourceCounts.unknown}
             </p>
           </div>
         ) : null}

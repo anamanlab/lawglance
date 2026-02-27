@@ -50,6 +50,12 @@ export type DocumentReadinessState = {
   missingRequiredItems: string[];
   blockingIssues: string[];
   warnings: string[];
+  requirementStatuses: {
+    item: string;
+    status: "present" | "missing" | "warning";
+    ruleScope: "base" | "conditional";
+    reason: string | null;
+  }[];
 };
 
 export type SupportContext = {

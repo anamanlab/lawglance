@@ -19,6 +19,7 @@ ResearchPosture = Literal["judicial_review", "appeal", "motion", "application"]
 DocumentForum = Literal["federal_court_jr", "rpd", "rad", "iad", "id"]
 DocumentQualityStatus = Literal["processed", "needs_review", "failed"]
 DocumentChecklistStatus = Literal["present", "missing", "warning"]
+DocumentRuleScope = Literal["base", "conditional"]
 
 
 class ChatRequest(BaseModel):
@@ -224,6 +225,7 @@ class DocumentIntakeResult(BaseModel):
     classification: str = Field(min_length=1, max_length=128)
     quality_status: DocumentQualityStatus
     issues: list[str] = Field(default_factory=list)
+    used_ocr: bool = False
 
 
 class DocumentIntakeResponse(BaseModel):
@@ -234,6 +236,13 @@ class DocumentIntakeResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class DocumentRequirementStatus(BaseModel):
+    item: str = Field(min_length=1, max_length=128)
+    status: DocumentChecklistStatus
+    rule_scope: DocumentRuleScope = "base"
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class DocumentReadinessResponse(BaseModel):
     matter_id: str = Field(min_length=3, max_length=128)
     forum: DocumentForum
@@ -241,6 +250,7 @@ class DocumentReadinessResponse(BaseModel):
     missing_required_items: list[str] = Field(default_factory=list)
     blocking_issues: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    requirement_statuses: list[DocumentRequirementStatus] = Field(default_factory=list)
 
 
 class DocumentTableOfContentsEntry(BaseModel):
@@ -252,6 +262,8 @@ class DocumentTableOfContentsEntry(BaseModel):
 class DocumentDisclosureChecklistEntry(BaseModel):
     item: str = Field(min_length=1, max_length=128)
     status: DocumentChecklistStatus
+    rule_scope: DocumentRuleScope = "base"
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class DocumentPackageResponse(BaseModel):

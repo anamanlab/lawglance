@@ -70,6 +70,14 @@ Response (`200`):
   "blocking_issues": [
     "illegible_pages"
   ],
+  "requirement_statuses": [
+    {
+      "item": "memorandum",
+      "status": "missing",
+      "rule_scope": "base",
+      "reason": "Required to set out legal argument and requested relief."
+    }
+  ],
   "warnings": [
     "ocr_low_confidence"
   ]
@@ -97,11 +105,15 @@ Response (`200`):
   "disclosure_checklist": [
     {
       "item": "decision_under_review",
-      "status": "present"
+      "status": "present",
+      "rule_scope": "base",
+      "reason": "Required to identify the administrative decision being challenged."
     },
     {
       "item": "memorandum",
-      "status": "missing"
+      "status": "missing",
+      "rule_scope": "base",
+      "reason": "Required to set out legal argument and requested relief."
     }
   ],
   "cover_letter_draft": "Procedural draft text...",
@@ -155,4 +167,3 @@ Initial issue code set:
 - `GET readiness` must be deterministic for identical document state.
 - `POST package` must not proceed when blocking readiness issues exist.
 - All responses must include `x-trace-id`.
-

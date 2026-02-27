@@ -121,6 +121,12 @@ function toDocumentReadinessState(
     missingRequiredItems: payload.missing_required_items ?? [],
     blockingIssues: payload.blocking_issues ?? [],
     warnings: payload.warnings ?? [],
+    requirementStatuses: (payload.requirement_statuses ?? []).map((status) => ({
+      item: status.item,
+      status: status.status,
+      ruleScope: status.rule_scope ?? "base",
+      reason: status.reason ?? null,
+    })),
   };
 }
 
@@ -857,6 +863,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
               missingRequiredItems: [],
               blockingIssues: [],
               warnings: [],
+              requirementStatuses: [],
             }
       );
       setSupportContext({

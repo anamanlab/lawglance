@@ -171,6 +171,12 @@ export type MatterReadinessResponsePayload = {
   missing_required_items: string[];
   blocking_issues: string[];
   warnings: string[];
+  requirement_statuses?: {
+    item: string;
+    status: "present" | "missing" | "warning";
+    rule_scope?: "base" | "conditional";
+    reason?: string | null;
+  }[];
 };
 
 export type MatterPackageTocItem = {
@@ -182,6 +188,8 @@ export type MatterPackageTocItem = {
 export type MatterPackageChecklistItem = {
   item: string;
   status: string;
+  rule_scope?: "base" | "conditional";
+  reason?: string | null;
 };
 
 export type MatterPackageResponsePayload = {

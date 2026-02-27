@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from immcad_api.policy.document_requirements import FilingForum, evaluate_readiness
+from immcad_api.policy.document_requirements import (
+    FilingForum,
+    evaluate_readiness,
+    requirement_rules_for_forum,
+    required_doc_types_for_forum,
+)
 from immcad_api.schemas import (
     DocumentDisclosureChecklistEntry,
     DocumentIntakeResult,
@@ -15,6 +20,8 @@ _TOC_PRIORITY_BY_FORUM: dict[FilingForum, tuple[str, ...]] = {
         "decision_under_review",
         "affidavit",
         "memorandum",
+        "translation",
+        "translator_declaration",
     ),
     FilingForum.RPD: (
         "disclosure_package",
@@ -23,15 +30,19 @@ _TOC_PRIORITY_BY_FORUM: dict[FilingForum, tuple[str, ...]] = {
     ),
     FilingForum.RAD: (
         "appeal_record",
+        "decision_under_review",
         "memorandum",
     ),
     FilingForum.IAD: (
         "appeal_record",
+        "decision_under_review",
         "disclosure_package",
     ),
     FilingForum.ID: (
         "disclosure_package",
         "witness_list",
+        "translation",
+        "translator_declaration",
     ),
 }
 
@@ -81,13 +92,25 @@ class DocumentPackageService:
         forum: FilingForum,
         classified_doc_types: set[str],
     ) -> list[DocumentDisclosureChecklistEntry]:
+        required_items = required_doc_types_for_forum(
+            forum=forum,
+            classified_doc_types=classified_doc_types,
+        )
+        requirement_rules = requirement_rules_for_forum(
+            forum=forum,
+            classified_doc_types=classified_doc_types,
+        )
+        rule_by_item = {rule.item: rule for rule in requirement_rules}
         checklist: list[DocumentDisclosureChecklistEntry] = []
-        for required_doc_type in _TOC_PRIORITY_BY_FORUM[forum]:
+        for required_doc_type in required_items:
             status = "present" if required_doc_type in classified_doc_types else "missing"
+            rule = rule_by_item.get(required_doc_type)
             checklist.append(
                 DocumentDisclosureChecklistEntry(
                     item=required_doc_type,
                     status=status,
+                    rule_scope=rule.rule_scope if rule is not None else "base",
+                    reason=rule.reason if rule is not None else None,
                 )
             )
         return checklist

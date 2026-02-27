@@ -110,9 +110,6 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official courts: available | CanLII: not used")
     ).toBeTruthy();
-    expect(
-      screen.getByText("Results by source: Official 1, CanLII 0, Other 0")
-    ).toBeTruthy();
     expect(screen.getByText("PDF available")).toBeTruthy();
     expect(screen.getByText("Intake quality: MEDIUM")).toBeTruthy();
     expect(

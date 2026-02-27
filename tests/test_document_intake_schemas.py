@@ -29,10 +29,19 @@ def test_readiness_response_exposes_blocking_issues() -> None:
         missing_required_items=["memorandum"],
         blocking_issues=["illegible_pages"],
         warnings=["ocr_low_confidence"],
+        requirement_statuses=[
+            {
+                "item": "memorandum",
+                "status": "missing",
+                "rule_scope": "base",
+                "reason": "Memorandum of argument is required.",
+            }
+        ],
     )
 
     assert response.is_ready is False
     assert response.blocking_issues == ["illegible_pages"]
+    assert response.requirement_statuses[0].rule_scope == "base"
 
 
 def test_document_package_response_contains_toc_and_cover_letter() -> None:
@@ -48,10 +57,16 @@ def test_document_package_response_contains_toc_and_cover_letter() -> None:
             }
         ],
         disclosure_checklist=[
-            {"item": "memorandum", "status": "missing"},
+            {
+                "item": "memorandum",
+                "status": "missing",
+                "rule_scope": "base",
+                "reason": "Memorandum of argument is required.",
+            },
         ],
         cover_letter_draft="Draft text",
     )
 
     assert package.table_of_contents[0].document_type == "notice_of_application"
     assert package.disclosure_checklist[0].status == "missing"
+    assert package.disclosure_checklist[0].rule_scope == "base"

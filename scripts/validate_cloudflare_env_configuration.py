@@ -8,6 +8,19 @@ import tomllib
 
 
 REQUIRED_RUNTIME_ENV_KEYS: tuple[str, ...] = ("ENVIRONMENT", "IMMCAD_ENVIRONMENT")
+REQUIRED_BACKEND_HARDENED_KEYS: tuple[str, ...] = (
+    "ENABLE_SCAFFOLD_PROVIDER",
+    "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS",
+    "ENABLE_OPENAI_PROVIDER",
+    "PRIMARY_PROVIDER",
+    "ENABLE_CASE_SEARCH",
+    "ENABLE_OFFICIAL_CASE_SOURCES",
+    "CASE_SEARCH_OFFICIAL_ONLY_RESULTS",
+    "EXPORT_POLICY_GATE_ENABLED",
+    "DOCUMENT_REQUIRE_HTTPS",
+    "GEMINI_MODEL",
+    "CITATION_TRUSTED_DOMAINS",
+)
 
 
 def _load_frontend_wrangler_vars(path: Path) -> dict[str, str]:
@@ -65,6 +78,62 @@ def _validate_runtime_env_vars(
     return errors
 
 
+def _validate_cloud_only_defaults(
+    *,
+    frontend_wrangler_path: Path,
+    frontend_vars: dict[str, str],
+    backend_wrangler_path: Path,
+    backend_vars: dict[str, str],
+) -> list[str]:
+    errors: list[str] = []
+    frontend_label = str(frontend_wrangler_path)
+    backend_label = str(backend_wrangler_path)
+
+    frontend_backend_url = (frontend_vars.get("IMMCAD_API_BASE_URL") or "").strip()
+    if not frontend_backend_url:
+        errors.append(f"{frontend_label}: missing required var `IMMCAD_API_BASE_URL`")
+    elif not frontend_backend_url.startswith("https://"):
+        errors.append(
+            f"{frontend_label}: IMMCAD_API_BASE_URL must start with `https://` "
+            f"(got `{frontend_backend_url}`)"
+        )
+    elif ".workers.dev" not in frontend_backend_url:
+        errors.append(
+            f"{frontend_label}: IMMCAD_API_BASE_URL should target Cloudflare Worker "
+            f"domain (`*.workers.dev`) (got `{frontend_backend_url}`)"
+        )
+
+    fallback_backend_url = (frontend_vars.get("IMMCAD_API_BASE_URL_FALLBACK") or "").strip()
+    if fallback_backend_url:
+        errors.append(
+            f"{frontend_label}: IMMCAD_API_BASE_URL_FALLBACK must be unset for "
+            "cloud-only production baseline"
+        )
+
+    for required_key in REQUIRED_BACKEND_HARDENED_KEYS:
+        if not (backend_vars.get(required_key) or "").strip():
+            errors.append(f"{backend_label}: missing required var `{required_key}`")
+
+    required_backend_flags = {
+        "ENABLE_SCAFFOLD_PROVIDER": "false",
+        "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS": "false",
+        "ENABLE_OPENAI_PROVIDER": "false",
+        "PRIMARY_PROVIDER": "gemini",
+        "CASE_SEARCH_OFFICIAL_ONLY_RESULTS": "true",
+        "EXPORT_POLICY_GATE_ENABLED": "true",
+        "DOCUMENT_REQUIRE_HTTPS": "true",
+    }
+    for key, expected in required_backend_flags.items():
+        actual = (backend_vars.get(key) or "").strip().lower()
+        if actual and actual != expected:
+            errors.append(
+                f"{backend_label}: {key} must be `{expected}` for cloud-only production "
+                f"baseline (got `{actual}`)"
+            )
+
+    return errors
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -111,6 +180,14 @@ def main() -> int:
             str(backend_wrangler_path): backend_vars,
         },
         expected_environment=args.expected_environment,
+    )
+    errors.extend(
+        _validate_cloud_only_defaults(
+            frontend_wrangler_path=frontend_wrangler_path,
+            frontend_vars=frontend_vars,
+            backend_wrangler_path=backend_wrangler_path,
+            backend_vars=backend_vars,
+        )
     )
     if errors:
         print("Cloudflare environment configuration check failed:")

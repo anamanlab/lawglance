@@ -5,12 +5,10 @@ description = "Native Cloudflare Python Worker runtime scaffold for IMMCAD backe
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0,<1",
-    "google-genai>=1.33.0,<2",
     "httpx>=0.27.0,<1",
-    "openai>=1.66.3,<2",
     "pydantic>=2.9.0,<3",
+    "python-multipart>=0.0.9,<1",
     "pyyaml>=6.0.2,<7",
-    "redis>=6.3.0,<7",
 ]
 
 [dependency-groups]

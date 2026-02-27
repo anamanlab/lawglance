@@ -56,12 +56,15 @@ def test_backend_native_python_entry_uses_asgi_bridge() -> None:
     entry = NATIVE_ENTRY_PATH.read_text(encoding="utf-8")
     assert "class Default(WorkerEntrypoint)" in entry
     assert "return await asgi.fetch(app, request, self.env)" in entry
+    assert "def _bootstrap_os_environ_from_worker_env" in entry
+    assert "def _bootstrap_os_environ_from_global_worker_env" in entry
+    assert 'import_from_javascript("cloudflare:workers")' in entry
     assert "from immcad_api.main import app" in entry
 
 
 def test_backend_native_wrangler_enables_python_workers_flag() -> None:
     wrangler_toml = NATIVE_WRANGLER_TOML.read_text(encoding="utf-8")
-    assert "compatibility_flags = [\"python_workers\"]" in wrangler_toml
+    assert 'compatibility_flags = ["python_workers"]' in wrangler_toml
     assert 'main = "src/entry.py"' in wrangler_toml
 
 

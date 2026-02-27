@@ -1,10 +1,10 @@
 # Backend Cloudflare Migration Scaffold
 
-This directory contains migration artifacts for moving IMMCAD backend traffic onto Cloudflare in a staged, low-risk way.
+This directory contains Cloudflare backend runtime and fallback proxy artifacts.
 
 ## Current Scope
-- Stage 1 (implemented here): Cloudflare Worker edge proxy in front of the existing backend origin.
-- Stage 2 (in progress): Cloudflare-native backend runtime scaffold via Python Workers (`src/entry.py`, `wrangler.toml`, `pyproject.toml`) with dedicated deploy workflow.
+- Canonical production path: Cloudflare-native backend runtime via Python Worker (`src/entry.py`, `wrangler.toml`, `pyproject.toml`).
+- Historical emergency fallback: Cloudflare Worker edge proxy (`src/worker.ts`, `wrangler.backend-proxy.jsonc`).
 
 ## Artifacts
 - `backend-cloudflare/src/worker.ts`: request proxy Worker with strict path allowlist.
@@ -15,9 +15,9 @@ This directory contains migration artifacts for moving IMMCAD backend traffic on
 - `backend-cloudflare/pyproject.toml`: native Python Worker dependency + toolchain configuration.
 
 ## Why This Helps
-- Moves ingress and edge security controls to Cloudflare immediately.
-- Avoids a risky all-at-once backend runtime rewrite.
-- Preserves existing API behavior while we complete backend architecture POC work.
+- Removes dependency on VPS/temp machine uptime and origin tunnels for normal production operation.
+- Makes deployment reproducible from repository + Cloudflare + GitHub Actions.
+- Keeps an emergency rollback path available without coupling day-to-day ops to it.
 
 ## Local Commands
 ```bash
@@ -78,8 +78,7 @@ uv run pywrangler deploy
   - `BACKEND_RETRY_ATTEMPTS` (default `1`, bounded `0..2`, idempotent methods only)
 
 ## Production Notes
-- Stage 1 proxy remains transitional until native Python Worker canary validation passes.
-- Native worker deploy workflow: `.github/workflows/cloudflare-backend-native-deploy.yml` (manual trigger).
-- Current blocker from live canary attempt: Cloudflare script bundle-size limit (`code: 10027`) on free plan for this backend package size.
-- Backend proxy workflow now runs a free-plan readiness gate (`scripts/check_cloudflare_free_plan_readiness.sh`) before deploy.
+- Native worker deploy workflow: `.github/workflows/cloudflare-backend-native-deploy.yml` (push + manual trigger).
+- Workflow syncs runtime secrets to Cloudflare Worker before deploy.
+- Backend proxy workflow remains available for emergency fallback and is scoped to proxy-specific files.
 - Keep `/ops/*` auth and existing application-level policy controls enabled in the backend.

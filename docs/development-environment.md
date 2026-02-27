@@ -14,8 +14,9 @@
 - [Environment variables](#environment-variables)
 - [Redis (optional but recommended)](#redis-(optional-but-recommended))
 - [Cloudflare Frontend Deploy](#cloudflare-frontend-deploy)
-- [Cloudflare Backend Proxy (Transitional)](#cloudflare-backend-proxy-(transitional))
-- [Legacy Vercel Environment Sync (Transitional)](#legacy-vercel-environment-sync-(transitional))
+- [Cloudflare Backend Native (Canonical Production Path)](#cloudflare-backend-native-(canonical-production-path))
+- [Cloudflare Backend Proxy (Historical Emergency Fallback)](#cloudflare-backend-proxy-(historical-emergency-fallback))
+- [Cloudflare Environment Configuration](#cloudflare-environment-configuration)
 - [Troubleshooting](#troubleshooting)
 
 This guide standardizes local development for IMMCAD.
@@ -215,32 +216,9 @@ GitHub Actions workflow:
 
 The workflow performs typecheck + contract tests + OpenNext bundle build before deploy.
 
-## Cloudflare Backend Proxy (Transitional)
+## Cloudflare Backend Native (Canonical Production Path)
 
-`backend-cloudflare` provides a Cloudflare Worker edge proxy in front of the current backend origin.
-
-Local/backend migration checks:
-
-```bash
-# Build backend runtime container spike artifact
-make backend-cf-spike-build
-
-# Deploy backend proxy worker
-make backend-cf-proxy-deploy
-```
-
-Key files:
-
-- `backend-cloudflare/src/worker.ts`
-- `backend-cloudflare/wrangler.backend-proxy.jsonc`
-- `.github/workflows/cloudflare-backend-proxy-deploy.yml`
-- GitHub Actions secret required for deploy: `IMMCAD_BACKEND_ORIGIN`
-
-This is a transitional step for edge cutover while backend runtime migration (Containers vs Python Worker) is finalized.
-
-## Cloudflare Backend Native (Python Worker, In Progress)
-
-Native backend runtime scaffold artifacts are available under `backend-cloudflare/`:
+Primary production backend runtime is Cloudflare-native Python Worker under `backend-cloudflare/`:
 
 - `backend-cloudflare/src/entry.py`
 - `backend-cloudflare/wrangler.toml`
@@ -255,56 +233,33 @@ make backend-cf-native-dev
 make backend-cf-native-deploy
 ```
 
-Note: native Python Worker deploy can fail on Cloudflare plan script-size limits (`code: 10027`) for large dependency bundles; validate plan/runtime constraints before cutover.
-
 Runtime performance smoke helper (authenticated):
 
 ```bash
-export IMMCAD_API_BASE_URL=https://immcad-api.arkiteto.dpdns.org
+export IMMCAD_API_BASE_URL=https://immcad-backend-native-python.optivoo-edu.workers.dev
 export IMMCAD_API_BEARER_TOKEN=<prod-token>
 REQUESTS=20 CONCURRENCY=5 MAX_P95_SECONDS=2.5 make backend-cf-perf-smoke
 ```
 
+## Cloudflare Backend Proxy (Historical Emergency Fallback)
+
+`backend-cloudflare/src/worker.ts` and `backend-cloudflare/wrangler.backend-proxy.jsonc`
+remain for emergency rollback only. They are not the primary production path.
+
 ## Cloudflare Environment Configuration
 
-Cloudflare is the primary deployment path. Configure runtime/env in three layers:
+Cloudflare production deployment is fully cloud-managed (no VPS/origin runtime env file required).
 
-1. Local backend origin runtime env file
-2. Cloudflare Worker non-secret vars (`vars` in Wrangler config)
-3. Cloudflare Worker secrets (`wrangler secret put`)
-
-### 1) Prepare backend origin runtime env file
-
-Canonical runtime path:
-
-- `ops/runtime/.env.backend-origin`
-
-Prepare from a source file:
-
-```bash
-bash scripts/prepare_backend_origin_env.sh --from-file /secure/path/backend-origin.env
-```
-
-Transitional import from legacy Vercel env artifact:
-
-```bash
-make backend-origin-env-recover-from-vercel
-```
-
-Validate and materialize default runtime env path:
-
-```bash
-make backend-origin-env-prepare
-```
-
-### 2) Validate Cloudflare Worker runtime vars
+### 1) Validate Cloudflare Worker runtime vars
 
 `frontend-web/wrangler.jsonc` and `backend-cloudflare/wrangler.toml` must define:
 
 - `ENVIRONMENT`
 - `IMMCAD_ENVIRONMENT`
-- Optional emergency fallback for frontend chat proxy:
-  - `IMMCAD_API_BASE_URL_FALLBACK` (used when primary chat upstream is unavailable, for example tunnel `530/1033`)
+- Cloud-only production baseline:
+  - frontend `IMMCAD_API_BASE_URL` -> Cloudflare backend Worker URL (`*.workers.dev`)
+  - no `IMMCAD_API_BASE_URL_FALLBACK` in production wrangler vars
+  - hardened backend policy flags (`ENABLE_SCAFFOLD_PROVIDER=false`, `GEMINI_MODEL`, `CITATION_TRUSTED_DOMAINS`, etc.)
 
 Both values must match and default to `production` for deploy configs.
 
@@ -314,7 +269,7 @@ Run validation:
 make cloudflare-env-validate
 ```
 
-### 3) Sync Cloudflare Worker secrets
+### 2) Sync Cloudflare Worker secrets
 
 Sync backend-native Worker secrets from your current shell:
 
@@ -324,7 +279,19 @@ make cloudflare-env-sync
 
 This calls `scripts/sync_cloudflare_backend_native_secrets.sh` and updates only non-empty variables present in your shell.
 
-### Legacy Tooling Note
+### 3) CI deploy requirements
+
+For repo-driven deploys (`.github/workflows/cloudflare-backend-native-deploy.yml`,
+`.github/workflows/cloudflare-frontend-deploy.yml`), configure GitHub Secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `IMMCAD_API_BEARER_TOKEN`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- Optional: `CANLII_API_KEY`, `REDIS_URL`
+
+### Historical Tooling Note
 
 `scripts/vercel_env_sync.py` and `make vercel-env-*` targets are retained only for emergency rollback/recovery workflows. They are not part of the Cloudflare-first deploy path.
 

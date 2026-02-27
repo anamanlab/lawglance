@@ -5,7 +5,10 @@ on:
     branches:
       - main
     paths:
-      - "backend-cloudflare/**"
+      - "backend-cloudflare/src/worker.ts"
+      - "backend-cloudflare/wrangler.backend-proxy.jsonc"
+      - "scripts/check_cloudflare_free_plan_readiness.sh"
+      - "scripts/check_cloudflare_edge_proxy_contract.sh"
       - ".github/workflows/cloudflare-backend-proxy-deploy.yml"
   workflow_dispatch:
 

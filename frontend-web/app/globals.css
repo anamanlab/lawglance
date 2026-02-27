@@ -123,6 +123,16 @@ textarea:focus-visible {
   }
 }
 
+@keyframes imm-activity-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+
 @layer components {
   .imm-kicker {
     display: inline-flex;
@@ -204,6 +214,14 @@ textarea:focus-visible {
 
   .imm-fade-up {
     animation: imm-fade-up 0.45s ease-out both;
+  }
+
+  .imm-activity-animate {
+    transition: transform 180ms ease, opacity 180ms ease, background-color 180ms ease;
+  }
+
+  .imm-activity-animate[data-activity-status="running"] {
+    animation: imm-activity-pulse 1.4s ease-in-out infinite;
   }
 
   .imm-meta-card {
@@ -431,5 +449,10 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .imm-activity-animate {
+    animation: none !important;
+    transition: none !important;
   }
 }

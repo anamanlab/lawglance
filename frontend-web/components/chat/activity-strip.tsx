@@ -23,10 +23,12 @@ export function ActivityStrip({ events }: ActivityStripProps): JSX.Element | nul
   }
 
   return (
-    <div aria-label="Agent activity" className="mt-2 flex flex-wrap gap-1.5">
+    <div aria-label="Agent activity" aria-live="polite" className="mt-2 flex flex-wrap gap-1.5">
       {events.map((event) => (
         <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClasses(event.status)}`}
+          aria-label={`${event.label} (${event.status})`}
+          className={`imm-activity-animate inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${statusClasses(event.status)}`}
+          data-activity-status={event.status}
           key={event.id}
         >
           {event.label}

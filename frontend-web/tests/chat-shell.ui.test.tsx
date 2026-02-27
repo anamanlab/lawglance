@@ -223,6 +223,9 @@ describe("chat shell ui", () => {
     expect(timelineList).toBeTruthy();
     expect(within(timelineList).getByText("Evaluating sources")).toBeTruthy();
     expect(
+      within(timelineList).getByLabelText("Evaluating sources (success)")
+    ).toBeTruthy();
+    expect(
       screen.getByRole("button", { name: "Hide details" })
     ).toBeTruthy();
   });

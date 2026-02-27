@@ -80,6 +80,10 @@ Endpoints:
   - `ENVIRONMENT=production uv run python scripts/run_ingestion_jobs.py --cadence scheduled_incremental --fail-on-error`
   - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
   - Enforces source policy gates from `config/source_policy.yaml` (or `--source-policy`).
+- Run Cloudflare hourly ingestion scheduler wrapper (FC hourly, SCC every 6h, laws daily + Tue/Fri full-sync window):
+  - `uv run python scripts/run_cloudflare_ingestion_hourly.py --fail-on-error`
+  - Writes scheduler report JSON + federal-laws section chunks JSONL (`--federal-laws-output`).
+  - Dry-run schedule only: `uv run python scripts/run_cloudflare_ingestion_hourly.py --dry-run --utc-timestamp 2026-02-27T04:00:00Z`
 - Run deterministic ingestion smoke gate (no external network required):
   - `make ingestion-smoke`
 - Evaluate operational alert thresholds against live `/ops/metrics`:

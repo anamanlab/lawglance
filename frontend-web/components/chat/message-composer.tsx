@@ -7,6 +7,7 @@ import type { SubmissionPhase } from "@/components/chat/types";
 
 type MessageComposerProps = {
   draft: string;
+  isFirstRun: boolean;
   isSubmitting: boolean;
   sendDisabled: boolean;
   remainingCharacters: number;
@@ -19,6 +20,7 @@ type MessageComposerProps = {
 
 export function MessageComposer({
   draft,
+  isFirstRun,
   isSubmitting,
   sendDisabled,
   remainingCharacters,
@@ -38,6 +40,25 @@ export function MessageComposer({
   return (
     <section className="imm-paper-card imm-fade-up rounded-2xl p-4 md:p-5" style={{ animationDelay: "180ms" }}>
       <form className="relative z-10 space-y-4" onSubmit={onSubmit} ref={formRef}>
+        {isFirstRun ? (
+          <div className="rounded-xl border border-[rgba(106,155,204,0.35)] bg-[rgba(237,243,250,0.72)] p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#436280]">
+              Guided Start - Step 1 of 3
+            </p>
+            <p className="mt-1 text-xs leading-6 text-muted">
+              Recommended next action: load a starter question, then send and review grounded sources.
+            </p>
+            <button
+              className="imm-btn-secondary mt-2 px-2.5 py-1 text-[11px]"
+              disabled={isSubmitting}
+              onClick={() => onQuickPromptClick(QUICK_PROMPTS[0] ?? "")}
+              type="button"
+            >
+              Load starter question
+            </button>
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="imm-kicker">Question Draft</p>

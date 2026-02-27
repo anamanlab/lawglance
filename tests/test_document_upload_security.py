@@ -31,6 +31,9 @@ def test_upload_reports_unsupported_content_type_as_failed_result() -> None:
     assert len(body["results"]) == 1
     assert body["results"][0]["quality_status"] == "failed"
     assert body["results"][0]["issues"] == ["unsupported_file_type"]
+    assert body["results"][0]["issue_details"][0]["code"] == "unsupported_file_type"
+    assert body["results"][0]["issue_details"][0]["severity"] == "error"
+    assert "pdf" in body["results"][0]["issue_details"][0]["remediation"].lower()
 
 
 def test_upload_reports_oversized_payload_as_failed_result(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,6 +51,9 @@ def test_upload_reports_oversized_payload_as_failed_result(monkeypatch: pytest.M
     assert len(body["results"]) == 1
     assert body["results"][0]["quality_status"] == "failed"
     assert body["results"][0]["issues"] == ["upload_size_exceeded"]
+    assert body["results"][0]["issue_details"][0]["code"] == "upload_size_exceeded"
+    assert body["results"][0]["issue_details"][0]["severity"] == "error"
+    assert "smaller" in body["results"][0]["issue_details"][0]["remediation"].lower()
 
 
 def test_upload_malformed_allowed_payload_returns_failed_result() -> None:
@@ -67,6 +73,9 @@ def test_upload_malformed_allowed_payload_returns_failed_result() -> None:
     assert len(body["results"]) == 1
     assert body["results"][0]["quality_status"] == "failed"
     assert "file_unreadable" in body["results"][0]["issues"]
+    assert body["results"][0]["issue_details"][0]["code"] == "file_unreadable"
+    assert body["results"][0]["issue_details"][0]["severity"] == "error"
+    assert "upload" in body["results"][0]["issue_details"][0]["remediation"].lower()
 
 
 def test_upload_valid_png_payload_returns_needs_review_result() -> None:

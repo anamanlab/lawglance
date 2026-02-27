@@ -7,6 +7,13 @@ import type {
 type StatusBannerProps = {
   chatError: ChatErrorState | null;
   supportContext?: SupportContext | null;
+  workflowStatus?:
+    | {
+        title: string;
+        message: string;
+        tone: "info" | "success" | "warning";
+      }
+    | null;
   relatedCasesStatus?: string;
   isSubmitting: boolean;
   retryPrompt: string | null;
@@ -37,9 +44,20 @@ function buildWorkflowErrorAction(endpoint: SupportContext["endpoint"] | undefin
   return "Retry in a moment. If the issue persists, capture the trace ID for support.";
 }
 
+function workflowToneClasses(tone: "info" | "success" | "warning"): string {
+  if (tone === "success") {
+    return "border-[rgba(120,140,93,0.35)] bg-[rgba(238,242,231,0.95)] text-[#4f603d]";
+  }
+  if (tone === "warning") {
+    return "border-[rgba(217,119,87,0.35)] bg-[rgba(248,238,232,0.95)] text-[#6b362a]";
+  }
+  return "border-[rgba(106,155,204,0.35)] bg-[rgba(238,243,248,0.95)] text-[#36506b]";
+}
+
 export function StatusBanner({
   chatError,
   supportContext = null,
+  workflowStatus = null,
   relatedCasesStatus = "",
   isSubmitting,
   retryPrompt,
@@ -59,7 +77,12 @@ export function StatusBanner({
     isSlowChatResponse &&
     submissionPhase === "chat";
 
-  if (!chatError && !hasNonChatWorkflowError && !showSlowResponseBanner) {
+  if (
+    !chatError &&
+    !hasNonChatWorkflowError &&
+    !showSlowResponseBanner &&
+    !workflowStatus
+  ) {
     return null;
   }
 
@@ -123,6 +146,24 @@ export function StatusBanner({
               {supportContext?.policyReason ? ` • Policy: ${supportContext.policyReason}` : ""}
             </p>
           ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (workflowStatus) {
+    return (
+      <div
+        aria-live="polite"
+        className={`imm-paper-card imm-fade-up rounded-2xl border p-4 text-sm ${workflowToneClasses(workflowStatus.tone)}`}
+        style={{ animationDelay: "120ms" }}
+      >
+        <div className="relative z-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em]">
+            Workflow update
+          </p>
+          <p className="mt-2 text-base font-semibold leading-snug">{workflowStatus.title}</p>
+          <p className="mt-2 leading-7">{workflowStatus.message}</p>
         </div>
       </div>
     );

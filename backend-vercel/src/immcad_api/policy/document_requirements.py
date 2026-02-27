@@ -11,6 +11,7 @@ class FilingForum(str, Enum):
     RAD = "rad"
     IAD = "iad"
     ID = "id"
+    IRCC_APPLICATION = "ircc_application"
 
 
 RequirementRuleScope = Literal["base", "conditional"]
@@ -102,6 +103,16 @@ _BASE_REQUIREMENT_RULES_BY_FORUM: dict[FilingForum, tuple[RequirementRule, ...]]
         RequirementRule(
             item="witness_list",
             reason="Required to identify witnesses for admissibility proceedings.",
+        ),
+    ),
+    FilingForum.IRCC_APPLICATION: (
+        RequirementRule(
+            item="disclosure_package",
+            reason="Required to provide the core IRCC application package materials.",
+        ),
+        RequirementRule(
+            item="supporting_evidence",
+            reason="Required to support eligibility claims for the IRCC application stream.",
         ),
     ),
 }

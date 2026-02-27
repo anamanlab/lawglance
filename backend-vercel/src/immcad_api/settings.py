@@ -49,6 +49,7 @@ class Settings:
     document_upload_max_bytes: int
     document_upload_max_files: int
     document_allowed_content_types: tuple[str, ...]
+    document_require_https: bool
 
 
 def parse_str_env(name: str, default: str | None = None) -> str | None:
@@ -281,6 +282,14 @@ def load_settings() -> Settings:
             "image/tiff",
         ),
     )
+    document_require_https = parse_bool_env(
+        "DOCUMENT_REQUIRE_HTTPS",
+        hardened_environment,
+    )
+    if hardened_environment and not document_require_https:
+        raise ValueError(
+            "DOCUMENT_REQUIRE_HTTPS must be true when ENVIRONMENT is production/prod/ci"
+        )
 
     raw_gemini_model = parse_str_env("GEMINI_MODEL")
     gemini_model = raw_gemini_model or "gemini-2.5-flash-lite"
@@ -352,4 +361,5 @@ def load_settings() -> Settings:
         document_upload_max_bytes=document_upload_max_bytes,
         document_upload_max_files=document_upload_max_files,
         document_allowed_content_types=document_allowed_content_types,
+        document_require_https=document_require_https,
     )

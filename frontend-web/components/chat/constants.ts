@@ -57,3 +57,6 @@ export const ASSISTANT_BOOTSTRAP_TEXT =
   "Welcome to IMMCAD. Ask a Canadian immigration question to get started.";
 
 export const MAX_MESSAGE_LENGTH = 8000;
+
+export const DOCUMENT_UPLOAD_DEFAULT_STATUS =
+  "Upload documents to evaluate filing readiness and package generation.";

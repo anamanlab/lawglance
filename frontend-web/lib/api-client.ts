@@ -50,6 +50,8 @@ export type CaseSearchResult = {
   url: string;
   source_id?: string | null;
   document_url?: string | null;
+  docket_numbers?: string[] | null;
+  source_event_type?: "new" | "updated" | "translated" | "corrected" | null;
   export_allowed?: boolean | null;
   export_policy_reason?: string | null;
 };
@@ -88,6 +90,8 @@ export type LawyerCaseSupport = {
   decision_date: string;
   url: string;
   document_url?: string | null;
+  docket_numbers?: string[] | null;
+  source_event_type?: "new" | "updated" | "translated" | "corrected" | null;
   pdf_status: "available" | "unavailable";
   pdf_reason?: string | null;
   export_allowed?: boolean | null;
@@ -139,7 +143,8 @@ export type DocumentForum =
   | "rpd"
   | "rad"
   | "iad"
-  | "id";
+  | "id"
+  | "ircc_application";
 
 export type DocumentIntakeRequestPayload = {
   forum: DocumentForum;
@@ -154,6 +159,14 @@ export type DocumentIntakeResult = {
   classification: string | null;
   quality_status: string;
   issues: string[];
+  issue_details?: DocumentIntakeIssueDetail[];
+};
+
+export type DocumentIntakeIssueDetail = {
+  code: string;
+  message: string;
+  severity: "blocking" | "warning" | "info" | string;
+  remediation: string | null;
 };
 
 export type DocumentIntakeResponsePayload = {
@@ -162,6 +175,11 @@ export type DocumentIntakeResponsePayload = {
   results: DocumentIntakeResult[];
   blocking_issues: string[];
   warnings: string[];
+};
+
+export type SupportMatrixResponsePayload = {
+  supported_profiles_by_forum: Record<string, string[]>;
+  unsupported_profile_families: string[];
 };
 
 export type MatterReadinessResponsePayload = {
@@ -183,6 +201,8 @@ export type MatterPackageTocItem = {
   position: number;
   document_type: string;
   filename: string;
+  start_page?: number | null;
+  end_page?: number | null;
 };
 
 export type MatterPackageChecklistItem = {
@@ -192,13 +212,72 @@ export type MatterPackageChecklistItem = {
   reason?: string | null;
 };
 
+export type MatterPackageRuleViolation = {
+  severity: "blocking" | "warning" | string;
+  violation_code?: string;
+  code?: string;
+  rule_source_url?: string | null;
+  source_url?: string | null;
+  remediation?: string | null;
+};
+
+export type MatterPackageCompilationProfile = {
+  id: string;
+  version: string;
+};
+
+export type MatterPackageRecordSectionSlotStatus = {
+  document_type: string;
+  status: "present" | "missing" | "warning" | string;
+  rule_scope?: "base" | "conditional";
+  reason?: string | null;
+};
+
+export type MatterPackageRecordSection = {
+  section_id: string;
+  title: string;
+  instructions: string;
+  document_types: string[];
+  section_status?: "present" | "missing" | "warning" | string;
+  slot_statuses?: MatterPackageRecordSectionSlotStatus[];
+  missing_document_types?: string[];
+  missing_reasons?: string[];
+};
+
+export type MatterPackagePaginationSummary = {
+  total_documents?: number;
+  total_pages?: number;
+  last_assigned_page?: number;
+  totalDocuments?: number;
+  totalPages?: number;
+  lastAssignedPage?: number;
+};
+
 export type MatterPackageResponsePayload = {
   matter_id: string;
   forum: DocumentForum;
-  table_of_contents: MatterPackageTocItem[];
+  table_of_contents?: MatterPackageTocItem[];
+  toc_entries?: MatterPackageTocItem[];
+  pagination_summary?: MatterPackagePaginationSummary | string | null;
+  rule_violations?: MatterPackageRuleViolation[];
+  compilation_profile?: MatterPackageCompilationProfile | null;
+  compilation_output_mode?: "metadata_plan_only" | "compiled_pdf" | string;
+  compiled_artifact?: {
+    filename: string;
+    byte_size: number;
+    sha256: string;
+    page_count: number;
+  } | null;
+  record_sections?: MatterPackageRecordSection[];
   disclosure_checklist: MatterPackageChecklistItem[];
   cover_letter_draft: string;
   is_ready: boolean;
+};
+
+export type MatterPackageDownloadResponsePayload = {
+  blob: Blob;
+  filename: string | null;
+  contentType: string;
 };
 
 export type ApiErrorCode =
@@ -913,6 +992,87 @@ function postCaseExportApproval(
   );
 }
 
+async function getMatterPackageDownload(
+  options: ApiClientOptions,
+  matterId: string
+): Promise<ApiResult<MatterPackageDownloadResponsePayload>> {
+  const normalizedMatterId = matterId.trim();
+  if (!normalizedMatterId) {
+    return {
+      ok: false,
+      status: 422,
+      traceId: null,
+      traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Matter ID is required.",
+      },
+    };
+  }
+
+  const requestUrl = buildApiUrl(
+    options.apiBaseUrl,
+    `/documents/matters/${encodeURIComponent(normalizedMatterId)}/package/download`
+  );
+  try {
+    const response = await getJsonWithRetry(
+      requestUrl,
+      buildRequestHeadersWithoutContentType(options.bearerToken, {
+        accept: PDF_ACCEPT_HEADER,
+      })
+    );
+    const headerTraceId = getResponseTraceId(response.headers);
+    if (response.ok) {
+      const packageBlob = await response.blob();
+      return {
+        ok: true,
+        status: response.status,
+        traceId: headerTraceId,
+        data: {
+          blob: packageBlob,
+          filename: parseContentDispositionFilename(
+            response.headers.get("content-disposition")
+          ),
+          contentType: response.headers.get("content-type") ?? "application/pdf",
+        },
+      };
+    }
+
+    const responseBody = await parseResponseBody(response);
+    const parsedError = parseErrorEnvelope(responseBody);
+    const bodyTraceId = parsedError?.traceId ?? null;
+    const traceIdMismatch =
+      Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
+    return {
+      ok: false,
+      status: response.status,
+      traceId,
+      traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
+      error: parsedError
+        ? {
+            code: parsedError.code,
+            message: parsedError.message,
+          }
+        : buildFallbackError(response.status),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      traceId: buildClientTraceId(),
+      traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "PROVIDER_ERROR",
+        message: "Unable to reach the IMMCAD API endpoint.",
+      },
+    };
+  }
+}
+
 export function createApiClient(options: ApiClientOptions) {
   return {
     sendChatMessage(
@@ -1018,6 +1178,14 @@ export function createApiClient(options: ApiClientOptions) {
         options,
         `/documents/matters/${encodeURIComponent(normalizedMatterId)}/package`
       );
+    },
+    downloadMatterPackagePdf(
+      matterId: string
+    ): Promise<ApiResult<MatterPackageDownloadResponsePayload>> {
+      return getMatterPackageDownload(options, matterId);
+    },
+    getDocumentSupportMatrix(): Promise<ApiResult<SupportMatrixResponsePayload>> {
+      return getJson<SupportMatrixResponsePayload>(options, "/documents/support-matrix");
     },
   };
 }

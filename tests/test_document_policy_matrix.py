@@ -71,6 +71,18 @@ from immcad_api.policy.document_requirements import FilingForum, evaluate_readin
             False,
             ("witness_list",),
         ),
+        (
+            FilingForum.IRCC_APPLICATION,
+            {"disclosure_package", "supporting_evidence"},
+            True,
+            (),
+        ),
+        (
+            FilingForum.IRCC_APPLICATION,
+            {"disclosure_package"},
+            False,
+            ("supporting_evidence",),
+        ),
     ],
 )
 def test_forum_policy_matrix(

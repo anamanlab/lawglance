@@ -61,6 +61,8 @@ export const CHAT_SUCCESS_WITH_RESEARCH_PREVIEW: ChatResponsePayload = {
         decision_date: "2024-03-01",
         url: "https://example.test/cases/auto-preview",
         document_url: "https://example.test/cases/auto-preview/document.pdf",
+        docket_numbers: ["IMM-2024-101"],
+        source_event_type: "new",
         pdf_status: "available",
         pdf_reason: null,
         export_allowed: true,
@@ -119,6 +121,8 @@ export const LAWYER_RESEARCH_SUCCESS_RESPONSE: LawyerCaseResearchResponsePayload
       url: "https://example.test/cases/1",
       document_url:
         "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/123/index.do",
+      docket_numbers: ["IMM-2025-100"],
+      source_event_type: "updated",
       pdf_status: "available",
       pdf_reason: "document_url_trusted",
       export_allowed: true,

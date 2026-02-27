@@ -24,7 +24,7 @@ Provide a secure, client-friendly workflow where users can drag-and-drop multipl
 
 ## Client Experience (Minimal Friction)
 
-1. User selects a matter forum (`federal_court_jr`, `rpd`, `rad`, `iad`, `id`) and optional matter reference.
+1. User selects a matter forum (`federal_court_jr`, `rpd`, `rad`, `iad`, `id`, `ircc_application`) and optional matter reference.
 2. User drags and drops many PDFs/images in one action.
 3. Platform starts processing automatically with no per-file required form fields.
 4. User sees per-file status:
@@ -65,6 +65,7 @@ For each uploaded file:
 4. Readiness policy stage
 - evaluate forum-specific required items
 - compute blocking issues and missing required elements
+- return requirement-level metadata (`item`, `status`, `rule_scope`, `reason`)
 - output readiness summary (`ready` / `not_ready`)
 
 5. Package stage
@@ -85,9 +86,10 @@ For each uploaded file:
   - missing required items
   - blocking issues
   - non-blocking warnings
+  - requirement status metadata for each rule (`rule_scope` + rationale)
 - **Package preview**:
   - table of contents entries
-  - disclosure checklist
+  - disclosure checklist (including rule scope + rationale metadata)
   - cover-letter draft
 
 ## Failure and Recovery Behavior
@@ -103,6 +105,7 @@ System behavior principles:
 - Never silently drop files.
 - Return deterministic machine-readable issue codes.
 - Keep partial progress (successful files remain available when one file fails).
+- Scope matter lookup by client identity so one client cannot resolve another client's uploaded matter state.
 
 ## Security and Compliance Requirements
 
@@ -142,4 +145,3 @@ Differentiators:
 - Legal advice generation.
 - Fully automated acceptance with no human review path.
 - Advanced multilingual translation workflows.
-

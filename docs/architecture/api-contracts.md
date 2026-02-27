@@ -7,6 +7,11 @@
 - [`POST /api/search/cases`](#`post-/api/search/cases`)
 - [`POST /api/research/lawyer-cases`](#`post-/api/research/lawyer-cases`)
 - [`POST /api/export/cases`](#`post-/api/export/cases`)
+- [`POST /api/documents/intake`](#`post-/api/documents/intake`)
+- [`GET /api/documents/support-matrix`](#`get-/api/documents/support-matrix`)
+- [`GET /api/documents/matters/{matter_id}/readiness`](#`get-/api/documents/matters/{matter_id}/readiness`)
+- [`PATCH /api/documents/matters/{matter_id}/classification`](#`patch-/api/documents/matters/{matter_id}/classification`)
+- [`POST /api/documents/matters/{matter_id}/package`](#`post-/api/documents/matters/{matter_id}/package`)
 - [`GET /ops/metrics`](#`get-/ops/metrics`)
 - [Error Envelope](#error-envelope)
 - [Interface Rules](#interface-rules)
@@ -268,6 +273,188 @@ Success response:
   - `x-export-policy-reason`: policy decision used for this export (for example `source_export_allowed`).
   - `content-disposition`: attachment filename.
   - `content-type`: source media type (typically `application/pdf`).
+
+## `POST /api/documents/intake`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+Content-Type: multipart/form-data
+```
+
+Request (`multipart/form-data`):
+
+- `forum` (required): `federal_court_jr | rpd | rad | iad | id | ircc_application`
+- `matter_id` (optional): existing matter identifier; backend creates one when omitted
+- `files[]` (required): one or more uploads (`application/pdf`, `image/png`, `image/jpeg`, `image/tiff`)
+
+Response:
+
+```json
+{
+  "matter_id": "matter-abc123def456",
+  "forum": "federal_court_jr",
+  "results": [
+    {
+      "file_id": "a1b2c3d4e5",
+      "original_filename": "notice.pdf",
+      "normalized_filename": "notice-of-application-a1b2c3d4e5.pdf",
+      "classification": "notice_of_application",
+      "quality_status": "processed",
+      "issues": [],
+      "issue_details": [],
+      "used_ocr": false
+    }
+  ],
+  "blocking_issues": [],
+  "warnings": []
+}
+```
+
+Document-matter scoping rules:
+
+- Matter records are scoped by backend-resolved `request.state.client_id`.
+- Follow-up readiness/package requests must resolve to the same client identity to access the matter.
+- The Next.js proxy forwards stable identity headers (`x-real-ip`, `x-forwarded-for`, `cf-connecting-ip`, `true-client-ip`) to preserve this scope across proxied requests.
+
+Validation/policy notes:
+
+- Missing files, invalid forum, or file-count overflow return `422 VALIDATION_ERROR`.
+- Per-file failures are returned in `results[]` with deterministic issue codes (`unsupported_file_type`, `upload_size_exceeded`, `file_unreadable`) instead of failing the full request.
+- Failed results also include `issue_details[]` entries with `code`, `message`, `severity`, and `remediation`; deterministic upload/parser failures include actionable remediation guidance.
+- When `DOCUMENT_REQUIRE_HTTPS=true`, non-HTTPS access to `/api/documents/*` is blocked with `400 VALIDATION_ERROR` and `policy_reason=document_https_required`.
+- Unsupported `compilation_profile_id` values return `422 VALIDATION_ERROR` with `policy_reason=document_compilation_profile_invalid` and include supported profiles for the selected forum in the error message.
+
+## `GET /api/documents/support-matrix`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+```
+
+Response:
+
+```json
+{
+  "supported_profiles_by_forum": {
+    "federal_court_jr": ["federal_court_jr_leave", "federal_court_jr_hearing"],
+    "rpd": ["rpd"],
+    "rad": ["rad"],
+    "id": ["id"],
+    "iad": ["iad", "iad_sponsorship", "iad_residency", "iad_admissibility"],
+    "ircc_application": ["ircc_pr_card_renewal"]
+  },
+  "unsupported_profile_families": [
+    "humanitarian_and_compassionate",
+    "prra",
+    "work_permit",
+    "study_permit",
+    "citizenship_proof"
+  ]
+}
+```
+
+## `GET /api/documents/matters/{matter_id}/readiness`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+```
+
+Response:
+
+```json
+{
+  "matter_id": "matter-abc123def456",
+  "forum": "federal_court_jr",
+  "is_ready": false,
+  "missing_required_items": ["memorandum"],
+  "blocking_issues": ["illegible_pages"],
+  "warnings": [],
+  "requirement_statuses": [
+    {
+      "item": "memorandum",
+      "status": "missing",
+      "rule_scope": "base",
+      "reason": "Required to set out legal argument and requested relief."
+    }
+  ]
+}
+```
+
+Not-found behavior:
+
+- Returns `404 SOURCE_UNAVAILABLE` with `policy_reason=document_matter_not_found` when the matter ID does not exist in the caller's client scope.
+
+## `PATCH /api/documents/matters/{matter_id}/classification`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "file_id": "a1b2c3d4e5",
+  "classification": "disclosure_package"
+}
+```
+
+Response:
+
+- Returns the same payload shape as `GET /api/documents/matters/{matter_id}/readiness` with updated readiness/checklist/package metadata based on the override.
+
+Policy behavior:
+
+- Returns `422 VALIDATION_ERROR` with `policy_reason=document_classification_invalid` when the override value is not a supported canonical document type.
+- Returns `404 SOURCE_UNAVAILABLE` with `policy_reason=document_file_not_found` when the file ID is not present in the scoped matter.
+- Returns `404 SOURCE_UNAVAILABLE` with `policy_reason=document_matter_not_found` when the scoped matter record is unavailable.
+
+## `POST /api/documents/matters/{matter_id}/package`
+
+Headers:
+
+```text
+Authorization: Bearer <token>   # required when IMMCAD_API_BEARER_TOKEN is configured (API_BEARER_TOKEN alias supported)
+```
+
+Response:
+
+```json
+{
+  "matter_id": "matter-abc123def456",
+  "forum": "federal_court_jr",
+  "is_ready": true,
+  "table_of_contents": [
+    {
+      "position": 1,
+      "document_type": "notice_of_application",
+      "filename": "notice-of-application-a1b2c3d4e5.pdf"
+    }
+  ],
+  "disclosure_checklist": [
+    {
+      "item": "decision_under_review",
+      "status": "present",
+      "rule_scope": "base",
+      "reason": "Required to identify the administrative decision being challenged."
+    }
+  ],
+  "cover_letter_draft": "Procedural draft text..."
+}
+```
+
+Policy behavior:
+
+- Returns `409 POLICY_BLOCKED` with `policy_reason=document_package_not_ready` when readiness is not yet satisfied.
+- Returns `404 SOURCE_UNAVAILABLE` with `policy_reason=document_matter_not_found` when the scoped matter record is unavailable.
 
 ## `GET /ops/metrics`
 

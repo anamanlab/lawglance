@@ -110,6 +110,20 @@ def test_load_settings_defaults_to_production_when_node_env_is_production(
     assert settings.environment == "production"
 
 
+def test_load_settings_prefers_explicit_environment_over_node_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_hardened_env_without_environment(monkeypatch)
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("IMMCAD_ENVIRONMENT", "development")
+    monkeypatch.setenv("NODE_ENV", "production")
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+
+    settings = load_settings()
+
+    assert settings.environment == "development"
+
+
 def test_load_settings_requires_hardened_guards_when_vercel_env_is_production(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -246,6 +260,40 @@ def test_load_settings_has_default_cors_origins(
         "http://127.0.0.1:3000",
         "http://localhost:3000",
     )
+
+
+def test_load_settings_defaults_document_https_requirement_to_false_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.delenv("DOCUMENT_REQUIRE_HTTPS", raising=False)
+
+    settings = load_settings()
+    assert settings.document_require_https is False
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_defaults_document_https_requirement_to_true_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.delenv("DOCUMENT_REQUIRE_HTTPS", raising=False)
+
+    settings = load_settings()
+    assert settings.document_require_https is True
+
+
+@pytest.mark.parametrize("environment", ["production", "prod", "ci"])
+def test_load_settings_rejects_document_https_disabled_in_hardened_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: str,
+) -> None:
+    _set_hardened_env(monkeypatch, environment)
+    monkeypatch.setenv("DOCUMENT_REQUIRE_HTTPS", "false")
+
+    with pytest.raises(ValueError, match="DOCUMENT_REQUIRE_HTTPS must be true"):
+        load_settings()
 
 
 def test_load_settings_defaults_to_in_memory_rate_limiter_when_redis_url_unset(

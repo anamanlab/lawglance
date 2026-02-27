@@ -389,6 +389,43 @@ def test_chat_validation_error_for_unsupported_locale_and_mode() -> None:
     assert "x-trace-id" in response.headers
 
 
+def test_document_endpoints_require_https_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DOCUMENT_REQUIRE_HTTPS", "true")
+    https_client = TestClient(create_app())
+
+    response = https_client.get("/api/documents/matters/matter-http-only/readiness")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "document_https_required"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
+def test_document_endpoints_accept_forwarded_https_proto_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    monkeypatch.setenv("DOCUMENT_REQUIRE_HTTPS", "true")
+    https_client = TestClient(create_app())
+
+    response = https_client.get(
+        "/api/documents/matters/matter-forwarded-https/readiness",
+        headers={"x-forwarded-proto": "https"},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"]["code"] == "SOURCE_UNAVAILABLE"
+    assert body["error"]["policy_reason"] == "document_matter_not_found"
+    assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+
+
 def test_optional_bearer_auth_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("IMMCAD_API_BEARER_TOKEN", "secret-token")
     monkeypatch.setenv("API_BEARER_TOKEN", "secret-token")

@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { createApiClient } from "@/lib/api-client";
+import { createApiClient, type SupportMatrixResponsePayload } from "@/lib/api-client";
 import type {
   DocumentForum,
   DocumentIntakeResult,
   LawyerCaseSupport,
   LawyerResearchIntakePayload,
+  MatterPackageResponsePayload,
   MatterReadinessResponsePayload,
 } from "@/lib/api-client";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
-import { ASSISTANT_BOOTSTRAP_TEXT, ERROR_COPY } from "@/components/chat/constants";
+import {
+  ASSISTANT_BOOTSTRAP_TEXT,
+  DOCUMENT_UPLOAD_DEFAULT_STATUS,
+  ERROR_COPY,
+} from "@/components/chat/constants";
 import type {
   CaseRetrievalMode,
   ChatErrorState,
+  DocumentCompilationState,
+  FrontendLocale,
   ChatMessage,
   DocumentReadinessState,
   DocumentUploadItem,
@@ -94,8 +101,6 @@ const BROAD_QUERY_INTAKE_GATE_MESSAGE =
   "Add at least two intake details (objective, target court, issue tags, or citation/docket anchor) before running broad case-law research queries.";
 const INVALID_DECISION_DATE_RANGE_MESSAGE =
   "Decision date range is invalid. 'From' date must be earlier than or equal to 'to' date.";
-const DOCUMENT_UPLOAD_DEFAULT_STATUS =
-  "Upload documents to evaluate filing readiness and package generation.";
 
 function toDocumentUploadStatus(
   qualityStatus: string
@@ -113,6 +118,81 @@ function toDocumentUploadStatus(
   return "uploaded";
 }
 
+function toDocumentUploadIssueDetails(
+  result: DocumentIntakeResult
+): DocumentUploadItem["issueDetails"] {
+  const normalizedDetails: DocumentUploadItem["issueDetails"] = [];
+  const seenDetails = new Set<string>();
+  for (const issueDetail of result.issue_details ?? []) {
+    const normalizedCode = issueDetail.code?.trim();
+    const normalizedMessage = issueDetail.message?.trim();
+    if (!normalizedCode || !normalizedMessage) {
+      continue;
+    }
+    const normalizedRemediation =
+      typeof issueDetail.remediation === "string" && issueDetail.remediation.trim().length > 0
+        ? issueDetail.remediation.trim()
+        : null;
+    const dedupeKey = [
+      normalizedCode.toLowerCase(),
+      normalizedMessage.toLowerCase(),
+      issueDetail.severity.trim().toLowerCase(),
+      normalizedRemediation?.toLowerCase() ?? "",
+    ].join("|");
+    if (seenDetails.has(dedupeKey)) {
+      continue;
+    }
+    seenDetails.add(dedupeKey);
+    normalizedDetails.push({
+      code: normalizedCode,
+      message: normalizedMessage,
+      severity: issueDetail.severity,
+      remediation: normalizedRemediation,
+    });
+  }
+  return normalizedDetails;
+}
+
+function toDocumentUploadIssueCodes(
+  result: DocumentIntakeResult,
+  issueDetails: DocumentUploadItem["issueDetails"]
+): string[] {
+  const issueCodes = result.issues.length > 0 ? result.issues : issueDetails.map((detail) => detail.code);
+  const normalizedIssueCodes: string[] = [];
+  const seenIssueCodes = new Set<string>();
+  for (const issueCode of issueCodes) {
+    const normalizedIssueCode = issueCode.trim();
+    if (!normalizedIssueCode) {
+      continue;
+    }
+    const dedupeKey = normalizedIssueCode.toLowerCase();
+    if (seenIssueCodes.has(dedupeKey)) {
+      continue;
+    }
+    seenIssueCodes.add(dedupeKey);
+    normalizedIssueCodes.push(normalizedIssueCode);
+  }
+  return normalizedIssueCodes;
+}
+
+const DEFAULT_DOCUMENT_SUPPORT_MATRIX: SupportMatrixResponsePayload = {
+  supported_profiles_by_forum: {
+    federal_court_jr: ["federal_court_jr_leave", "federal_court_jr_hearing"],
+    rpd: ["rpd"],
+    rad: ["rad"],
+    id: ["id"],
+    iad: ["iad", "iad_sponsorship", "iad_residency", "iad_admissibility"],
+    ircc_application: ["ircc_pr_card_renewal"],
+  },
+  unsupported_profile_families: [
+    "humanitarian_and_compassionate",
+    "prra",
+    "work_permit",
+    "study_permit",
+    "citizenship_proof",
+  ],
+};
+
 function toDocumentReadinessState(
   payload: MatterReadinessResponsePayload
 ): DocumentReadinessState {
@@ -127,6 +207,67 @@ function toDocumentReadinessState(
       ruleScope: status.rule_scope ?? "base",
       reason: status.reason ?? null,
     })),
+    latestCompilation: null,
+  };
+}
+
+function toDocumentCompilationState(
+  payload: MatterPackageResponsePayload
+): DocumentCompilationState {
+  const rawTocEntries =
+    payload.toc_entries && payload.toc_entries.length > 0
+      ? payload.toc_entries
+      : payload.table_of_contents ?? [];
+  return {
+    tocEntries: rawTocEntries.map((entry) => ({
+      position: entry.position,
+      documentType: entry.document_type,
+      filename: entry.filename,
+      startPage: typeof entry.start_page === "number" ? entry.start_page : null,
+      endPage: typeof entry.end_page === "number" ? entry.end_page : null,
+    })),
+    paginationSummary: payload.pagination_summary ?? null,
+    ruleViolations: (payload.rule_violations ?? []).map((violation) => ({
+      severity: violation.severity,
+      code: violation.violation_code ?? violation.code ?? "UNKNOWN_RULE_VIOLATION",
+      sourceUrl: violation.rule_source_url ?? violation.source_url ?? null,
+      remediation: violation.remediation ?? null,
+    })),
+    compilationProfile: payload.compilation_profile
+      ? {
+          id: payload.compilation_profile.id,
+          version: payload.compilation_profile.version,
+        }
+      : null,
+    compilationOutputMode:
+      payload.compilation_output_mode === "compiled_pdf"
+        ? "compiled_pdf"
+        : payload.compilation_output_mode === "metadata_plan_only"
+          ? "metadata_plan_only"
+          : null,
+    compiledArtifact: payload.compiled_artifact
+      ? {
+          filename: payload.compiled_artifact.filename,
+          byteSize: payload.compiled_artifact.byte_size,
+          sha256: payload.compiled_artifact.sha256,
+          pageCount: payload.compiled_artifact.page_count,
+        }
+      : null,
+    recordSections: (payload.record_sections ?? []).map((section) => ({
+      sectionId: section.section_id,
+      title: section.title,
+      instructions: section.instructions,
+      documentTypes: section.document_types ?? [],
+      sectionStatus: section.section_status ?? "present",
+      slotStatuses: (section.slot_statuses ?? []).map((slotStatus) => ({
+        documentType: slotStatus.document_type,
+        status: slotStatus.status,
+        ruleScope: slotStatus.rule_scope ?? "base",
+        reason: slotStatus.reason ?? null,
+      })),
+      missingDocumentTypes: section.missing_document_types ?? [],
+      missingReasons: section.missing_reasons ?? [],
+    })),
   };
 }
 
@@ -134,13 +275,36 @@ function buildDocumentUploadItem(
   result: DocumentIntakeResult,
   fallbackFilename: string
 ): DocumentUploadItem {
+  const issueDetails = toDocumentUploadIssueDetails(result);
   return {
     fileId: result.file_id || `${fallbackFilename}-${Date.now()}`,
     filename: result.original_filename || fallbackFilename,
     classification: result.classification ?? null,
     status: toDocumentUploadStatus(result.quality_status),
-    issues: result.issues ?? [],
+    issues: toDocumentUploadIssueCodes(result, issueDetails),
+    issueDetails,
   };
+}
+
+function startBrowserDownload(blob: Blob, filename: string): boolean {
+  if (
+    typeof window === "undefined" ||
+    typeof window.URL.createObjectURL !== "function"
+  ) {
+    return false;
+  }
+  const objectUrl = window.URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = objectUrl;
+  downloadLink.download = filename;
+  downloadLink.rel = "noopener";
+  document.body.append(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  if (typeof window.URL.revokeObjectURL === "function") {
+    window.URL.revokeObjectURL(objectUrl);
+  }
+  return true;
 }
 
 export interface UseChatLogicProps {
@@ -154,8 +318,10 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const messageCounterRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const endOfThreadRef = useRef<HTMLDivElement | null>(null);
+  const localeStorageKey = "immcad.locale";
 
   const [draft, setDraft] = useState("");
+  const [activeLocale, setActiveLocale] = useState<FrontendLocale>("en-CA");
   const [isChatSubmitting, setIsChatSubmitting] = useState(false);
   const [isCaseSearchSubmitting, setIsCaseSearchSubmitting] = useState(false);
   const [isExportSubmitting, setIsExportSubmitting] = useState(false);
@@ -192,6 +358,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [isDocumentIntakeSubmitting, setIsDocumentIntakeSubmitting] = useState(false);
   const [isDocumentReadinessSubmitting, setIsDocumentReadinessSubmitting] = useState(false);
   const [isDocumentPackageSubmitting, setIsDocumentPackageSubmitting] = useState(false);
+  const [isDocumentDownloadSubmitting, setIsDocumentDownloadSubmitting] = useState(false);
   const [exportingCaseId, setExportingCaseId] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
   const [chatPendingElapsedSeconds, setChatPendingElapsedSeconds] = useState(0);
@@ -200,12 +367,44 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const isSlowChatResponse = isChatSubmitting && chatPendingElapsedSeconds >= 8;
 
   const apiClient = useMemo(() => createApiClient({ apiBaseUrl }), [apiBaseUrl]);
+  const [supportMatrix, setSupportMatrix] = useState<SupportMatrixResponsePayload | null>(
+    null
+  );
+  const supportMatrixLoadedRef = useRef(false);
+
+  const loadDocumentSupportMatrix = useCallback(async (): Promise<void> => {
+    if (supportMatrixLoadedRef.current || supportMatrix !== null) {
+      return;
+    }
+    supportMatrixLoadedRef.current = true;
+    const result = await apiClient.getDocumentSupportMatrix();
+    if (result.ok) {
+      setSupportMatrix(result.data);
+    }
+  }, [apiClient, supportMatrix]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     buildMessage("assistant-bootstrap", "assistant", ASSISTANT_BOOTSTRAP_TEXT, {
       disclaimer: legalDisclaimer,
     }),
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const storedLocale = window.localStorage.getItem(localeStorageKey);
+    if (storedLocale === "en-CA" || storedLocale === "fr-CA") {
+      setActiveLocale(storedLocale);
+    }
+  }, [localeStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(localeStorageKey, activeLocale);
+  }, [activeLocale, localeStorageKey]);
 
   useEffect(() => {
     if (typeof endOfThreadRef.current?.scrollIntoView === "function") {
@@ -227,6 +426,15 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       window.clearInterval(intervalId);
     };
   }, [isChatSubmitting]);
+
+  useEffect(() => {
+    if (supportMatrix) {
+      return;
+    }
+    if (documentReadiness || documentUploads.length > 0) {
+      void loadDocumentSupportMatrix();
+    }
+  }, [documentReadiness, documentUploads.length, loadDocumentSupportMatrix, supportMatrix]);
 
   const submitPrompt = useCallback(
     async (prompt: string, options?: { isRetry?: boolean }): Promise<void> => {
@@ -269,7 +477,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         const chatResult = await apiClient.sendChatMessage({
           session_id: sessionIdRef.current,
           message: promptToSubmit,
-          locale: "en-CA",
+          locale: activeLocale,
           mode: "standard",
         });
 
@@ -360,7 +568,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         textareaRef.current?.focus();
       }
     },
-    [apiClient, isSubmitting, legalDisclaimer]
+    [activeLocale, apiClient, isSubmitting, legalDisclaimer]
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
@@ -518,17 +726,6 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         return;
       }
 
-      const userApproved =
-        typeof window !== "undefined"
-          ? window.confirm(
-              "Export this case PDF now? This will download the document from the official source."
-            )
-          : false;
-      if (!userApproved) {
-        setRelatedCasesStatus("Case export cancelled. No file was downloaded.");
-        return;
-      }
-
       setIsExportSubmitting(true);
       setSubmissionPhase("export");
       setExportingCaseId(caseResult.case_id);
@@ -672,8 +869,16 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           return false;
         }
 
-        setDocumentMatterId(readinessResult.data.matter_id || normalizedMatterId);
-        setDocumentReadiness(toDocumentReadinessState(readinessResult.data));
+        const resolvedMatterId = readinessResult.data.matter_id || normalizedMatterId;
+        const shouldPreserveCompilation = documentMatterId.trim() === resolvedMatterId;
+        setDocumentMatterId(resolvedMatterId);
+        setDocumentReadiness((currentReadiness) => {
+          const nextReadiness = toDocumentReadinessState(readinessResult.data);
+          if (shouldPreserveCompilation) {
+            nextReadiness.latestCompilation = currentReadiness?.latestCompilation ?? null;
+          }
+          return nextReadiness;
+        });
         if (!options?.suppressStatusMessage) {
           setDocumentStatusMessage(
             readinessResult.data.is_ready
@@ -692,7 +897,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         setIsDocumentReadinessSubmitting(false);
       }
     },
-    [apiClient, showOperationalPanels]
+    [apiClient, documentMatterId, showOperationalPanels]
   );
 
   const onDocumentUpload = useCallback(
@@ -718,6 +923,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           classification: null,
           status: "pending",
           issues: [],
+          issueDetails: [],
         }))
       );
 
@@ -736,6 +942,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
               classification: null,
               status: "failed",
               issues: [],
+              issueDetails: [],
             }))
           );
           setDocumentStatusMessage(`Upload failed. ${intakeResult.error.message}`);
@@ -760,6 +967,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
               classification: null,
               status: "failed" as const,
               issues: ["missing_result"],
+              issueDetails: [],
             };
           }
           return buildDocumentUploadItem(matchedResult, file.name);
@@ -852,18 +1060,24 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         return;
       }
 
+      const compilationState = toDocumentCompilationState(packageResult.data);
       setDocumentStatusMessage(
-        `Package generated. TOC items: ${packageResult.data.table_of_contents.length}.`
+        `Package generated. TOC items: ${compilationState.tocEntries.length}.`
       );
       setDocumentReadiness((currentReadiness) =>
         currentReadiness
-          ? { ...currentReadiness, isReady: packageResult.data.is_ready }
+          ? {
+              ...currentReadiness,
+              isReady: packageResult.data.is_ready,
+              latestCompilation: compilationState,
+            }
           : {
               isReady: packageResult.data.is_ready,
               missingRequiredItems: [],
               blockingIssues: [],
               warnings: [],
               requirementStatuses: [],
+              latestCompilation: compilationState,
             }
       );
       setSupportContext({
@@ -884,12 +1098,96 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     showOperationalPanels,
   ]);
 
+  const onDownloadDocumentPackage = useCallback(async (): Promise<void> => {
+    if (
+      isDocumentDownloadSubmitting ||
+      isDocumentPackageSubmitting ||
+      isDocumentIntakeSubmitting ||
+      isDocumentReadinessSubmitting
+    ) {
+      return;
+    }
+
+    const matterId = documentMatterId.trim();
+    if (!matterId) {
+      setDocumentStatusMessage("Enter a matter ID or upload documents first.");
+      return;
+    }
+
+    const latestCompilation = documentReadiness?.latestCompilation ?? null;
+    if (latestCompilation?.compilationOutputMode !== "compiled_pdf") {
+      setDocumentStatusMessage("Compiled binder unavailable. Generate package in compiled mode.");
+      return;
+    }
+
+    setIsDocumentDownloadSubmitting(true);
+    setDocumentStatusMessage("Preparing binder download...");
+    try {
+      const downloadResult = await apiClient.downloadMatterPackagePdf(matterId);
+      if (!downloadResult.ok) {
+        const unavailableMessage =
+          downloadResult.policyReason === "document_compiled_artifact_unavailable"
+            ? "Compiled binder unavailable. Generate package again or verify compiled mode."
+            : downloadResult.policyReason === "document_package_not_ready"
+              ? "Package blocked. Resolve missing or blocking items first."
+              : null;
+        const statusMessage = showOperationalPanels
+          ? `Unable to download binder: ${downloadResult.error.message}${
+              downloadResult.policyReason ? ` (Policy: ${downloadResult.policyReason})` : ""
+            } (Trace ID: ${downloadResult.traceId ?? "Unavailable"})`
+          : unavailableMessage ?? `Binder download failed. ${downloadResult.error.message}`;
+        setDocumentStatusMessage(statusMessage);
+        setSupportContext({
+          endpoint: "/api/documents/matters/{matter_id}/package/download",
+          status: "error",
+          traceId: downloadResult.traceId,
+          code: downloadResult.error.code,
+          policyReason: downloadResult.policyReason,
+          traceIdMismatch: downloadResult.traceIdMismatch,
+        });
+        return;
+      }
+
+      const fallbackFilename =
+        latestCompilation.compiledArtifact?.filename || `${matterId}-compiled-binder.pdf`;
+      const downloadFilename = downloadResult.data.filename || fallbackFilename;
+      if (!startBrowserDownload(downloadResult.data.blob, downloadFilename)) {
+        setDocumentStatusMessage(
+          `Binder download is ready, but automatic download is unavailable in this browser (${downloadFilename}).`
+        );
+      } else {
+        setDocumentStatusMessage(`Download started: ${downloadFilename}`);
+      }
+      setSupportContext({
+        endpoint: "/api/documents/matters/{matter_id}/package/download",
+        status: "success",
+        traceId: downloadResult.traceId,
+        traceIdMismatch: false,
+      });
+    } finally {
+      setIsDocumentDownloadSubmitting(false);
+    }
+  }, [
+    apiClient,
+    documentMatterId,
+    documentReadiness,
+    isDocumentDownloadSubmitting,
+    isDocumentIntakeSubmitting,
+    isDocumentPackageSubmitting,
+    isDocumentReadinessSubmitting,
+    showOperationalPanels,
+  ]);
+
   const onDocumentForumChange = useCallback((value: DocumentForum): void => {
     setDocumentForum(value);
   }, []);
 
   const onDocumentMatterIdChange = useCallback((value: string): void => {
     setDocumentMatterId(value);
+  }, []);
+
+  const onLocaleChange = useCallback((value: FrontendLocale): void => {
+    setActiveLocale(value);
   }, []);
 
   const onSubmit = useCallback(
@@ -969,6 +1267,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     endOfThreadRef,
     draft,
     setDraft,
+    activeLocale,
     isSubmitting,
     isChatSubmitting,
     isCaseSearchSubmitting,
@@ -1002,6 +1301,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     isDocumentIntakeSubmitting,
     isDocumentReadinessSubmitting,
     isDocumentPackageSubmitting,
+    isDocumentDownloadSubmitting,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -1023,8 +1323,11 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     onIntakeDateToChange,
     onDocumentForumChange,
     onDocumentMatterIdChange,
+    onLocaleChange,
     onDocumentUpload,
     onRefreshDocumentReadiness,
     onBuildDocumentPackage,
+    onDownloadDocumentPackage,
+    documentSupportMatrix: supportMatrix ?? DEFAULT_DOCUMENT_SUPPORT_MATRIX,
   };
 }

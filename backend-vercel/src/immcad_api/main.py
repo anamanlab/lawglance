@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import secrets
 import time
@@ -108,6 +109,33 @@ def _resolve_rate_limit_client_id(request: Request) -> str | None:
 
     # Final fallback when request.client is unavailable (common in worker shims).
     return _sanitize_client_host(request.headers.get("host"))
+
+
+def _extract_forwarded_proto(value: str | None) -> str | None:
+    if not value:
+        return None
+    first_value = value.split(",", 1)[0].strip().lower()
+    return first_value or None
+
+
+def _request_has_https_scheme(request: Request) -> bool:
+    if str(request.url.scheme or "").strip().lower() == "https":
+        return True
+    for header_name in ("x-forwarded-proto", "x-forwarded-protocol"):
+        forwarded_proto = _extract_forwarded_proto(request.headers.get(header_name))
+        if forwarded_proto == "https":
+            return True
+    cf_visitor = request.headers.get("cf-visitor")
+    if cf_visitor:
+        try:
+            visitor_payload = json.loads(cf_visitor)
+        except json.JSONDecodeError:
+            visitor_payload = None
+        if isinstance(visitor_payload, dict):
+            visitor_scheme = str(visitor_payload.get("scheme", "")).strip().lower()
+            if visitor_scheme == "https":
+                return True
+    return False
 
 
 def create_app() -> FastAPI:
@@ -250,6 +278,7 @@ def create_app() -> FastAPI:
         request_path = request.url.path
         is_api_request = request_path.startswith("/api")
         is_ops_request = request_path.startswith("/ops")
+        is_document_api_request = request_path.startswith("/api/documents")
         requires_bearer_auth = is_ops_request or (is_api_request and has_api_bearer_token)
         try:
             if requires_bearer_auth:
@@ -283,6 +312,25 @@ def create_app() -> FastAPI:
                         content=error.model_dump(),
                         headers={"x-trace-id": request.state.trace_id},
                     )
+            if (
+                is_document_api_request
+                and settings.document_require_https
+                and not _request_has_https_scheme(request)
+            ):
+                error = ErrorEnvelope(
+                    error={
+                        "code": "VALIDATION_ERROR",
+                        "message": "HTTPS is required for document upload and retrieval endpoints",
+                        "trace_id": request.state.trace_id,
+                        "policy_reason": "document_https_required",
+                    }
+                )
+                status_code = 400
+                return JSONResponse(
+                    status_code=status_code,
+                    content=error.model_dump(),
+                    headers={"x-trace-id": request.state.trace_id},
+                )
 
             if is_api_request:
                 client_id = _resolve_rate_limit_client_id(request)

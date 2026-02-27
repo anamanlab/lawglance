@@ -254,13 +254,13 @@ describe("chat shell ui", () => {
 
     expect(screen.getByLabelText("Research objective")).toBeTruthy();
     expect(screen.getByLabelText("Target court")).toBeTruthy();
-    expect(screen.getByLabelText("Issue tags")).toBeTruthy();
-    expect(screen.getByLabelText("Citation or docket anchor")).toBeTruthy();
-    expect(screen.getByLabelText("Decision date from")).toBeTruthy();
-    expect(screen.getByLabelText("Decision date to")).toBeTruthy();
+    expect(screen.queryByLabelText("Issue tags")).toBeNull();
+    expect(screen.queryByLabelText("Citation or docket anchor")).toBeNull();
+    expect(screen.queryByLabelText("Decision date from")).toBeNull();
+    expect(screen.queryByLabelText("Decision date to")).toBeNull();
   });
 
-  it("renders document-intake controls in the sidebar", () => {
+  it("renders document-intake controls in the sidebar", async () => {
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
@@ -268,6 +268,8 @@ describe("chat shell ui", () => {
       />
     );
 
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
     expect(screen.getByText("Document intake")).toBeTruthy();
     expect(screen.getByLabelText("Document forum")).toBeTruthy();
     expect(screen.getByLabelText("Matter ID (optional)")).toBeTruthy();

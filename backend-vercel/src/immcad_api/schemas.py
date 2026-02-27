@@ -10,16 +10,34 @@ Confidence = Literal["low", "medium", "high"]
 FallbackReason = Literal["timeout", "rate_limit", "policy_block", "provider_error"]
 ChatLocale = Literal["en-CA", "fr-CA"]
 ChatMode = Literal["standard"]
+SourceEventType = Literal["new", "updated", "translated", "corrected"]
 ResearchObjective = Literal[
     "support_precedent",
     "distinguish_precedent",
     "background_research",
 ]
 ResearchPosture = Literal["judicial_review", "appeal", "motion", "application"]
-DocumentForum = Literal["federal_court_jr", "rpd", "rad", "iad", "id"]
+DocumentForum = Literal[
+    "federal_court_jr", "rpd", "rad", "iad", "id", "ircc_application"
+]
+DocumentCompilationProfileId = Literal[
+    "federal_court_jr_leave",
+    "federal_court_jr_hearing",
+    "rpd",
+    "rad",
+    "id",
+    "iad",
+    "iad_sponsorship",
+    "iad_residency",
+    "iad_admissibility",
+    "ircc_pr_card_renewal",
+]
 DocumentQualityStatus = Literal["processed", "needs_review", "failed"]
 DocumentChecklistStatus = Literal["present", "missing", "warning"]
 DocumentRuleScope = Literal["base", "conditional"]
+DocumentViolationSeverity = Literal["warning", "blocking"]
+DocumentCompilationOutputMode = Literal["metadata_plan_only", "compiled_pdf"]
+DocumentSubmissionChannel = Literal["portal", "email", "fax", "mail", "in_person"]
 
 
 class ChatRequest(BaseModel):
@@ -86,6 +104,8 @@ class CaseSearchResult(BaseModel):
     url: str
     source_id: str | None = None
     document_url: str | None = None
+    docket_numbers: list[str] | None = None
+    source_event_type: SourceEventType | None = None
     export_allowed: bool | None = None
     export_policy_reason: str | None = None
 
@@ -158,6 +178,8 @@ class LawyerCaseSupport(BaseModel):
     decision_date: date
     url: str
     document_url: str | None = None
+    docket_numbers: list[str] | None = None
+    source_event_type: SourceEventType | None = None
     pdf_status: Literal["available", "unavailable"]
     pdf_reason: str | None = None
     export_allowed: bool | None = None
@@ -208,14 +230,56 @@ class CaseExportApprovalResponse(BaseModel):
 class DocumentIntakeInitRequest(BaseModel):
     forum: DocumentForum
     matter_id: str | None = Field(default=None, min_length=3, max_length=128)
+    compilation_profile_id: DocumentCompilationProfileId | None = None
     client_reference: str | None = Field(default=None, min_length=1, max_length=128)
+    submission_channel: DocumentSubmissionChannel = "portal"
+    decision_date: date | None = None
+    hearing_date: date | None = None
+    service_date: date | None = None
+    filing_date: date | None = None
+    deadline_override_reason: str | None = Field(
+        default=None, min_length=1, max_length=500
+    )
     language: ChatLocale = "en-CA"
+
+    @field_validator("deadline_override_reason", mode="before")
+    @classmethod
+    def _normalize_deadline_override_reason(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("deadline_override_reason must be a string when provided")
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("deadline_override_reason cannot be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_deadline_dates(self):
+        if (
+            self.service_date is not None
+            and self.hearing_date is not None
+            and self.service_date > self.hearing_date
+        ):
+            raise ValueError("service_date must be <= hearing_date")
+        return self
 
 
 class DocumentIssue(BaseModel):
     code: str = Field(min_length=1, max_length=128)
     message: str | None = Field(default=None, max_length=500)
     severity: Literal["warning", "blocking", "error"] = "warning"
+    remediation: str | None = Field(default=None, max_length=500)
+
+
+class DocumentPageCharCount(BaseModel):
+    page_number: int = Field(ge=1)
+    extracted_char_count: int = Field(default=0, ge=0)
+
+
+class DocumentClassificationCandidate(BaseModel):
+    classification: str = Field(min_length=1, max_length=128)
+    score: float = Field(ge=0.0, le=1.0)
 
 
 class DocumentIntakeResult(BaseModel):
@@ -223,17 +287,33 @@ class DocumentIntakeResult(BaseModel):
     original_filename: str = Field(min_length=1, max_length=260)
     normalized_filename: str = Field(min_length=1, max_length=260)
     classification: str = Field(min_length=1, max_length=128)
+    classification_confidence: Confidence | None = None
+    classification_candidates: list[DocumentClassificationCandidate] = Field(
+        default_factory=list
+    )
     quality_status: DocumentQualityStatus
     issues: list[str] = Field(default_factory=list)
+    issue_details: list[DocumentIssue] = Field(default_factory=list)
     used_ocr: bool = False
+    total_pages: int = Field(default=0, ge=0)
+    page_char_counts: list[DocumentPageCharCount] = Field(default_factory=list)
+    file_hash: str | None = Field(default=None, min_length=8, max_length=128)
+    ocr_confidence_class: Confidence | None = None
+    ocr_capability: str | None = Field(default=None, max_length=128)
 
 
 class DocumentIntakeResponse(BaseModel):
     matter_id: str = Field(min_length=3, max_length=128)
     forum: DocumentForum
+    compilation_profile_id: DocumentCompilationProfileId | None = None
     results: list[DocumentIntakeResult]
     blocking_issues: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+
+
+class DocumentClassificationOverrideRequest(BaseModel):
+    file_id: str = Field(min_length=1, max_length=128)
+    classification: str = Field(min_length=1, max_length=128)
 
 
 class DocumentRequirementStatus(BaseModel):
@@ -241,6 +321,31 @@ class DocumentRequirementStatus(BaseModel):
     status: DocumentChecklistStatus
     rule_scope: DocumentRuleScope = "base"
     reason: str | None = Field(default=None, max_length=500)
+
+
+class DocumentRecordSectionSlotStatus(BaseModel):
+    document_type: str = Field(min_length=1, max_length=128)
+    status: DocumentChecklistStatus
+    rule_scope: DocumentRuleScope = "base"
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class DocumentRecordSection(BaseModel):
+    section_id: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=260)
+    instructions: str = Field(min_length=1, max_length=4000)
+    document_types: list[str] = Field(default_factory=list)
+    section_status: DocumentChecklistStatus = "present"
+    slot_statuses: list[DocumentRecordSectionSlotStatus] = Field(default_factory=list)
+    missing_document_types: list[str] = Field(default_factory=list)
+    missing_reasons: list[str] = Field(default_factory=list)
+
+
+class DocumentCompiledArtifactMetadata(BaseModel):
+    filename: str = Field(min_length=1, max_length=260)
+    byte_size: int = Field(ge=0)
+    sha256: str = Field(min_length=64, max_length=64)
+    page_count: int = Field(ge=0)
 
 
 class DocumentReadinessResponse(BaseModel):
@@ -251,12 +356,25 @@ class DocumentReadinessResponse(BaseModel):
     blocking_issues: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     requirement_statuses: list[DocumentRequirementStatus] = Field(default_factory=list)
+    toc_entries: list[DocumentTableOfContentsEntry] = Field(default_factory=list)
+    pagination_summary: DocumentPaginationSummary = Field(
+        default_factory=lambda: DocumentPaginationSummary()
+    )
+    rule_violations: list[DocumentRuleViolation] = Field(default_factory=list)
+    compilation_profile: DocumentCompilationProfile = Field(
+        default_factory=lambda: DocumentCompilationProfile()
+    )
+    compilation_output_mode: DocumentCompilationOutputMode = "metadata_plan_only"
+    compiled_artifact: DocumentCompiledArtifactMetadata | None = None
+    record_sections: list[DocumentRecordSection] = Field(default_factory=list)
 
 
 class DocumentTableOfContentsEntry(BaseModel):
     position: int = Field(ge=1)
     document_type: str = Field(min_length=1, max_length=128)
     filename: str = Field(min_length=1, max_length=260)
+    start_page: int | None = Field(default=None, ge=1)
+    end_page: int | None = Field(default=None, ge=1)
 
 
 class DocumentDisclosureChecklistEntry(BaseModel):
@@ -266,13 +384,46 @@ class DocumentDisclosureChecklistEntry(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class DocumentPaginationSummary(BaseModel):
+    total_documents: int = Field(default=0, ge=0)
+    total_pages: int = Field(default=0, ge=0)
+    last_assigned_page: int = Field(default=0, ge=0)
+
+
+class DocumentRuleViolation(BaseModel):
+    violation_code: str = Field(min_length=1, max_length=128)
+    severity: DocumentViolationSeverity = "warning"
+    message: str | None = Field(default=None, max_length=500)
+    rule_id: str | None = Field(default=None, max_length=128)
+    rule_source_url: str = Field(min_length=1, max_length=2048)
+    remediation: str | None = Field(default=None, max_length=500)
+
+
+class DocumentCompilationProfile(BaseModel):
+    id: str = Field(default="legacy-intake-compat", min_length=1, max_length=128)
+    version: str = Field(default="1.0", min_length=1, max_length=64)
+
+
 class DocumentPackageResponse(BaseModel):
     matter_id: str = Field(min_length=3, max_length=128)
     forum: DocumentForum
     is_ready: bool
     table_of_contents: list[DocumentTableOfContentsEntry] = Field(default_factory=list)
-    disclosure_checklist: list[DocumentDisclosureChecklistEntry] = Field(default_factory=list)
+    disclosure_checklist: list[DocumentDisclosureChecklistEntry] = Field(
+        default_factory=list
+    )
     cover_letter_draft: str = Field(default="", max_length=24000)
+    toc_entries: list[DocumentTableOfContentsEntry] = Field(default_factory=list)
+    pagination_summary: DocumentPaginationSummary = Field(
+        default_factory=lambda: DocumentPaginationSummary()
+    )
+    rule_violations: list[DocumentRuleViolation] = Field(default_factory=list)
+    compilation_profile: DocumentCompilationProfile = Field(
+        default_factory=lambda: DocumentCompilationProfile()
+    )
+    compilation_output_mode: DocumentCompilationOutputMode = "metadata_plan_only"
+    compiled_artifact: DocumentCompiledArtifactMetadata | None = None
+    record_sections: list[DocumentRecordSection] = Field(default_factory=list)
 
 
 class ErrorBody(BaseModel):
@@ -295,3 +446,5 @@ class ErrorEnvelope(BaseModel):
 
 ChatResearchPreview.model_rebuild()
 ChatResponse.model_rebuild()
+DocumentReadinessResponse.model_rebuild()
+DocumentPackageResponse.model_rebuild()

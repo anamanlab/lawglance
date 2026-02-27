@@ -57,6 +57,8 @@ class DocumentExtractionResult:
     ocr_pages: int
     ocr_char_count: int
     ocr_limit_hit: bool
+    ocr_capability: str = "unavailable"
+    ocr_confidence: str = "not_applicable"
 
 
 def _is_tesseract_ocr_enabled() -> bool:
@@ -71,6 +73,22 @@ def _can_run_tesseract_ocr() -> bool:
         and Image is not None
         and shutil.which("tesseract") is not None
     )
+
+
+def _ocr_capability() -> str:
+    return "available" if _can_run_tesseract_ocr() else "unavailable"
+
+
+def _ocr_confidence_class(*, used_ocr: bool, ocr_char_count: int, ocr_limit_hit: bool) -> str:
+    if not used_ocr:
+        return "not_applicable"
+    if ocr_limit_hit:
+        return "low"
+    if ocr_char_count >= 64:
+        return "high"
+    if ocr_char_count >= 24:
+        return "medium"
+    return "low"
 
 
 def _ocr_text_from_page(page: fitz.Page) -> str:
@@ -141,6 +159,7 @@ def extract_text_and_page_signals(payload_bytes: bytes) -> DocumentExtractionRes
     ocr_char_count = 0
     used_ocr = False
     ocr_limit_hit = False
+    ocr_capability = _ocr_capability()
     page_limit = _ocr_page_limit()
     char_limit = _ocr_char_limit()
 
@@ -185,6 +204,11 @@ def extract_text_and_page_signals(payload_bytes: bytes) -> DocumentExtractionRes
 
     extracted_text = "\n".join(fragment for fragment in text_fragments if fragment)
     total_extracted_char_count = sum(signal.extracted_char_count for signal in page_signals)
+    ocr_confidence = _ocr_confidence_class(
+        used_ocr=used_ocr,
+        ocr_char_count=ocr_char_count,
+        ocr_limit_hit=ocr_limit_hit,
+    )
 
     return DocumentExtractionResult(
         extracted_text=extracted_text,
@@ -195,6 +219,8 @@ def extract_text_and_page_signals(payload_bytes: bytes) -> DocumentExtractionRes
         ocr_pages=ocr_pages,
         ocr_char_count=ocr_char_count,
         ocr_limit_hit=ocr_limit_hit,
+        ocr_capability=ocr_capability,
+        ocr_confidence=ocr_confidence,
     )
 
 

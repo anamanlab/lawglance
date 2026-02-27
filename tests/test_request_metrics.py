@@ -46,6 +46,9 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
         forum="federal_court_jr",
         file_count=2,
         outcome="accepted",
+        ocr_warning_files=1,
+        low_confidence_classification_files=1,
+        parser_failure_files=0,
     )
     metrics.record_document_intake_event(
         trace_id="trace-doc-2",
@@ -55,6 +58,49 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
         file_count=0,
         outcome="rejected",
         policy_reason="document_files_missing",
+        ocr_warning_files=0,
+        low_confidence_classification_files=0,
+        parser_failure_files=0,
+    )
+    metrics.record_document_classification_override_event(
+        trace_id="trace-doc-override-1",
+        client_id="198.51.100.2",
+        matter_id="matter-doc-1",
+        forum="federal_court_jr",
+        file_id="file-1",
+        previous_classification="unclassified",
+        new_classification="notice_of_application",
+        outcome="updated",
+    )
+    metrics.record_document_classification_override_event(
+        trace_id="trace-doc-override-2",
+        client_id="198.51.100.3",
+        matter_id="matter-doc-2",
+        forum="iad",
+        file_id="missing-file",
+        previous_classification=None,
+        new_classification="decision_under_review",
+        outcome="rejected",
+        policy_reason="document_file_not_found",
+    )
+    metrics.record_document_compilation_outcome(
+        outcome="compiled",
+        trace_id="trace-comp-1",
+        client_id="198.51.100.2",
+        matter_id="matter-doc-1",
+        forum="federal_court_jr",
+        route="package",
+        http_status=200,
+    )
+    metrics.record_document_compilation_outcome(
+        outcome="blocked",
+        policy_reason="document_package_not_ready",
+        trace_id="trace-comp-2",
+        client_id="198.51.100.3",
+        matter_id="matter-doc-2",
+        forum="iad",
+        route="package_download",
+        http_status=409,
     )
 
     clock["now"] = 160.0
@@ -99,6 +145,16 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert snapshot["document_intake"]["attempts"] == 2
     assert snapshot["document_intake"]["accepted"] == 1
     assert snapshot["document_intake"]["rejected"] == 1
+    assert snapshot["document_intake"]["rejected_rate"] == pytest.approx(0.5)
+    assert snapshot["document_intake"]["files_total"] == 2
+    assert snapshot["document_intake"]["ocr_warning_files"] == 1
+    assert snapshot["document_intake"]["ocr_warning_rate"] == pytest.approx(0.5)
+    assert snapshot["document_intake"]["low_confidence_classification_files"] == 1
+    assert snapshot["document_intake"]["low_confidence_classification_rate"] == pytest.approx(
+        0.5
+    )
+    assert snapshot["document_intake"]["parser_failure_files"] == 0
+    assert snapshot["document_intake"]["parser_failure_rate"] == 0.0
     assert snapshot["document_intake"]["policy_reasons"]["document_files_missing"] == 1
     assert len(snapshot["document_intake"]["audit_recent"]) == 2
     accepted_event, rejected_event = snapshot["document_intake"]["audit_recent"]
@@ -108,6 +164,7 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert accepted_event["forum"] == "federal_court_jr"
     assert accepted_event["file_count"] == 2
     assert accepted_event["outcome"] == "accepted"
+    assert accepted_event["low_confidence_classification_files"] == 1
     assert "policy_reason" not in accepted_event
     assert accepted_event["timestamp_utc"].endswith("Z")
     assert rejected_event["trace_id"] == "trace-doc-2"
@@ -116,8 +173,70 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert rejected_event["forum"] == "iad"
     assert rejected_event["file_count"] == 0
     assert rejected_event["outcome"] == "rejected"
+    assert rejected_event["low_confidence_classification_files"] == 0
     assert rejected_event["policy_reason"] == "document_files_missing"
     assert rejected_event["timestamp_utc"].endswith("Z")
+    assert snapshot["document_classification_override"]["attempts"] == 2
+    assert snapshot["document_classification_override"]["updated"] == 1
+    assert snapshot["document_classification_override"]["rejected"] == 1
+    assert snapshot["document_classification_override"]["rejected_rate"] == pytest.approx(
+        0.5
+    )
+    assert (
+        snapshot["document_classification_override"]["policy_reasons"][
+            "document_file_not_found"
+        ]
+        == 1
+    )
+    assert len(snapshot["document_classification_override"]["audit_recent"]) == 2
+    updated_override_event, rejected_override_event = snapshot[
+        "document_classification_override"
+    ]["audit_recent"]
+    assert updated_override_event["trace_id"] == "trace-doc-override-1"
+    assert updated_override_event["client_id"] == "198.51.100.2"
+    assert updated_override_event["matter_id"] == "matter-doc-1"
+    assert updated_override_event["forum"] == "federal_court_jr"
+    assert updated_override_event["file_id"] == "file-1"
+    assert updated_override_event["previous_classification"] == "unclassified"
+    assert updated_override_event["new_classification"] == "notice_of_application"
+    assert updated_override_event["outcome"] == "updated"
+    assert updated_override_event["timestamp_utc"].endswith("Z")
+    assert rejected_override_event["trace_id"] == "trace-doc-override-2"
+    assert rejected_override_event["client_id"] == "198.51.100.3"
+    assert rejected_override_event["matter_id"] == "matter-doc-2"
+    assert rejected_override_event["forum"] == "iad"
+    assert rejected_override_event["file_id"] == "missing-file"
+    assert rejected_override_event["new_classification"] == "decision_under_review"
+    assert rejected_override_event["outcome"] == "rejected"
+    assert rejected_override_event["policy_reason"] == "document_file_not_found"
+    assert rejected_override_event["timestamp_utc"].endswith("Z")
+    assert snapshot["document_compilation"]["attempts"] == 2
+    assert snapshot["document_compilation"]["compiled"] == 1
+    assert snapshot["document_compilation"]["blocked"] == 1
+    assert snapshot["document_compilation"]["block_rate"] == pytest.approx(0.5)
+    assert (
+        snapshot["document_compilation"]["policy_reasons"]["document_package_not_ready"]
+        == 1
+    )
+    assert len(snapshot["document_compilation"]["audit_recent"]) == 2
+    compiled_event, blocked_event = snapshot["document_compilation"]["audit_recent"]
+    assert compiled_event["outcome"] == "compiled"
+    assert compiled_event["trace_id"] == "trace-comp-1"
+    assert compiled_event["client_id"] == "198.51.100.2"
+    assert compiled_event["matter_id"] == "matter-doc-1"
+    assert compiled_event["forum"] == "federal_court_jr"
+    assert compiled_event["route"] == "package"
+    assert compiled_event["http_status"] == 200
+    assert compiled_event["timestamp_utc"].endswith("Z")
+    assert blocked_event["outcome"] == "blocked"
+    assert blocked_event["trace_id"] == "trace-comp-2"
+    assert blocked_event["client_id"] == "198.51.100.3"
+    assert blocked_event["matter_id"] == "matter-doc-2"
+    assert blocked_event["forum"] == "iad"
+    assert blocked_event["route"] == "package_download"
+    assert blocked_event["http_status"] == 409
+    assert blocked_event["policy_reason"] == "document_package_not_ready"
+    assert blocked_event["timestamp_utc"].endswith("Z")
     assert snapshot["latency_ms"]["sample_count"] == 2
     assert snapshot["latency_ms"]["p50"] == pytest.approx(250.0)
     assert snapshot["latency_ms"]["p95"] == pytest.approx(385.0)
@@ -152,8 +271,28 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["document_intake"]["attempts"] == 0
     assert snapshot["document_intake"]["accepted"] == 0
     assert snapshot["document_intake"]["rejected"] == 0
+    assert snapshot["document_intake"]["rejected_rate"] == 0.0
+    assert snapshot["document_intake"]["files_total"] == 0
+    assert snapshot["document_intake"]["ocr_warning_files"] == 0
+    assert snapshot["document_intake"]["ocr_warning_rate"] == 0.0
+    assert snapshot["document_intake"]["low_confidence_classification_files"] == 0
+    assert snapshot["document_intake"]["low_confidence_classification_rate"] == 0.0
+    assert snapshot["document_intake"]["parser_failure_files"] == 0
+    assert snapshot["document_intake"]["parser_failure_rate"] == 0.0
     assert snapshot["document_intake"]["policy_reasons"] == {}
     assert snapshot["document_intake"]["audit_recent"] == []
+    assert snapshot["document_classification_override"]["attempts"] == 0
+    assert snapshot["document_classification_override"]["updated"] == 0
+    assert snapshot["document_classification_override"]["rejected"] == 0
+    assert snapshot["document_classification_override"]["rejected_rate"] == 0.0
+    assert snapshot["document_classification_override"]["policy_reasons"] == {}
+    assert snapshot["document_classification_override"]["audit_recent"] == []
+    assert snapshot["document_compilation"]["attempts"] == 0
+    assert snapshot["document_compilation"]["compiled"] == 0
+    assert snapshot["document_compilation"]["blocked"] == 0
+    assert snapshot["document_compilation"]["block_rate"] == 0.0
+    assert snapshot["document_compilation"]["policy_reasons"] == {}
+    assert snapshot["document_compilation"]["audit_recent"] == []
     assert snapshot["latency_ms"]["sample_count"] == 0
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0
@@ -172,3 +311,34 @@ def test_lawyer_research_source_unavailable_events_count_per_request() -> None:
     snapshot = metrics.snapshot()
     assert snapshot["lawyer_research"]["requests"] == 1
     assert snapshot["lawyer_research"]["source_unavailable_events"] == 1
+
+
+def test_request_metrics_tracks_document_compilation_block_rates_and_reasons() -> None:
+    metrics = RequestMetrics(time_fn=lambda: 10.0)
+
+    metrics.record_document_compilation_outcome(outcome="compiled")
+    metrics.record_document_compilation_outcome(
+        outcome="blocked",
+        policy_reason="document_package_not_ready",
+    )
+    metrics.record_document_compilation_outcome(
+        outcome="blocked",
+        policy_reason="document_translation_requirement_missing",
+    )
+
+    snapshot = metrics.snapshot()
+
+    assert snapshot["document_compilation"]["attempts"] == 3
+    assert snapshot["document_compilation"]["compiled"] == 1
+    assert snapshot["document_compilation"]["blocked"] == 2
+    assert snapshot["document_compilation"]["block_rate"] == pytest.approx(2 / 3)
+    assert (
+        snapshot["document_compilation"]["policy_reasons"]["document_package_not_ready"]
+        == 1
+    )
+    assert (
+        snapshot["document_compilation"]["policy_reasons"][
+            "document_translation_requirement_missing"
+        ]
+        == 1
+    )

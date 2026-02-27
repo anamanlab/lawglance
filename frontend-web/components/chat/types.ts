@@ -27,6 +27,7 @@ export type ChatShellProps = {
 };
 
 export type SubmissionPhase = "idle" | "chat" | "cases" | "export";
+export type FrontendLocale = "en-CA" | "fr-CA";
 export type CaseRetrievalMode = "auto" | "manual" | null;
 export type ResearchConfidence = "low" | "medium" | "high" | null;
 export type IntakeCompleteness = "low" | "medium" | "high" | null;
@@ -38,12 +39,81 @@ export type ResearchObjective =
   | "";
 export type ResearchPosture = "judicial_review" | "appeal" | "motion" | "application" | "";
 export type DocumentUploadStatus = "pending" | "uploaded" | "needs_review" | "failed";
+export type DocumentUploadIssueDetail = {
+  code: string;
+  message: string;
+  severity: "blocking" | "warning" | "info" | string;
+  remediation: string | null;
+};
 export type DocumentUploadItem = {
   fileId: string;
   filename: string;
   classification: string | null;
   status: DocumentUploadStatus;
   issues: string[];
+  issueDetails: DocumentUploadIssueDetail[];
+};
+export type DocumentCompilationTocEntry = {
+  position: number;
+  documentType: string;
+  filename: string;
+  startPage: number | null;
+  endPage: number | null;
+};
+export type DocumentCompilationRuleViolation = {
+  severity: "blocking" | "warning" | string;
+  code: string;
+  sourceUrl: string | null;
+  remediation: string | null;
+};
+export type DocumentCompilationProfile = {
+  id: string;
+  version: string;
+};
+export type DocumentCompiledArtifact = {
+  filename: string;
+  byteSize: number;
+  sha256: string;
+  pageCount: number;
+};
+export type DocumentCompilationPaginationSummary =
+  | string
+  | {
+      total_documents?: number;
+      total_pages?: number;
+      last_assigned_page?: number;
+      totalDocuments?: number;
+      totalPages?: number;
+      lastAssignedPage?: number;
+    };
+export type DocumentCompilationSectionSlotStatus = {
+  documentType: string;
+  status: "present" | "missing" | "warning" | string;
+  ruleScope: "base" | "conditional";
+  reason: string | null;
+};
+export type DocumentCompilationRecordSection = {
+  sectionId: string;
+  title: string;
+  instructions: string;
+  documentTypes: string[];
+  sectionStatus: "present" | "missing" | "warning" | string;
+  slotStatuses: DocumentCompilationSectionSlotStatus[];
+  missingDocumentTypes: string[];
+  missingReasons: string[];
+};
+export type DocumentCompilationState = {
+  tocEntries: DocumentCompilationTocEntry[];
+  paginationSummary: DocumentCompilationPaginationSummary | null;
+  ruleViolations: DocumentCompilationRuleViolation[];
+  compilationProfile: DocumentCompilationProfile | null;
+  compilationOutputMode: "metadata_plan_only" | "compiled_pdf" | null;
+  compiledArtifact: DocumentCompiledArtifact | null;
+  recordSections: DocumentCompilationRecordSection[];
+};
+export type DocumentSupportMatrix = {
+  supported_profiles_by_forum: Record<string, string[]>;
+  unsupported_profile_families: string[];
 };
 export type DocumentReadinessState = {
   isReady: boolean;
@@ -56,6 +126,7 @@ export type DocumentReadinessState = {
     ruleScope: "base" | "conditional";
     reason: string | null;
   }[];
+  latestCompilation: DocumentCompilationState | null;
 };
 
 export type SupportContext = {
@@ -67,7 +138,8 @@ export type SupportContext = {
     | "/api/export/cases/approval"
     | "/api/documents/intake"
     | "/api/documents/matters/{matter_id}/readiness"
-    | "/api/documents/matters/{matter_id}/package";
+    | "/api/documents/matters/{matter_id}/package"
+    | "/api/documents/matters/{matter_id}/package/download";
   status: "success" | "error";
   traceId: string | null;
   code?: ApiErrorCode;
@@ -102,6 +174,7 @@ export type RelatedCasePanelProps = {
   isDocumentIntakeSubmitting: boolean;
   isDocumentReadinessSubmitting: boolean;
   isDocumentPackageSubmitting: boolean;
+  isDocumentDownloadSubmitting: boolean;
   isChatSubmitting: boolean;
   isCaseSearchSubmitting: boolean;
   isExportSubmitting: boolean;
@@ -129,6 +202,8 @@ export type RelatedCasePanelProps = {
   onDocumentUpload: (files: File[]) => void;
   onRefreshDocumentReadiness: () => void;
   onBuildDocumentPackage: () => void;
+  onDownloadDocumentPackage: () => void;
+  documentSupportMatrix: DocumentSupportMatrix;
   onCaseSearchQueryChange: (value: string) => void;
   onIntakeObjectiveChange: (value: ResearchObjective) => void;
   onIntakeTargetCourtChange: (value: string) => void;

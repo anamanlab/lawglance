@@ -15,6 +15,8 @@ class RequestMetrics:
         max_latency_samples: int = 2048,
         max_export_audit_events: int = 256,
         max_document_intake_audit_events: int = 256,
+        max_document_classification_override_audit_events: int = 256,
+        max_document_compilation_audit_events: int = 256,
         time_fn: Callable[[], float] | None = None,
     ) -> None:
         if max_latency_samples < 1:
@@ -23,6 +25,12 @@ class RequestMetrics:
             raise ValueError("max_export_audit_events must be >= 1")
         if max_document_intake_audit_events < 1:
             raise ValueError("max_document_intake_audit_events must be >= 1")
+        if max_document_classification_override_audit_events < 1:
+            raise ValueError(
+                "max_document_classification_override_audit_events must be >= 1"
+            )
+        if max_document_compilation_audit_events < 1:
+            raise ValueError("max_document_compilation_audit_events must be >= 1")
         self._time_fn = time_fn or time.monotonic
         self._started_at = self._time_fn()
         self._lock = Lock()
@@ -43,9 +51,27 @@ class RequestMetrics:
         self._document_intake_attempts = 0
         self._document_intake_accepted = 0
         self._document_intake_rejected = 0
+        self._document_intake_files_total = 0
+        self._document_intake_ocr_warning_files_total = 0
+        self._document_intake_low_confidence_classification_files_total = 0
+        self._document_intake_parser_failure_files_total = 0
         self._document_intake_policy_reasons: Counter[str] = Counter()
         self._document_intake_audit_events: deque[dict[str, object]] = deque(
             maxlen=max_document_intake_audit_events
+        )
+        self._document_classification_override_attempts = 0
+        self._document_classification_override_updated = 0
+        self._document_classification_override_rejected = 0
+        self._document_classification_override_policy_reasons: Counter[str] = Counter()
+        self._document_classification_override_audit_events: deque[
+            dict[str, object]
+        ] = deque(maxlen=max_document_classification_override_audit_events)
+        self._document_compilation_attempts = 0
+        self._document_compilation_compiled = 0
+        self._document_compilation_blocked = 0
+        self._document_compilation_policy_reasons: Counter[str] = Counter()
+        self._document_compilation_audit_events: deque[dict[str, object]] = deque(
+            maxlen=max_document_compilation_audit_events
         )
         self._lawyer_research_requests = 0
         self._lawyer_research_cases_returned_total = 0
@@ -144,8 +170,22 @@ class RequestMetrics:
         file_count: int,
         outcome: str,
         policy_reason: str | None = None,
+        ocr_warning_files: int | None = None,
+        low_confidence_classification_files: int | None = None,
+        parser_failure_files: int | None = None,
     ) -> None:
         normalized_file_count = max(int(file_count), 0)
+        normalized_ocr_warning_files = max(int(ocr_warning_files or 0), 0)
+        if normalized_ocr_warning_files > normalized_file_count:
+            normalized_ocr_warning_files = normalized_file_count
+        normalized_low_confidence_classification_files = max(
+            int(low_confidence_classification_files or 0), 0
+        )
+        if normalized_low_confidence_classification_files > normalized_file_count:
+            normalized_low_confidence_classification_files = normalized_file_count
+        normalized_parser_failure_files = max(int(parser_failure_files or 0), 0)
+        if normalized_parser_failure_files > normalized_file_count:
+            normalized_parser_failure_files = normalized_file_count
         event: dict[str, object] = {
             "timestamp_utc": datetime.now(timezone.utc)
             .replace(microsecond=0)
@@ -158,6 +198,14 @@ class RequestMetrics:
             "file_count": normalized_file_count,
             "outcome": outcome,
         }
+        if ocr_warning_files is not None:
+            event["ocr_warning_files"] = normalized_ocr_warning_files
+        if low_confidence_classification_files is not None:
+            event["low_confidence_classification_files"] = (
+                normalized_low_confidence_classification_files
+            )
+        if parser_failure_files is not None:
+            event["parser_failure_files"] = normalized_parser_failure_files
         if policy_reason:
             event["policy_reason"] = policy_reason
         with self._lock:
@@ -166,9 +214,101 @@ class RequestMetrics:
                 self._document_intake_accepted += 1
             elif outcome == "rejected":
                 self._document_intake_rejected += 1
+            self._document_intake_files_total += normalized_file_count
+            self._document_intake_ocr_warning_files_total += normalized_ocr_warning_files
+            self._document_intake_low_confidence_classification_files_total += (
+                normalized_low_confidence_classification_files
+            )
+            self._document_intake_parser_failure_files_total += (
+                normalized_parser_failure_files
+            )
             if policy_reason:
                 self._document_intake_policy_reasons[policy_reason] += 1
             self._document_intake_audit_events.append(event)
+
+    def record_document_classification_override_event(
+        self,
+        *,
+        trace_id: str,
+        client_id: str | None,
+        matter_id: str | None,
+        forum: str | None,
+        file_id: str | None,
+        previous_classification: str | None,
+        new_classification: str | None,
+        outcome: str,
+        policy_reason: str | None = None,
+    ) -> None:
+        event: dict[str, object] = {
+            "timestamp_utc": datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "trace_id": trace_id,
+            "client_id": client_id,
+            "matter_id": matter_id,
+            "forum": forum,
+            "file_id": file_id,
+            "outcome": outcome,
+        }
+        if previous_classification is not None:
+            event["previous_classification"] = previous_classification
+        if new_classification is not None:
+            event["new_classification"] = new_classification
+        if policy_reason:
+            event["policy_reason"] = policy_reason
+        with self._lock:
+            self._document_classification_override_attempts += 1
+            if outcome == "updated":
+                self._document_classification_override_updated += 1
+            elif outcome == "rejected":
+                self._document_classification_override_rejected += 1
+            if policy_reason:
+                self._document_classification_override_policy_reasons[policy_reason] += 1
+            self._document_classification_override_audit_events.append(event)
+
+    def record_document_compilation_outcome(
+        self,
+        *,
+        outcome: str,
+        policy_reason: str | None = None,
+        trace_id: str | None = None,
+        client_id: str | None = None,
+        matter_id: str | None = None,
+        forum: str | None = None,
+        route: str | None = None,
+        http_status: int | None = None,
+    ) -> None:
+        event: dict[str, object] = {
+            "timestamp_utc": datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "outcome": outcome,
+        }
+        if trace_id:
+            event["trace_id"] = trace_id
+        if client_id:
+            event["client_id"] = client_id
+        if matter_id:
+            event["matter_id"] = matter_id
+        if forum:
+            event["forum"] = forum
+        if route:
+            event["route"] = route
+        if http_status is not None:
+            event["http_status"] = max(int(http_status), 0)
+        if policy_reason:
+            event["policy_reason"] = policy_reason
+        with self._lock:
+            self._document_compilation_attempts += 1
+            if outcome == "compiled":
+                self._document_compilation_compiled += 1
+            elif outcome == "blocked":
+                self._document_compilation_blocked += 1
+            if policy_reason:
+                self._document_compilation_policy_reasons[policy_reason] += 1
+            self._document_compilation_audit_events.append(event)
 
     def snapshot(self) -> dict[str, object]:
         with self._lock:
@@ -188,8 +328,42 @@ class RequestMetrics:
             document_intake_attempts = self._document_intake_attempts
             document_intake_accepted = self._document_intake_accepted
             document_intake_rejected = self._document_intake_rejected
+            document_intake_files_total = self._document_intake_files_total
+            document_intake_ocr_warning_files_total = (
+                self._document_intake_ocr_warning_files_total
+            )
+            document_intake_low_confidence_classification_files_total = (
+                self._document_intake_low_confidence_classification_files_total
+            )
+            document_intake_parser_failure_files_total = (
+                self._document_intake_parser_failure_files_total
+            )
             document_intake_policy_reasons = dict(self._document_intake_policy_reasons)
             document_intake_audit_events = list(self._document_intake_audit_events)
+            document_classification_override_attempts = (
+                self._document_classification_override_attempts
+            )
+            document_classification_override_updated = (
+                self._document_classification_override_updated
+            )
+            document_classification_override_rejected = (
+                self._document_classification_override_rejected
+            )
+            document_classification_override_policy_reasons = dict(
+                self._document_classification_override_policy_reasons
+            )
+            document_classification_override_audit_events = list(
+                self._document_classification_override_audit_events
+            )
+            document_compilation_attempts = self._document_compilation_attempts
+            document_compilation_compiled = self._document_compilation_compiled
+            document_compilation_blocked = self._document_compilation_blocked
+            document_compilation_policy_reasons = dict(
+                self._document_compilation_policy_reasons
+            )
+            document_compilation_audit_events = list(
+                self._document_compilation_audit_events
+            )
             lawyer_research_requests = self._lawyer_research_requests
             lawyer_research_cases_returned_total = (
                 self._lawyer_research_cases_returned_total
@@ -241,8 +415,60 @@ class RequestMetrics:
                 "attempts": document_intake_attempts,
                 "accepted": document_intake_accepted,
                 "rejected": document_intake_rejected,
+                "rejected_rate": (
+                    document_intake_rejected / document_intake_attempts
+                    if document_intake_attempts
+                    else 0.0
+                ),
+                "files_total": document_intake_files_total,
+                "ocr_warning_files": document_intake_ocr_warning_files_total,
+                "ocr_warning_rate": (
+                    document_intake_ocr_warning_files_total / document_intake_files_total
+                    if document_intake_files_total
+                    else 0.0
+                ),
+                "low_confidence_classification_files": (
+                    document_intake_low_confidence_classification_files_total
+                ),
+                "low_confidence_classification_rate": (
+                    document_intake_low_confidence_classification_files_total
+                    / document_intake_files_total
+                    if document_intake_files_total
+                    else 0.0
+                ),
+                "parser_failure_files": document_intake_parser_failure_files_total,
+                "parser_failure_rate": (
+                    document_intake_parser_failure_files_total / document_intake_files_total
+                    if document_intake_files_total
+                    else 0.0
+                ),
                 "policy_reasons": document_intake_policy_reasons,
                 "audit_recent": document_intake_audit_events,
+            },
+            "document_classification_override": {
+                "attempts": document_classification_override_attempts,
+                "updated": document_classification_override_updated,
+                "rejected": document_classification_override_rejected,
+                "rejected_rate": (
+                    document_classification_override_rejected
+                    / document_classification_override_attempts
+                    if document_classification_override_attempts
+                    else 0.0
+                ),
+                "policy_reasons": document_classification_override_policy_reasons,
+                "audit_recent": document_classification_override_audit_events,
+            },
+            "document_compilation": {
+                "attempts": document_compilation_attempts,
+                "compiled": document_compilation_compiled,
+                "blocked": document_compilation_blocked,
+                "block_rate": (
+                    document_compilation_blocked / document_compilation_attempts
+                    if document_compilation_attempts
+                    else 0.0
+                ),
+                "policy_reasons": document_compilation_policy_reasons,
+                "audit_recent": document_compilation_audit_events,
             },
             "lawyer_research": {
                 "requests": lawyer_research_requests,

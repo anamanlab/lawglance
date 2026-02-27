@@ -307,6 +307,61 @@ def test_run_ingestion_jobs_fails_on_invalid_scc_payload(tmp_path: Path) -> None
     assert "validation failed" in (report.results[0].error or "")
 
 
+def test_run_ingestion_jobs_allows_partial_invalid_fc_payload(tmp_path: Path) -> None:
+    registry_path = tmp_path / "registry.json"
+    registry_payload = {
+        "version": "2026-02-24",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "FC_DECISIONS",
+                "source_type": "case_law",
+                "instrument": "FC decisions feed",
+                "url": "https://example.com/fc",
+                "update_cadence": "scheduled_incremental",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    mixed_payload = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Doe v Canada, 2026 FC 272</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/111111/index.do</link>
+      <description>Neutral citation 2026 FC 272</description>
+      <pubDate>Tue, 20 Feb 2024 10:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Missing citation entry</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/222222/index.do</link>
+      <description>No neutral citation in this record</description>
+      <pubDate>Tue, 20 Feb 2024 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+    def fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        return FetchResult(payload=mixed_payload, http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        environment="production",
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.failed == 0
+    assert report.results[0].status == "success"
+    assert report.results[0].records_total == 2
+    assert report.results[0].records_valid == 1
+    assert report.results[0].records_invalid == 1
+    assert "validation warning" in (report.results[0].error or "")
+
+
 def test_run_ingestion_jobs_applies_retry_budget_from_fetch_policy(
     tmp_path: Path,
 ) -> None:

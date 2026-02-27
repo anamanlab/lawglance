@@ -66,6 +66,59 @@ def test_lawyer_research_endpoint_returns_structured_cases(
     assert response.headers["x-trace-id"]
 
 
+def test_lawyer_research_endpoint_falls_back_when_threadpool_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search_calls = {"count": 0}
+
+    def _mock_case_search(self, request):
+        del self, request
+        search_calls["count"] += 1
+        return CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-301",
+                    title="Threadless Runtime v Canada",
+                    citation="2026 FC 301",
+                    decision_date=date(2026, 2, 3),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2026301/index.do",
+                    source_id="FC_DECISIONS",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2026301/index.do",
+                )
+            ]
+        )
+
+    async def _threadless_runtime(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_case_search,
+    )
+    monkeypatch.setattr(
+        "immcad_api.api.routes.lawyer_research.run_in_threadpool",
+        _threadless_runtime,
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "Federal Court appeal about inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cases"][0]["citation"] == "2026 FC 301"
+    assert search_calls["count"] >= 1
+
+
 def test_lawyer_research_endpoint_returns_disabled_envelope_when_case_search_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

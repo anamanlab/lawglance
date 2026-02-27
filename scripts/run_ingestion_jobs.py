@@ -90,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--state-path",
-        default="artifacts/ingestion/checkpoints.json",
+        default=".cache/immcad/ingestion-checkpoints.json",
         help="Checkpoint state path used for conditional requests (ETag/Last-Modified).",
     )
     parser.add_argument(

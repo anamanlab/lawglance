@@ -19,6 +19,7 @@ if str(SRC_PATH) not in sys.path:
 
 
 FC_SOURCE_ID = "FC_DECISIONS"
+FCA_SOURCE_ID = "FCA_DECISIONS"
 SCC_SOURCE_ID = "SCC_DECISIONS"
 FEDERAL_LAWS_SOURCE_ID = "FEDERAL_LAWS_BULK_XML"
 
@@ -63,7 +64,7 @@ def build_hourly_schedule(run_at_utc: datetime) -> dict[str, Any]:
     if run_at_utc.tzinfo is None:
         raise ValueError("run_at_utc must be timezone-aware")
 
-    source_ids = [FC_SOURCE_ID]
+    source_ids = [FC_SOURCE_ID, FCA_SOURCE_ID]
     scc_due = run_at_utc.hour % SCC_INTERVAL_HOURS == 0
     laws_due = run_at_utc.hour == FEDERAL_LAWS_DAILY_HOUR_UTC
     laws_full_sync_due = (
@@ -365,7 +366,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--state-path",
-        default="artifacts/ingestion/checkpoints.json",
+        default=".cache/immcad/ingestion-checkpoints.json",
         help="Checkpoint state path used for conditional requests (ETag/Last-Modified).",
     )
     parser.add_argument(

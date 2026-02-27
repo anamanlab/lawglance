@@ -3,6 +3,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
+from immcad_api.services import document_extraction
 from immcad_api.services.document_extraction import extract_text_and_page_signals
 
 
@@ -91,3 +92,12 @@ def test_extract_uses_default_ocr_limits_when_env_values_invalid(monkeypatch) ->
     monkeypatch.setenv("IMMCAD_OCR_CHAR_LIMIT", "also-invalid")
     result = extract_text_and_page_signals(payload)
     assert result.total_pages == 1
+
+
+def test_extract_returns_value_error_when_fitz_runtime_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(document_extraction, "fitz", None)
+
+    with pytest.raises(ValueError, match="unreadable_document_payload"):
+        extract_text_and_page_signals(b"%PDF-1.4\n%fallback\n")

@@ -94,10 +94,15 @@ def build_lawyer_research_router(
                 policy_reason="case_search_query_too_broad",
             )
         try:
-            research_response = await run_in_threadpool(
-                lawyer_case_research_service.research,
-                payload,
-            )
+            try:
+                research_response = await run_in_threadpool(
+                    lawyer_case_research_service.research,
+                    payload,
+                )
+            except RuntimeError:
+                # Python Workers can run in threadless runtimes where threadpool
+                # execution is unavailable; fallback to direct invocation.
+                research_response = lawyer_case_research_service.research(payload)
             if request_metrics is not None:
                 pdf_available_count = sum(
                     1 for case in research_response.cases if case.pdf_status == "available"

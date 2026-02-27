@@ -81,6 +81,81 @@ class _FakeClient:
         return _FakeResponse(payload)
 
 
+def test_official_case_law_client_follows_redirects_for_runtime_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    redirecting_url = "https://redirect.example.test/fc-feed"
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'>
+  <channel>
+    <item>
+      <title>Redirected FC decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/100003/index.do</link>
+      <description>Neutral citation 2026 FC 303</description>
+      <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+    class _RedirectAwareClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            del args
+            self.follow_redirects = bool(kwargs.get("follow_redirects"))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url: str, *args: Any, **kwargs: Any) -> _FakeResponse:
+            del args
+            if url == redirecting_url and (
+                self.follow_redirects or kwargs.get("follow_redirects")
+            ):
+                return _FakeResponse(fc_feed)
+            raise httpx.HTTPStatusError(
+                "redirect not followed",
+                request=httpx.Request("GET", url),
+                response=httpx.Response(302),
+            )
+
+    registry = SourceRegistry.model_validate(
+        {
+            "version": "2026-02-25",
+            "jurisdiction": "ca",
+            "sources": [
+                {
+                    "source_id": "FC_DECISIONS",
+                    "source_type": "case_law",
+                    "instrument": "FC feed",
+                    "url": redirecting_url,
+                    "update_cadence": "scheduled_incremental",
+                }
+            ],
+        }
+    )
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        _RedirectAwareClient,
+    )
+
+    client = OfficialCaseLawClient(source_registry=registry)
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="redirected decision",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].citation == "2026 FC 303"
+
+
 def test_official_case_law_client_returns_ranked_fc_results(monkeypatch: pytest.MonkeyPatch) -> None:
     fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
 <rss version='2.0'>
@@ -120,6 +195,231 @@ def test_official_case_law_client_returns_ranked_fc_results(monkeypatch: pytest.
         response.results[0].document_url
         == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/123456/1/document.do"
     )
+
+
+def test_official_case_law_client_prefers_fc_query_search_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_search_html = b"""<!DOCTYPE html>
+<html lang="en">
+  <body>
+    <ul>
+      <li class="odd list-item-expanded">
+        <div class="metadata">
+          <h3>
+            <span class="title">
+              <a target="_parent" href="/fc-cf/decisions/en/item/521478/index.do?q=immigration">
+                Balakumar v. Canada (Immigration, Refugees and Citizenship)
+              </a>
+            </span>
+            - <span class="citation">2022 FC 703</span>
+            - <span class="publicationDate">2022-05-12</span>
+          </h3>
+        </div>
+      </li>
+    </ul>
+  </body>
+</html>
+"""
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'><channel></channel></rss>
+"""
+    responses = {
+        "https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do": fc_search_html,
+        "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do": fc_feed,
+    }
+    fetch_count: dict[str, int] = {}
+
+    class _CountingClient(_FakeClient):
+        def get(self, url: str, *args: Any, **kwargs: Any) -> _FakeResponse:
+            fetch_count[url] = fetch_count.get(url, 0) + 1
+            return super().get(url, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _CountingClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="immigration",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].citation == "2022 FC 703"
+    assert fetch_count["https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do"] == 1
+    assert fetch_count.get("https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do", 0) == 0
+
+
+def test_official_case_law_client_falls_back_to_fc_feed_when_query_search_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'>
+  <channel>
+    <item>
+      <title>Fallback FC decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/100777/index.do</link>
+      <description>Neutral citation 2026 FC 707</description>
+      <pubDate>Mon, 01 Jan 2026 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    responses = {
+        "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do": fc_feed,
+    }
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="fallback fc decision",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].citation == "2026 FC 707"
+
+
+def test_official_case_law_client_prefers_fca_query_search_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fca_search_html = b"""<!DOCTYPE html>
+<html lang="en">
+  <body>
+    <ul>
+      <li class="odd list-item-expanded">
+        <div class="metadata">
+              <h3>
+                <span class="title">
+                  <a target="_parent" href="/fca-caf/decisions/en/item/521795/index.do?q=immigration">
+                Canadian Society of Immigration Consultants v. Canada (Citizenship and Immigration)
+                  </a>
+                </span>
+            - <span class="citation">2026 FCA 43</span>
+            - <span class="publicationDate">2026-02-26</span>
+          </h3>
+        </div>
+      </li>
+    </ul>
+  </body>
+</html>
+"""
+
+    class _FcaParamCheckingClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url: str, *args: Any, **kwargs: Any) -> _FakeResponse:
+            del args
+            assert url == "https://decisions.fca-caf.gc.ca/fca-caf/en/d/s/index.do"
+            params = kwargs.get("params", {})
+            assert isinstance(params, dict)
+            assert params.get("cont") == "immigration"
+            assert params.get("col") == "53"
+            assert params.get("iframe") == "true"
+            return _FakeResponse(fca_search_html)
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        _FcaParamCheckingClient,
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="immigration",
+            jurisdiction="ca",
+            court="fca",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].citation == "2026 FCA 43"
+    assert response.results[0].source_id == "FCA_DECISIONS"
+
+
+def test_official_case_law_client_uses_content_param_for_generic_query_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_search_html = b"""<!DOCTYPE html>
+<html lang="en">
+  <body>
+    <ul>
+      <li class="odd list-item-expanded">
+        <div class="metadata">
+          <h3>
+            <span class="title">
+              <a target="_parent" href="/fc-cf/decisions/en/item/521478/index.do?q=immigration">
+                Balakumar v. Canada (Immigration, Refugees and Citizenship)
+              </a>
+            </span>
+            - <span class="citation">2022 FC 703</span>
+            - <span class="publicationDate">2022-05-12</span>
+          </h3>
+        </div>
+      </li>
+    </ul>
+  </body>
+</html>
+"""
+
+    class _ParamCheckingClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url: str, *args: Any, **kwargs: Any) -> _FakeResponse:
+            del args
+            assert url == "https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do"
+            params = kwargs.get("params", {})
+            assert isinstance(params, dict)
+            assert params.get("cont") == "immigration judicial review"
+            assert "ref" not in params
+            return _FakeResponse(fc_search_html)
+
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        _ParamCheckingClient,
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="immigration judicial review",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].citation == "2022 FC 703"
 
 
 def test_official_case_law_client_rejects_non_positive_cache_ttl() -> None:
@@ -417,6 +717,50 @@ def test_official_case_law_client_filters_results_by_decision_date_range(
 
     assert len(response.results) == 1
     assert response.results[0].citation == "2025 FC 22"
+
+
+def test_official_case_law_client_handles_missing_decision_date_in_range_filter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc_feed = b"""<?xml version='1.0' encoding='utf-8'?>
+<rss version='2.0'>
+  <channel>
+    <item>
+      <title>Missing date decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/200001/index.do</link>
+      <description>Neutral citation 2025 FC 55</description>
+    </item>
+    <item>
+      <title>Dated decision</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/200002/index.do</link>
+      <description>Neutral citation 2024 FC 44</description>
+      <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    responses = {
+        "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/rss.do": fc_feed,
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="decision",
+            jurisdiction="ca",
+            court="fc",
+            limit=5,
+            decision_date_from=date(2024, 1, 1),
+            decision_date_to=date(2024, 12, 31),
+        )
+    )
+
+    assert len(response.results) == 1
+    assert response.results[0].citation == "2024 FC 44"
 
 
 def test_official_case_law_client_avoids_substring_token_false_positives(

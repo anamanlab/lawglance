@@ -13,8 +13,10 @@ import httpx
 from immcad_api.errors import SourceUnavailableError
 from immcad_api.schemas import CaseSearchRequest, CaseSearchResponse, CaseSearchResult
 from immcad_api.sources.canada_courts import (
+    CourtCode,
     CourtDecisionRecord,
     parse_decisia_rss_feed,
+    parse_decisia_search_results_html,
     parse_fca_decisions_html_feed,
     parse_scc_json_feed,
 )
@@ -30,6 +32,23 @@ _SOURCE_IDS_BY_COURT = {
     "fca-caf": ("FCA_DECISIONS",),
 }
 _DEFAULT_SOURCE_IDS = ("FC_DECISIONS", "FCA_DECISIONS", "SCC_DECISIONS")
+_SEARCH_CONFIG_BY_SOURCE: dict[str, tuple[str, CourtCode, str]] = {
+    "SCC_DECISIONS": (
+        "https://decisions.scc-csc.ca/scc-csc/en/d/s/index.do",
+        "SCC",
+        "1",
+    ),
+    "FC_DECISIONS": (
+        "https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do",
+        "FC",
+        "54",
+    ),
+    "FCA_DECISIONS": (
+        "https://decisions.fca-caf.gc.ca/fca-caf/en/d/s/index.do",
+        "FCA",
+        "53",
+    ),
+}
 _QUERY_STOPWORDS = frozenset(
     {
         "a",
@@ -141,19 +160,44 @@ class OfficialCaseLawClient:
                 "Official court case-law sources are currently unavailable. Please retry later."
             )
 
-        cache_snapshot = self._get_cache_snapshot(source_ids)
-        if cache_snapshot is not None:
-            cached_records, cache_age = cache_snapshot
-            if cache_age <= self.cache_ttl_seconds:
-                return self._build_search_response(cached_records, request)
-            if cache_age <= self.stale_cache_ttl_seconds:
-                self._schedule_background_refresh(resolved_sources)
-                return self._build_search_response(cached_records, request)
+        records_by_source: dict[str, list[CourtDecisionRecord]] = {}
+        query_records, fallback_sources, query_errors = self._fetch_query_search_records(
+            request=request,
+            resolved_sources=resolved_sources,
+        )
+        records_by_source.update(query_records)
+        errors.extend(query_errors)
 
-        records_by_source, fetch_errors = self._fetch_records_for_sources(resolved_sources)
-        errors.extend(fetch_errors)
+        fallback_source_ids = tuple(source_id for source_id, _source_url in fallback_sources)
+        if fallback_source_ids:
+            cache_snapshot = self._get_cache_snapshot(fallback_source_ids)
+            if cache_snapshot is not None:
+                cached_records, cache_age = cache_snapshot
+                if cache_age <= self.cache_ttl_seconds:
+                    records = self._merge_cached_and_live_records(
+                        source_ids,
+                        cached_records=cached_records,
+                        live_records_by_source=records_by_source,
+                    )
+                    return self._build_search_response(records, request)
+                if cache_age <= self.stale_cache_ttl_seconds:
+                    self._schedule_background_refresh(fallback_sources)
+                    records = self._merge_cached_and_live_records(
+                        source_ids,
+                        cached_records=cached_records,
+                        live_records_by_source=records_by_source,
+                    )
+                    return self._build_search_response(records, request)
+
+            fallback_records_by_source, fetch_errors = self._fetch_records_for_sources(
+                fallback_sources
+            )
+            errors.extend(fetch_errors)
+            if fallback_records_by_source:
+                self._update_cache(fallback_records_by_source)
+                records_by_source.update(fallback_records_by_source)
+
         if records_by_source:
-            self._update_cache(records_by_source)
             records = self._collect_records(source_ids, records_by_source)
             return self._build_search_response(records, request)
 
@@ -242,7 +286,10 @@ class OfficialCaseLawClient:
         source_id: str,
         source_url: str,
     ) -> list[CourtDecisionRecord]:
-        with httpx.Client(timeout=self.timeout_seconds) as client:
+        with httpx.Client(
+            timeout=self.timeout_seconds,
+            follow_redirects=True,
+        ) as client:
             response = client.get(source_url)
             response.raise_for_status()
         return self._parse_source_payload(source_id, response.content)
@@ -271,6 +318,66 @@ class OfficialCaseLawClient:
                     errors.append(f"{source_id}: {exc}")
         return records_by_source, errors
 
+    def _fetch_query_search_records(
+        self,
+        *,
+        request: CaseSearchRequest,
+        resolved_sources: list[tuple[str, str]],
+    ) -> tuple[dict[str, list[CourtDecisionRecord]], list[tuple[str, str]], list[str]]:
+        if not request.query.strip():
+            return {}, list(resolved_sources), []
+
+        records_by_source: dict[str, list[CourtDecisionRecord]] = {}
+        fallback_sources: list[tuple[str, str]] = []
+        errors: list[str] = []
+        for source_id, source_url in resolved_sources:
+            if source_id not in _SEARCH_CONFIG_BY_SOURCE:
+                fallback_sources.append((source_id, source_url))
+                continue
+            try:
+                records_by_source[source_id] = self._fetch_source_records_via_query_search(
+                    source_id=source_id,
+                    request=request,
+                )
+            except Exception as exc:
+                errors.append(f"{source_id}: {exc}")
+                fallback_sources.append((source_id, source_url))
+        return records_by_source, fallback_sources, errors
+
+    def _fetch_source_records_via_query_search(
+        self,
+        *,
+        source_id: str,
+        request: CaseSearchRequest,
+    ) -> list[CourtDecisionRecord]:
+        config = _SEARCH_CONFIG_BY_SOURCE.get(source_id)
+        if config is None:
+            return []
+        endpoint_url, court_code, collection = config
+        params: dict[str, str] = {
+            "cont": request.query.strip(),
+            "col": collection,
+            "iframe": "true",
+        }
+        if request.decision_date_from is not None:
+            params["d1"] = request.decision_date_from.isoformat()
+        if request.decision_date_to is not None:
+            params["d2"] = request.decision_date_to.isoformat()
+
+        with httpx.Client(
+            timeout=self.timeout_seconds,
+            follow_redirects=True,
+        ) as client:
+            response = client.get(endpoint_url, params=params)
+            response.raise_for_status()
+
+        return parse_decisia_search_results_html(
+            response.content,
+            source_id=source_id,
+            court_code=court_code,
+            base_url=endpoint_url,
+        )
+
     def _collect_records(
         self,
         source_ids: tuple[str, ...],
@@ -280,6 +387,25 @@ class OfficialCaseLawClient:
         for source_id in source_ids:
             records.extend(records_by_source.get(source_id, []))
         return records
+
+    def _merge_cached_and_live_records(
+        self,
+        source_ids: tuple[str, ...],
+        *,
+        cached_records: list[CourtDecisionRecord],
+        live_records_by_source: dict[str, list[CourtDecisionRecord]],
+    ) -> list[CourtDecisionRecord]:
+        cached_records_by_source: dict[str, list[CourtDecisionRecord]] = {}
+        for record in cached_records:
+            cached_records_by_source.setdefault(record.source_id, []).append(record)
+
+        merged: list[CourtDecisionRecord] = []
+        for source_id in source_ids:
+            if source_id in live_records_by_source:
+                merged.extend(live_records_by_source[source_id])
+                continue
+            merged.extend(cached_records_by_source.get(source_id, []))
+        return merged
 
     def _build_search_response(
         self,
@@ -361,11 +487,13 @@ class OfficialCaseLawClient:
 
     def _is_within_decision_date_range(
         self,
-        decision_date: date,
+        decision_date: date | None,
         *,
         decision_date_from: date | None,
         decision_date_to: date | None,
     ) -> bool:
+        if decision_date is None:
+            return False
         if decision_date_from is not None and decision_date < decision_date_from:
             return False
         if decision_date_to is not None and decision_date > decision_date_to:

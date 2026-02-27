@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from immcad_api.policy import document_compilation_rules
 from immcad_api.policy.document_compilation_rules import (
     DocumentCompilationCatalog,
     load_document_compilation_rules,
@@ -128,3 +129,22 @@ def test_load_rules_rejects_unknown_document_type(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Unknown document_type"):
         load_document_compilation_rules(path)
+
+
+def test_load_rules_uses_embedded_payload_when_default_files_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing_paths = (
+        Path("/tmp/immcad-missing-rules-1.json"),
+        Path("/tmp/immcad-missing-rules-2.json"),
+    )
+    monkeypatch.setattr(
+        document_compilation_rules,
+        "_candidate_paths",
+        lambda _path: missing_paths,
+    )
+
+    catalog = load_document_compilation_rules()
+
+    assert isinstance(catalog, DocumentCompilationCatalog)
+    assert catalog.profiles

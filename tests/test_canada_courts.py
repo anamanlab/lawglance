@@ -6,6 +6,7 @@ import pytest
 
 from immcad_api.sources.canada_courts import (
     parse_decisia_rss_feed,
+    parse_decisia_search_results_html,
     parse_scc_json_feed,
     validate_court_source_payload,
 )
@@ -88,6 +89,81 @@ def test_parse_decisia_rss_feed_uses_decision_namespace_date_and_event_type() ->
     assert record.decision_date is not None
     assert record.decision_date.isoformat() == "2026-02-27"
     assert record.source_event_type == "translated"
+
+
+def test_parse_decisia_rss_feed_canonicalizes_norma_lexum_links() -> None:
+    rss = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Doe v Canada, 2026 FC 272</title>
+      <link>https://norma.lexum.com/fc-cf/decisions/en/item/530042/index.do?iframe=true</link>
+      <description>Sample case description</description>
+      <pubDate>Mon, 19 Feb 2024 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    records = parse_decisia_rss_feed(
+        rss.encode("utf-8"),
+        source_id="FC_DECISIONS",
+        court_code="FC",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert (
+        record.decision_url
+        == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/530042/index.do?iframe=true"
+    )
+    assert (
+        record.pdf_url
+        == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/530042/1/document.do?iframe=true"
+    )
+
+
+def test_parse_decisia_search_results_html_extracts_fc_records() -> None:
+    payload = """<!DOCTYPE html>
+<html lang="en">
+  <body>
+    <ul>
+      <li class="odd list-item-expanded">
+        <div class="metadata">
+          <h3>
+            <span class="title">
+              <a target="_parent" href="/fc-cf/decisions/en/item/521478/index.do?q=immigration">
+                Balakumar v. Canada (Immigration, Refugees and Citizenship)
+              </a>
+            </span>
+            - <span class="citation">2022 FC 703</span>
+            - <span class="publicationDate">2022-05-12</span>
+          </h3>
+        </div>
+      </li>
+    </ul>
+  </body>
+</html>
+"""
+
+    records = parse_decisia_search_results_html(
+        payload.encode("utf-8"),
+        source_id="FC_DECISIONS",
+        court_code="FC",
+        base_url="https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.case_id == "521478"
+    assert record.citation == "2022 FC 703"
+    assert (
+        record.decision_url
+        == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/521478/index.do?q=immigration"
+    )
+    assert (
+        record.pdf_url
+        == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/521478/1/document.do?q=immigration"
+    )
 
 
 def test_parse_scc_json_feed_coerces_numeric_case_id_to_string() -> None:

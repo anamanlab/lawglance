@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import immcad_api.policy.source_policy as source_policy_module
 from immcad_api.policy.source_policy import (
     SourcePolicy,
     is_source_export_allowed,
@@ -147,3 +148,29 @@ def test_source_policy_restricted_source_flags(
 )
 def test_normalize_runtime_environment(value: str | None, expected: str) -> None:
     assert normalize_runtime_environment(value) == expected
+
+
+def test_load_source_policy_uses_embedded_payload_when_files_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_path = tmp_path / "missing-source-policy.yaml"
+    monkeypatch.setattr(
+        source_policy_module,
+        "DEFAULT_SOURCE_POLICY_RELATIVE_PATH",
+        missing_path,
+    )
+    monkeypatch.setattr(
+        source_policy_module,
+        "DEFAULT_SOURCE_POLICY_PACKAGE_PATH",
+        missing_path,
+    )
+    monkeypatch.setattr(
+        source_policy_module,
+        "DEFAULT_SOURCE_POLICY_REPO_PATH",
+        missing_path,
+    )
+
+    policy = source_policy_module.load_source_policy()
+    assert isinstance(policy, SourcePolicy)
+    assert policy.get_source("IRPA") is not None

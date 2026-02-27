@@ -8,7 +8,7 @@ import json
 import logging
 import re
 from typing import Any, Literal
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 import xml.etree.ElementTree as ET
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +32,12 @@ _SOURCE_TO_COURT: dict[str, CourtCode] = {
     "FC_DECISIONS": "FC",
     "FCA_DECISIONS": "FCA",
 }
+_DECISIA_PATH_HOST_MAP: tuple[tuple[str, str], ...] = (
+    ("scc-csc", "decisions.scc-csc.ca"),
+    ("fc-cf", "decisions.fct-cf.gc.ca"),
+    ("fca-caf", "decisions.fca-caf.gc.ca"),
+)
+_DECISIA_MIRROR_HOSTS = frozenset({"norma.lexum.com"})
 
 
 @dataclass(frozen=True)
@@ -92,10 +98,48 @@ def _extract_case_id(value: str | None) -> str:
 def _derive_pdf_url(decision_url: str) -> str | None:
     if not decision_url:
         return None
-    candidate = re.sub(r"/item/(\d+)/index\.do$", r"/\1/1/document.do", decision_url)
-    if candidate == decision_url:
+    parsed = urlparse(decision_url)
+    if not re.search(r"/item/\d+/index\.do$", parsed.path):
         return None
-    return candidate
+    document_path = re.sub(r"/item/(\d+)/index\.do$", r"/\1/1/document.do", parsed.path)
+    candidate = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            document_path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+    return _canonicalize_decisia_url(candidate)
+
+
+def _canonicalize_decisia_url(url: str) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").strip().lower()
+    if hostname and hostname not in _DECISIA_MIRROR_HOSTS:
+        return url
+
+    path = parsed.path or ""
+    for path_segment, official_host in _DECISIA_PATH_HOST_MAP:
+        if f"/{path_segment}/" not in path:
+            continue
+        scheme = (parsed.scheme or "https").lower()
+        return urlunparse(
+            (
+                scheme,
+                official_host,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
+
+    return url
 
 
 def _extract_citation(text: str, *, court_code: CourtCode) -> str:
@@ -269,7 +313,9 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
     records: list[CourtDecisionRecord] = []
     for item in items:
         title = _dict_text(item.get("title")) or "Untitled"
-        link = _dict_text(item.get("link")) or _dict_text(item.get("url")) or ""
+        link = _canonicalize_decisia_url(
+            _dict_text(item.get("link")) or _dict_text(item.get("url")) or ""
+        )
         published_date = _parse_date(
             _dict_text(item.get("decisionDate"))
             or _dict_text(item.get("publishedDate"))
@@ -300,7 +346,12 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
             or _extract_case_id(link)
         )
         decision_url = link
-        pdf_url = _dict_text(item.get("pdf")) or _dict_text(item.get("documentUrl")) or _derive_pdf_url(link)
+        pdf_url = (
+            _canonicalize_decisia_url(
+                _dict_text(item.get("pdf")) or _dict_text(item.get("documentUrl")) or ""
+            )
+            or _derive_pdf_url(decision_url)
+        )
         docket_numbers = _extract_docket_numbers(item)
         source_event_type = _classify_source_event(
             title,
@@ -350,9 +401,17 @@ def parse_fca_decisions_html_feed(payload: bytes) -> list[CourtDecisionRecord]:
         title = html.unescape(re.sub(r"<[^>]+>", "", match.group("title"))).strip()
         citation = html.unescape(match.group("citation")).strip()
         decision_date = _parse_date(match.group("publication_date"))
-        link = urljoin("https://decisions.fca-caf.gc.ca", match.group("link"))
+        link = _canonicalize_decisia_url(
+            urljoin("https://decisions.fca-caf.gc.ca", match.group("link"))
+        )
         pdf_relative = match.group("pdf")
-        pdf_url = urljoin("https://decisions.fca-caf.gc.ca", pdf_relative) if pdf_relative else _derive_pdf_url(link)
+        pdf_url = (
+            _canonicalize_decisia_url(
+                urljoin("https://decisions.fca-caf.gc.ca", pdf_relative)
+            )
+            if pdf_relative
+            else _derive_pdf_url(link)
+        )
 
         records.append(
             CourtDecisionRecord(
@@ -363,6 +422,65 @@ def parse_fca_decisions_html_feed(payload: bytes) -> list[CourtDecisionRecord]:
                 citation=citation,
                 decision_date=decision_date,
                 decision_url=link,
+                pdf_url=pdf_url,
+            )
+        )
+
+    if records:
+        LOGGER.warning(
+            "FCA decisions HTML fallback parsed %d records",
+            len(records),
+        )
+    else:
+        LOGGER.warning(
+            "FCA decisions HTML fallback parsed 0 records; possible upstream markup change",
+        )
+
+    return records
+
+
+def parse_decisia_search_results_html(
+    payload: bytes,
+    *,
+    source_id: str,
+    court_code: CourtCode,
+    base_url: str,
+) -> list[CourtDecisionRecord]:
+    text = payload.decode("utf-8")
+    item_pattern = re.compile(
+        r'<li class="[^"]*list-item-expanded[^"]*">.*?'
+        r'<a[^>]+href="(?P<link>[^"]+/item/(?P<case_id>\d+)/index\.do[^"]*)"[^>]*>'
+        r"(?P<title>.*?)</a>.*?"
+        r'(?:<span class="citation">(?P<citation>[^<]+)</span>.*?)?'
+        r'(?:<span class="report-citation">(?P<report_citation>[^<]+)</span>.*?)?'
+        r'<span class="publicationDate">(?P<publication_date>\d{4}-\d{2}-\d{2})</span>.*?'
+        r"</li>",
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    records: list[CourtDecisionRecord] = []
+    for match in item_pattern.finditer(text):
+        title = html.unescape(re.sub(r"<[^>]+>", "", match.group("title"))).strip()
+        decision_url = _canonicalize_decisia_url(
+            urljoin(base_url, html.unescape(match.group("link")))
+        )
+        citation = (
+            html.unescape((match.group("citation") or "")).strip()
+            or html.unescape((match.group("report_citation") or "")).strip()
+            or _extract_citation(title, court_code=court_code)
+        )
+        decision_date = _parse_date(match.group("publication_date"))
+        pdf_url = _derive_pdf_url(decision_url)
+
+        records.append(
+            CourtDecisionRecord(
+                source_id=source_id,
+                court_code=court_code,
+                case_id=match.group("case_id"),
+                title=title or "Untitled",
+                citation=citation,
+                decision_date=decision_date,
+                decision_url=decision_url,
                 pdf_url=pdf_url,
             )
         )
@@ -398,7 +516,7 @@ def parse_decisia_rss_feed(payload: bytes, *, source_id: str, court_code: CourtC
     records: list[CourtDecisionRecord] = []
     for item in items:
         title = _xml_text(item, "title") or "Untitled"
-        link = _xml_text(item, "link") or ""
+        link = _canonicalize_decisia_url(_xml_text(item, "link") or "")
         description = _xml_text(item, "description") or ""
         pub_date = _xml_text(item, "pubDate")
         decision_date_value = (

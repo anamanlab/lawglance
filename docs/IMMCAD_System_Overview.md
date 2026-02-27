@@ -55,6 +55,11 @@ Unlike its predecessor which focused on Indian statutes, IMMCAD is exclusively f
 - **Orchestration**: Custom Modular API (`src/immcad_api`)
 - **Observability**: Trace ID-centric logging and telemetry.
 
+## Observability and Ingestion Checkpoints
+
+- **Trace logging**: Trace ID propagation across ingest jobs, chat requests, and export flows makes it easier to diagnose production issues end-to-end.
+- **Checkpoint sharing**: The ingestion pipelines (`scripts/run_ingestion_jobs.py`, Cloudflare schedulers, `OfficialCaseLawClient`) and the `/api/sources/transparency` router all read/write the same checkpoint state file (`.cache/immcad/ingestion-checkpoints.json` by default or the one configured via `INGESTION_CHECKPOINT_STATE_PATH`). Keeping every deployment wired to the same path ensures the frontend dashboard reflects the latest Federal/FCA/SCC RSS fetch status and policy flags.
+
 ## Project Structure
 
 - `src/immcad_api/`: The next-generation FastAPI backend.

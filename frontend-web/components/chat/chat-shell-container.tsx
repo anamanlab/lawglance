@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatHeader } from "@/components/chat/chat-header";
-import { MAX_MESSAGE_LENGTH } from "@/components/chat/constants";
+import {
+  DOCUMENT_UPLOAD_DEFAULT_STATUS,
+  MAX_MESSAGE_LENGTH,
+} from "@/components/chat/constants";
 import { MessageComposer } from "@/components/chat/message-composer";
 import { MessageList } from "@/components/chat/message-list";
 import { RelatedCasePanel } from "@/components/chat/related-case-panel";
@@ -23,6 +26,7 @@ export function ChatShell({
     endOfThreadRef,
     draft,
     setDraft,
+    activeLocale,
     isChatSubmitting,
     isCaseSearchSubmitting,
     isExportSubmitting,
@@ -55,6 +59,7 @@ export function ChatShell({
     isDocumentIntakeSubmitting,
     isDocumentReadinessSubmitting,
     isDocumentPackageSubmitting,
+    isDocumentDownloadSubmitting,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -75,23 +80,93 @@ export function ChatShell({
     onIntakeDateToChange,
     onDocumentForumChange,
     onDocumentMatterIdChange,
+    onLocaleChange,
     onDocumentUpload,
     onRefreshDocumentReadiness,
     onBuildDocumentPackage,
+    onDownloadDocumentPackage,
+    documentSupportMatrix,
   } = useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanels });
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
+  const mobileDrawerRef = useRef<HTMLElement | null>(null);
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
+  const closeMobileDrawer = useCallback(() => {
+    setIsMobileDrawerOpen(false);
+  }, []);
+
+  const openMobileDrawer = useCallback(() => {
+    previousFocusedElementRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIsMobileDrawerOpen(true);
+  }, []);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsMobileDrawerOpen(false);
+    if (!isMobileDrawerOpen || !mobileDrawerRef.current) {
+      return;
+    }
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getFocusableElements = (): HTMLElement[] =>
+      Array.from(
+        mobileDrawerRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? []
+      );
+    const focusableElements = getFocusableElements();
+    const firstFocusableElement = focusableElements[0] ?? mobileDrawerRef.current;
+    const lastFocusableElement =
+      focusableElements[focusableElements.length - 1] ?? mobileDrawerRef.current;
+
+    const focusTimer = window.setTimeout(() => {
+      firstFocusableElement.focus();
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMobileDrawer();
+        return;
+      }
+
+      if (event.key !== "Tab" || !mobileDrawerRef.current) {
+        return;
+      }
+
+      const activeElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const containsActiveElement =
+        activeElement !== null && mobileDrawerRef.current.contains(activeElement);
+
+      if (event.shiftKey) {
+        if (!containsActiveElement || activeElement === firstFocusableElement) {
+          event.preventDefault();
+          lastFocusableElement.focus();
+        }
+        return;
+      }
+
+      if (!containsActiveElement || activeElement === lastFocusableElement) {
+        event.preventDefault();
+        firstFocusableElement.focus();
       }
     };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMobileDrawer, isMobileDrawerOpen]);
+
+  useEffect(() => {
     if (isMobileDrawerOpen) {
-      window.addEventListener("keydown", handleKeyDown);
+      return;
     }
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    if (previousFocusedElementRef.current) {
+      previousFocusedElementRef.current.focus();
+      previousFocusedElementRef.current = null;
+    }
   }, [isMobileDrawerOpen]);
 
   useEffect(() => {
@@ -113,6 +188,53 @@ export function ChatShell({
     () => buildStatusTone(supportContext?.status ?? null),
     [supportContext]
   );
+  const workflowStatus = useMemo(() => {
+    const caseStatusMessage = relatedCasesStatus.trim();
+    const documentStatus = documentStatusMessage.trim();
+    const isDefaultDocumentStatus =
+      documentStatus === DOCUMENT_UPLOAD_DEFAULT_STATUS;
+
+    if (caseStatusMessage) {
+      const normalizedMessage = caseStatusMessage.toLowerCase();
+      const caseTone =
+        normalizedMessage.includes("unavailable") ||
+        normalizedMessage.includes("failed") ||
+        normalizedMessage.includes("blocked") ||
+        normalizedMessage.includes("invalid") ||
+        normalizedMessage.includes("too broad")
+          ? "warning"
+          : normalizedMessage.includes("download started") ||
+            normalizedMessage.includes("ready")
+            ? "success"
+            : "info";
+      return {
+        title: "Case-law workflow",
+        message: caseStatusMessage,
+        tone: caseTone as "info" | "success" | "warning",
+      };
+    }
+
+    if (!isDefaultDocumentStatus && documentStatus) {
+      const normalizedMessage = documentStatus.toLowerCase();
+      const documentTone =
+        normalizedMessage.includes("failed") ||
+        normalizedMessage.includes("not ready") ||
+        normalizedMessage.includes("blocked")
+          ? "warning"
+          : normalizedMessage.includes("complete") ||
+            normalizedMessage.includes("ready") ||
+            normalizedMessage.includes("generated")
+            ? "success"
+            : "info";
+      return {
+        title: "Document workflow",
+        message: documentStatus,
+        tone: documentTone as "info" | "success" | "warning",
+      };
+    }
+
+    return null;
+  }, [documentStatusMessage, relatedCasesStatus]);
   const endpointLabel = apiBaseUrl.trim().replace(/\/+$/, "") || "same-origin /api";
 
   return (
@@ -120,7 +242,11 @@ export function ChatShell({
       <section className="mx-auto w-full max-w-6xl">
         <div className="imm-paper-shell imm-fade-up rounded-[1.75rem] p-4 md:p-6" style={{ animationDelay: "60ms" }}>
           <div className="relative z-10">
-            <ChatHeader legalDisclaimer={legalDisclaimer} />
+            <ChatHeader
+              legalDisclaimer={legalDisclaimer}
+              activeLocale={activeLocale}
+              onLocaleChange={onLocaleChange}
+            />
 
             <div className="relative mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.68fr)_minmax(19rem,1fr)] lg:items-start">
               <div
@@ -131,6 +257,7 @@ export function ChatShell({
                 <StatusBanner
                   chatError={chatError}
                   supportContext={supportContext}
+                  workflowStatus={workflowStatus}
                   relatedCasesStatus={relatedCasesStatus}
                   isSubmitting={isChatSubmitting}
                   submissionPhase={submissionPhase}
@@ -153,6 +280,7 @@ export function ChatShell({
 
                 <MessageComposer
                   draft={draft}
+                  isFirstRun={messages.every((message) => message.author !== "user")}
                   isSubmitting={isChatSubmitting}
                   onDraftChange={setDraft}
                   onQuickPromptClick={onQuickPromptClick}
@@ -167,16 +295,18 @@ export function ChatShell({
               {isMobileDrawerOpen ? (
                 <div 
                   className="fixed inset-0 z-40 bg-[rgba(20,20,19,0.4)] backdrop-blur-[2px] transition-opacity duration-300 lg:hidden"
-                  onClick={() => setIsMobileDrawerOpen(false)}
+                  onClick={closeMobileDrawer}
                   aria-hidden="true"
                 />
               ) : null}
 
               <aside
                 id="mobile-case-law-drawer"
+                ref={mobileDrawerRef}
                 role={isMobileDrawerOpen ? "dialog" : undefined}
                 aria-modal={isMobileDrawerOpen ? true : undefined}
-                aria-label={isMobileDrawerOpen ? "Case Law Tools drawer" : undefined}
+                aria-labelledby={isMobileDrawerOpen ? "mobile-case-law-drawer-title" : undefined}
+                tabIndex={isMobileDrawerOpen ? -1 : undefined}
                 className={`
                   space-y-4 lg:sticky lg:top-4 lg:self-start
                   ${isMobileDrawerOpen 
@@ -187,11 +317,13 @@ export function ChatShell({
               >
                 {isMobileDrawerOpen ? (
                   <div className="mb-4 flex items-center justify-between lg:hidden">
-                    <h3 className="font-heading text-lg font-semibold text-ink">Case Law Tools</h3>
+                    <h3 className="font-heading text-lg font-semibold text-ink" id="mobile-case-law-drawer-title">
+                      Case Law Tools
+                    </h3>
                     <button
                       type="button"
                       className="imm-btn-secondary rounded-full border-[rgba(176,174,165,0.6)] bg-[rgba(247,243,234,0.8)] px-0"
-                      onClick={() => setIsMobileDrawerOpen(false)}
+                      onClick={closeMobileDrawer}
                       aria-label="Close Case Law Tools drawer"
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -210,6 +342,7 @@ export function ChatShell({
                   isDocumentIntakeSubmitting={isDocumentIntakeSubmitting}
                   isDocumentReadinessSubmitting={isDocumentReadinessSubmitting}
                   isDocumentPackageSubmitting={isDocumentPackageSubmitting}
+                  isDocumentDownloadSubmitting={isDocumentDownloadSubmitting}
                   isChatSubmitting={isChatSubmitting}
                   isCaseSearchSubmitting={isCaseSearchSubmitting}
                   isExportSubmitting={isExportSubmitting}
@@ -254,6 +387,10 @@ export function ChatShell({
                   onBuildDocumentPackage={() => {
                     void onBuildDocumentPackage();
                   }}
+                  onDownloadDocumentPackage={() => {
+                    void onDownloadDocumentPackage();
+                  }}
+                  documentSupportMatrix={documentSupportMatrix}
                   showDiagnostics={showOperationalPanels}
                   statusToneClass={statusToneClass}
                   submissionPhase={submissionPhase}
@@ -278,8 +415,9 @@ export function ChatShell({
           type="button"
           aria-expanded={isMobileDrawerOpen}
           aria-controls="mobile-case-law-drawer"
+          aria-haspopup="dialog"
           className="imm-btn-primary min-h-[56px] rounded-full px-5 text-sm shadow-[0_8px_24px_rgba(217,119,87,0.35)]"
-          onClick={() => setIsMobileDrawerOpen(true)}
+          onClick={openMobileDrawer}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>

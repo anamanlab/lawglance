@@ -274,6 +274,7 @@ describe("chat shell contract behavior", () => {
 
     await user.selectOptions(screen.getByLabelText("Research objective"), "support_precedent");
     await user.selectOptions(screen.getByLabelText("Target court"), "fca");
+    await user.click(screen.getByRole("button", { name: "Show advanced filters" }));
     await user.type(
       screen.getByLabelText("Issue tags"),
       "procedural_fairness, inadmissibility"
@@ -301,6 +302,76 @@ describe("chat shell contract behavior", () => {
     ).toBeTruthy();
   });
 
+  it("renders source and docket metadata badges when case metadata is present", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_profile: {
+              issue_tags: ["procedural_fairness"],
+              target_court: "fc",
+            },
+            cases: [
+              {
+                case_id: "fc-101",
+                title: "Metadata-rich Federal Court Decision",
+                citation: "2026 FC 101",
+                source_id: "FC_DECISIONS",
+                court: "FC",
+                decision_date: "2026-02-01",
+                url: "https://example.test/cases/fc-101",
+                document_url: "https://example.test/cases/fc-101/document.pdf",
+                pdf_status: "available",
+                export_allowed: true,
+                export_policy_reason: "source_export_allowed",
+                relevance_reason: "Matches the matter profile and citation context.",
+                source_event_type: "updated",
+                docket_numbers: ["IMM-2026-101", "IMM-2026-102"],
+              },
+            ],
+            source_status: {
+              official: "ok",
+              canlii: "not_used",
+            },
+            research_confidence: "high",
+            confidence_reasons: [],
+            intake_completeness: "high",
+            intake_hints: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-case-success" },
+          }
+        )
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court procedural fairness precedents"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(await screen.findByText("Source: Federal Court Decisions")).toBeTruthy();
+    expect(screen.getByText("Event: Updated")).toBeTruthy();
+    expect(screen.getByText("IMM-2026-101")).toBeTruthy();
+    expect(screen.getByText("IMM-2026-102")).toBeTruthy();
+  });
+
   it("blocks manual case-law search when intake decision-date range is invalid", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -325,6 +396,7 @@ describe("chat shell contract behavior", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
 
+    await user.click(screen.getByRole("button", { name: "Show advanced filters" }));
     await user.type(screen.getByLabelText("Decision date from"), "2025-12-31");
     await user.type(screen.getByLabelText("Decision date to"), "2024-01-01");
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
@@ -582,8 +654,6 @@ describe("chat shell contract behavior", () => {
           headers: { "x-trace-id": "trace-case-success" },
         })
       );
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
@@ -604,12 +674,10 @@ describe("chat shell contract behavior", () => {
     await screen.findByText("Sample Tribunal Decision");
 
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
-
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    await screen.findByText("Export this case PDF now?");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(
-      screen.getByText("Case export cancelled. No file was downloaded.")
-    ).toBeTruthy();
+    expect(screen.queryByText("Export this case PDF now?")).toBeNull();
   });
 
   it("blocks export UI for non-exportable case results", async () => {
@@ -654,8 +722,6 @@ describe("chat shell contract behavior", () => {
           }
         )
       );
-    const confirmSpy = vi.spyOn(window, "confirm");
-
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
@@ -682,7 +748,6 @@ describe("chat shell contract behavior", () => {
         "Online case review is still available. Direct PDF export is unavailable for this source under policy."
       )
     ).toBeTruthy();
-    expect(confirmSpy).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -719,7 +784,6 @@ describe("chat shell contract behavior", () => {
           },
         })
       );
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const createObjectURLMock = vi.fn(() => "blob:case-export");
     const revokeObjectURLMock = vi.fn();
     const linkClickSpy = vi
@@ -756,9 +820,10 @@ describe("chat shell contract behavior", () => {
     await screen.findByText("Sample Tribunal Decision");
 
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
+    await screen.findByText("Export this case PDF now?");
+    await user.click(screen.getByRole("button", { name: "Export PDF now" }));
 
     await screen.findByText("Download started: case-export.pdf");
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[2]?.[0]).toBe(
       "https://api.immcad.test/api/export/cases/approval"
@@ -807,8 +872,6 @@ describe("chat shell contract behavior", () => {
           headers: { "x-trace-id": "trace-export-policy" },
         })
       );
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
@@ -827,6 +890,8 @@ describe("chat shell contract behavior", () => {
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
     await screen.findByText("Sample Tribunal Decision");
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
+    await screen.findByText("Export this case PDF now?");
+    await user.click(screen.getByRole("button", { name: "Export PDF now" }));
 
     const policyBlockedMessages = await screen.findAllByText(
       "Case export was blocked by source policy for this source."
@@ -863,8 +928,6 @@ describe("chat shell contract behavior", () => {
           headers: { "x-trace-id": "trace-export-policy" },
         })
       );
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-
     render(
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
@@ -884,6 +947,8 @@ describe("chat shell contract behavior", () => {
     await user.click(screen.getByRole("button", { name: "Find related cases" }));
     await screen.findByText("Sample Tribunal Decision");
     await user.click(screen.getByRole("button", { name: "Export PDF" }));
+    await screen.findByText("Export this case PDF now?");
+    await user.click(screen.getByRole("button", { name: "Export PDF now" }));
 
     expect(await screen.findByText("Workflow Notice")).toBeTruthy();
     expect(await screen.findByText("Case export unavailable")).toBeTruthy();
@@ -934,6 +999,19 @@ describe("chat shell contract behavior", () => {
       .mockResolvedValueOnce(
         jsonResponse(
           {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
             matter_id: "matter-abc123",
             forum: "federal_court_jr",
             is_ready: true,
@@ -965,6 +1043,7 @@ describe("chat shell contract behavior", () => {
               },
             ],
             cover_letter_draft: "Draft cover letter content",
+            compilation_output_mode: "metadata_plan_only",
             is_ready: true,
           },
           {
@@ -981,6 +1060,7 @@ describe("chat shell contract behavior", () => {
     );
 
     const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
     const uploadInput = screen.getByLabelText("Upload documents");
     const fileA = new File(["memo"], "memo.pdf", { type: "application/pdf" });
     const fileB = new File(["affidavit"], "affidavit.pdf", { type: "application/pdf" });
@@ -992,10 +1072,16 @@ describe("chat shell contract behavior", () => {
     expect(await screen.findByText("affidavit.pdf")).toBeTruthy();
     expect(await screen.findByText(/Ready for filing package:/i)).toBeTruthy();
     expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.immcad.test/api/documents/intake");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const prePackageEndpoints = fetchMock.mock.calls
+      .slice(0, 3)
+      .map((call) => String(call?.[0] ?? ""));
+    expect(prePackageEndpoints[0]).toBe("https://api.immcad.test/api/documents/intake");
+    expect(prePackageEndpoints).toContain(
       "https://api.immcad.test/api/documents/matters/matter-abc123/readiness"
+    );
+    expect(prePackageEndpoints).toContain(
+      "https://api.immcad.test/api/documents/support-matrix"
     );
     const intakeInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(intakeInit).toEqual(
@@ -1006,11 +1092,250 @@ describe("chat shell contract behavior", () => {
     expect(intakeInit?.body instanceof FormData).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "Generate package" }));
-    expect(await screen.findByText("Package generated. TOC items: 1.")).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[2]?.[0]).toBe(
+    expect((await screen.findAllByText("Package generated. TOC items: 1.")).length).toBeGreaterThan(0);
+    const downloadButton = screen.getByRole("button", { name: "Download binder PDF" });
+    expect((downloadButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Download unavailable: compilation mode is metadata only. Generate a compiled PDF binder to enable download."
+      )
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[3]?.[0]).toBe(
       "https://api.immcad.test/api/documents/matters/matter-abc123/package"
     );
+  });
+
+  it("renders remediation guidance for unreadable failed uploads", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-unreadable-001",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-unreadable-001",
+                original_filename: "scan.pdf",
+                normalized_filename: "scan-normalized.pdf",
+                classification: null,
+                quality_status: "failed",
+                issues: ["unreadable_scan"],
+                issue_details: [
+                  {
+                    code: "unreadable_scan",
+                    message: "File text extraction failed.",
+                    severity: "blocking",
+                    remediation: "Re-scan at 300 DPI and upload a clear PDF.",
+                  },
+                ],
+              },
+            ],
+            blocking_issues: ["unreadable_scan"],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-unreadable-intake" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-unreadable-001",
+            forum: "federal_court_jr",
+            is_ready: false,
+            missing_required_items: [],
+            blocking_issues: ["unreadable_scan"],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-unreadable-readiness" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix" },
+          }
+        )
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const unreadableFile = new File(["scan"], "scan.pdf", { type: "application/pdf" });
+
+    await user.upload(uploadInput, unreadableFile);
+
+    expect(await screen.findByText("scan.pdf")).toBeTruthy();
+    expect(screen.getByText("Issues: unreadable scan")).toBeTruthy();
+    expect(
+      screen.getByText("Next step: Re-scan at 300 DPI and upload a clear PDF.")
+    ).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("downloads compiled binder PDF when compiled output is available", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-compiled-123",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "record.pdf",
+                normalized_filename: "record-normalized.pdf",
+                classification: "record",
+                quality_status: "ready",
+                issues: [],
+              },
+            ],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-compiled-123",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-compiled-123",
+            forum: "federal_court_jr",
+            toc_entries: [
+              {
+                position: 1,
+                document_type: "record",
+                filename: "record-normalized.pdf",
+                start_page: 1,
+                end_page: 4,
+              },
+            ],
+            pagination_summary: "Pages 1-4 across 1 compiled document.",
+            compilation_output_mode: "compiled_pdf",
+            compiled_artifact: {
+              filename: "matter-compiled-123.pdf",
+              byte_size: 4096,
+              sha256: "abc123",
+              page_count: 4,
+            },
+            is_ready: true,
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-package" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        pdfResponse(new Uint8Array([0x25, 0x50, 0x44, 0x46]), {
+          headers: {
+            "x-trace-id": "trace-doc-download",
+            "content-disposition": 'attachment; filename="matter-compiled-123.pdf"',
+          },
+        })
+      );
+    const createObjectURLMock = vi.fn(() => "blob:matter-compiled");
+    const revokeObjectURLMock = vi.fn();
+    const linkClickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURLMock,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURLMock,
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Matter ID: matter-compiled-123")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Generate package" }));
+
+    expect(
+      await screen.findByText("Compiled binder: matter-compiled-123.pdf (4 pages)")
+    ).toBeTruthy();
+    const downloadButton = screen.getByRole("button", { name: "Download binder PDF" });
+    expect((downloadButton as HTMLButtonElement).disabled).toBe(false);
+    await user.click(downloadButton);
+
+    expect(
+      (await screen.findAllByText("Download started: matter-compiled-123.pdf")).length
+    ).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[4]?.[0]).toBe(
+      "https://api.immcad.test/api/documents/matters/matter-compiled-123/package/download"
+    );
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:matter-compiled");
+    expect(linkClickSpy).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("Last endpoint: /api/documents/matters/{matter_id}/package/download")
+    ).toBeTruthy();
+    expect(screen.getByText("Trace ID: trace-doc-download")).toBeTruthy();
   });
 
   it("shows upload failure status when document intake request fails", async () => {
@@ -1038,6 +1363,7 @@ describe("chat shell contract behavior", () => {
     );
 
     const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
     const uploadInput = screen.getByLabelText("Upload documents");
     const file = new File(["exe"], "payload.exe", { type: "application/octet-stream" });
 

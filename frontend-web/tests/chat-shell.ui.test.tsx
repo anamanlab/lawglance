@@ -44,6 +44,19 @@ function createDeferred<T>(): {
   return { promise, resolve, reject };
 }
 
+function parseActivityPayload(testId: string): Array<{
+  stage: string;
+  status: string;
+  meta?: Record<string, unknown>;
+}> {
+  const rawPayload = screen.getByTestId(testId).textContent ?? "[]";
+  return JSON.parse(rawPayload) as Array<{
+    stage: string;
+    status: string;
+    meta?: Record<string, unknown>;
+  }>;
+}
+
 describe("chat shell ui", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -132,13 +145,13 @@ describe("chat shell ui", () => {
     vi.spyOn(globalThis, "fetch").mockReturnValueOnce(deferred.promise);
 
     render(
-      <ChatShell
-        apiBaseUrl="https://api.immcad.test"
-        legalDisclaimer={LEGAL_DISCLAIMER}
-        enableAgentThinkingTimeline={false}
-        showOperationalPanels
-      />
-    );
+        <ChatShell
+          apiBaseUrl="https://api.immcad.test"
+          legalDisclaimer={LEGAL_DISCLAIMER}
+          enableAgentThinkingTimeline
+          showOperationalPanels
+        />
+      );
 
     const user = userEvent.setup();
     await user.type(
@@ -150,6 +163,14 @@ describe("chat shell ui", () => {
     expect(await screen.findByText("Sending request...")).toBeTruthy();
     expect(await screen.findByText("Submitting your question...")).toBeTruthy();
     expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("true");
+    expect(await screen.findByLabelText("Agent activity")).toBeTruthy();
+    expect(screen.getByText("Understanding question")).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-pending")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: "intake", status: "running" }),
+        expect.objectContaining({ stage: "retrieval", status: "running" }),
+      ])
+    );
 
     deferred.resolve(
       jsonResponse(CHAT_SUCCESS_RESPONSE, {
@@ -158,6 +179,14 @@ describe("chat shell ui", () => {
     );
 
     expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: "retrieval", status: "success" }),
+        expect.objectContaining({ stage: "grounding", status: "success" }),
+        expect.objectContaining({ stage: "synthesis", status: "success" }),
+        expect.objectContaining({ stage: "delivery", status: "success" }),
+      ])
+    );
     await waitFor(() => {
       expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("false");
     });

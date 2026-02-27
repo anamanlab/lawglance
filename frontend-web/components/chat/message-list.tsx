@@ -1,6 +1,8 @@
 import { memo, type RefObject } from "react";
 
+import { ActivityStrip } from "@/components/chat/activity-strip";
 import type {
+  AgentActivityEvent,
   AgentActivityByTurn,
   ChatMessage,
   SubmissionPhase,
@@ -32,9 +34,13 @@ function renderLoadingCopy(submissionPhase: SubmissionPhase): string {
 const MessageBubble = memo(function MessageBubble({
   message,
   showDiagnostics,
+  enableAgentThinkingTimeline,
+  activityEvents,
 }: {
   message: ChatMessage;
   showDiagnostics: boolean;
+  enableAgentThinkingTimeline: boolean;
+  activityEvents: AgentActivityEvent[];
 }): JSX.Element {
   const isUser = message.author === "user";
 
@@ -78,6 +84,9 @@ const MessageBubble = memo(function MessageBubble({
           </div>
 
           <p className={`leading-7 ${isUser ? "text-[#faf9f5]" : "text-ink"}`}>{message.content}</p>
+          {!isUser && enableAgentThinkingTimeline ? (
+            <ActivityStrip events={activityEvents} />
+          ) : null}
 
           {message.author === "assistant" && message.fallbackUsed?.used ? (
             <p className="mt-2 text-[11px] leading-5 text-muted">
@@ -204,15 +213,30 @@ export function MessageList({
             className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-[rgba(243,239,229,0.96)] to-transparent"
           />
           <ol className="relative space-y-3">
-            {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} showDiagnostics={showDiagnostics} />
-            ))}
+            {messages.map((message) => {
+              const activityEvents =
+                message.activityTurnId === undefined
+                  ? []
+                  : (activityByTurn[message.activityTurnId] ?? []);
+              return (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  showDiagnostics={showDiagnostics}
+                  enableAgentThinkingTimeline={enableAgentThinkingTimeline}
+                  activityEvents={activityEvents}
+                />
+              );
+            })}
             {isChatSubmitting ? (
               <li className="flex justify-start">
                 <article className="max-w-[90%] w-full sm:w-[280px] rounded-2xl border border-[rgba(176,174,165,0.42)] bg-[rgba(250,249,245,0.96)] px-4 py-3 text-sm leading-relaxed text-ink md:max-w-[78%]">
                   <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
                     Processing
                   </p>
+                  {enableAgentThinkingTimeline ? (
+                    <ActivityStrip events={pendingActivityEvents} />
+                  ) : null}
                   <div className="flex animate-pulse flex-col gap-2.5">
                     <div className="h-2.5 w-full rounded-full bg-[rgba(176,174,165,0.3)]" />
                     <div className="h-2.5 w-3/4 rounded-full bg-[rgba(176,174,165,0.3)]" />

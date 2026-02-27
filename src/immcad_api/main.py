@@ -26,9 +26,12 @@ from immcad_api.schemas import ErrorEnvelope
 from immcad_api.services import (
     CaseSearchService,
     ChatService,
+    InMemoryDocumentMatterStore,
     KeywordGroundingAdapter,
     LawyerCaseResearchService,
+    RedisDocumentMatterStore,
     StaticGroundingAdapter,
+    build_document_matter_store,
     official_grounding_catalog,
     scaffold_grounded_citations,
 )
@@ -227,6 +230,13 @@ def create_app() -> FastAPI:
         max_age=600,
     )
     request_metrics = RequestMetrics()
+    document_matter_store = build_document_matter_store(redis_url=settings.redis_url)
+    if isinstance(document_matter_store, RedisDocumentMatterStore):
+        document_matter_store_backend = "redis"
+    elif isinstance(document_matter_store, InMemoryDocumentMatterStore):
+        document_matter_store_backend = "in_memory"
+    else:
+        document_matter_store_backend = "unknown"
     rate_limiter = build_rate_limiter(
         limit_per_minute=settings.api_rate_limit_per_minute,
         redis_url=settings.redis_url,
@@ -361,6 +371,7 @@ def create_app() -> FastAPI:
     app.include_router(
         build_documents_router(
             request_metrics=request_metrics,
+            matter_store=document_matter_store,
             upload_max_bytes=settings.document_upload_max_bytes,
             upload_max_files=settings.document_upload_max_files,
             allowed_content_types=settings.document_allowed_content_types,
@@ -412,6 +423,9 @@ def create_app() -> FastAPI:
         )
         return {
             "request_metrics": request_metrics.snapshot(),
+            "document_matter_store": {
+                "backend": document_matter_store_backend,
+            },
             "provider_routing_metrics": provider_router.telemetry_snapshot(),
             "canlii_usage_metrics": canlii_metrics_snapshot,
         }

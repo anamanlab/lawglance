@@ -4,6 +4,13 @@ from immcad_api.services.case_document_resolver import (
 )
 from immcad_api.services.case_search_service import CaseSearchService
 from immcad_api.services.document_intake_service import DocumentIntakeService
+from immcad_api.services.document_matter_store import (
+    DocumentMatterStore,
+    InMemoryDocumentMatterStore,
+    RedisDocumentMatterStore,
+    StoredDocumentMatter,
+    build_document_matter_store,
+)
 from immcad_api.services.document_package_service import DocumentPackageService
 from immcad_api.services.chat_service import ChatService
 from immcad_api.services.grounding import (
@@ -20,6 +27,11 @@ __all__ = [
     "resolve_pdf_status_with_reason",
     "CaseSearchService",
     "DocumentIntakeService",
+    "DocumentMatterStore",
+    "InMemoryDocumentMatterStore",
+    "RedisDocumentMatterStore",
+    "StoredDocumentMatter",
+    "build_document_matter_store",
     "DocumentPackageService",
     "ChatService",
     "LawyerCaseResearchService",

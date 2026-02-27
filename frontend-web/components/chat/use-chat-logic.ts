@@ -8,6 +8,10 @@ import type {
   MatterPackageResponsePayload,
   MatterReadinessResponsePayload,
 } from "@/lib/api-client";
+import {
+  buildInitialTurnEvents,
+  upsertTurnStageEvent,
+} from "@/components/chat/agent-activity";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
 import {
   ASSISTANT_BOOTSTRAP_TEXT,
@@ -15,6 +19,10 @@ import {
   ERROR_COPY,
 } from "@/components/chat/constants";
 import type {
+  AgentActivityByTurn,
+  AgentActivityMeta,
+  AgentActivityStage,
+  AgentActivityStatus,
   CaseRetrievalMode,
   ChatErrorState,
   DocumentCompilationState,
@@ -316,6 +324,7 @@ export interface UseChatLogicProps {
 export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanels }: UseChatLogicProps) {
   const sessionIdRef = useRef(buildSessionId());
   const messageCounterRef = useRef(0);
+  const activityTurnCounterRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const endOfThreadRef = useRef<HTMLDivElement | null>(null);
   const localeStorageKey = "immcad.locale";
@@ -370,16 +379,20 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [supportMatrix, setSupportMatrix] = useState<SupportMatrixResponsePayload | null>(
     null
   );
-  const supportMatrixLoadedRef = useRef(false);
+  const supportMatrixRequestInFlightRef = useRef(false);
 
   const loadDocumentSupportMatrix = useCallback(async (): Promise<void> => {
-    if (supportMatrixLoadedRef.current || supportMatrix !== null) {
+    if (supportMatrixRequestInFlightRef.current || supportMatrix !== null) {
       return;
     }
-    supportMatrixLoadedRef.current = true;
-    const result = await apiClient.getDocumentSupportMatrix();
-    if (result.ok) {
-      setSupportMatrix(result.data);
+    supportMatrixRequestInFlightRef.current = true;
+    try {
+      const result = await apiClient.getDocumentSupportMatrix();
+      if (result.ok) {
+        setSupportMatrix(result.data);
+      }
+    } finally {
+      supportMatrixRequestInFlightRef.current = false;
     }
   }, [apiClient, supportMatrix]);
 
@@ -388,6 +401,48 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       disclaimer: legalDisclaimer,
     }),
   ]);
+  const [activityByTurn, setActivityByTurn] = useState<AgentActivityByTurn>({});
+  const [activeActivityTurnId, setActiveActivityTurnId] = useState<string | null>(null);
+
+  const nextActivityTurnId = useCallback((): string => {
+    const turnId = `turn-${activityTurnCounterRef.current}`;
+    activityTurnCounterRef.current += 1;
+    return turnId;
+  }, []);
+
+  const applyTurnActivityEvents = useCallback(
+    (
+      turnId: string,
+      updates: Array<{
+        stage: AgentActivityStage;
+        status: AgentActivityStatus;
+        label: string;
+        endedAt?: string;
+        details?: string;
+        meta?: AgentActivityMeta;
+      }>
+    ): void => {
+      setActivityByTurn((currentActivityByTurn) => {
+        let nextTurnEvents = currentActivityByTurn[turnId] ?? buildInitialTurnEvents(turnId);
+        for (const update of updates) {
+          nextTurnEvents = upsertTurnStageEvent(nextTurnEvents, {
+            turnId,
+            stage: update.stage,
+            status: update.status,
+            label: update.label,
+            endedAt: update.endedAt,
+            details: update.details,
+            meta: update.meta,
+          });
+        }
+        return {
+          ...currentActivityByTurn,
+          [turnId]: nextTurnEvents,
+        };
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -446,6 +501,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       if (!promptToSubmit) {
         return;
       }
+      const activityTurnId = nextActivityTurnId();
 
       if (!options?.isRetry) {
         const userMessageId = nextMessageId("user", messageCounterRef);
@@ -455,6 +511,20 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         ]);
         setDraft("");
       }
+      setActiveActivityTurnId(activityTurnId);
+      setActivityByTurn((currentActivityByTurn) => {
+        let initialEvents = buildInitialTurnEvents(activityTurnId);
+        initialEvents = upsertTurnStageEvent(initialEvents, {
+          turnId: activityTurnId,
+          stage: "retrieval",
+          status: "running",
+          label: "Searching case law",
+        });
+        return {
+          ...currentActivityByTurn,
+          [activityTurnId]: initialEvents,
+        };
+      });
 
       setChatError(null);
       setRetryPrompt(null);
@@ -482,6 +552,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         });
 
         if (!chatResult.ok) {
+          const completedAt = new Date().toISOString();
           const errorCopy = ERROR_COPY[chatResult.error.code];
           setChatError({
             title: errorCopy.title,
@@ -498,11 +569,43 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
             code: chatResult.error.code,
             traceIdMismatch: chatResult.traceIdMismatch,
           });
+          applyTurnActivityEvents(activityTurnId, [
+            {
+              stage: "retrieval",
+              status: "error",
+              label: "Searching case law",
+              endedAt: completedAt,
+              meta: {
+                code: chatResult.error.code,
+              },
+            },
+            {
+              stage: "delivery",
+              status: "error",
+              label: "Delivering response",
+              endedAt: completedAt,
+              meta: {
+                code: chatResult.error.code,
+                traceId: chatResult.traceId ?? null,
+              },
+            },
+          ]);
           return;
         }
 
         const chatResponse = chatResult.data;
         const isPolicyRefusal = chatResponse.fallback_used.reason === "policy_block";
+        const completedAt = new Date().toISOString();
+        const synthesisStatus =
+          chatResponse.fallback_used.used && !isPolicyRefusal ? "warning" : "success";
+        const synthesisMeta: AgentActivityMeta | undefined =
+          chatResponse.fallback_used.used
+            ? {
+                fallbackUsed: chatResponse.fallback_used.used,
+                fallbackReason: chatResponse.fallback_used.reason ?? null,
+                fallbackProvider: chatResponse.fallback_used.provider ?? null,
+              }
+            : undefined;
         const assistantMessageId = nextMessageId("assistant", messageCounterRef);
 
         setMessages((currentMessages) => [
@@ -514,6 +617,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
             isPolicyRefusal,
             confidence: chatResponse.confidence,
             fallbackUsed: chatResponse.fallback_used,
+            activityTurnId,
           }),
         ]);
 
@@ -523,6 +627,49 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           traceId: chatResult.traceId,
           traceIdMismatch: false,
         });
+        applyTurnActivityEvents(activityTurnId, [
+          {
+            stage: "intake",
+            status: "success",
+            label: "Understanding question",
+            endedAt: completedAt,
+          },
+          {
+            stage: "retrieval",
+            status: "success",
+            label: "Searching case law",
+            endedAt: completedAt,
+          },
+          {
+            stage: "grounding",
+            status: "success",
+            label: "Evaluating sources",
+            endedAt: completedAt,
+            meta: {
+              sourceCount: chatResponse.citations.length,
+            },
+          },
+          {
+            stage: "synthesis",
+            status: synthesisStatus,
+            label: "Drafting answer",
+            endedAt: completedAt,
+            meta: synthesisMeta,
+          },
+          {
+            stage: "delivery",
+            status: isPolicyRefusal ? "blocked" : "success",
+            label: "Delivering response",
+            endedAt: completedAt,
+            meta: isPolicyRefusal
+              ? {
+                  fallbackReason: chatResponse.fallback_used.reason ?? "policy_block",
+                }
+              : {
+                  traceId: chatResult.traceId ?? null,
+                },
+          },
+        ]);
 
         if (isPolicyRefusal) {
           setRelatedCasesStatus(
@@ -568,7 +715,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         textareaRef.current?.focus();
       }
     },
-    [activeLocale, apiClient, isSubmitting, legalDisclaimer]
+    [activeLocale, apiClient, applyTurnActivityEvents, isSubmitting, legalDisclaimer, nextActivityTurnId]
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
@@ -628,7 +775,6 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     setIsCaseSearchSubmitting(true);
     setSubmissionPhase("cases");
     setExportingCaseId(null);
-    setSourceStatus(null);
     setResearchConfidence(null);
     setConfidenceReasons([]);
     setIntakeCompleteness(null);
@@ -650,6 +796,14 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       });
 
       if (!caseSearchResult.ok) {
+        if (caseSearchResult.error.code === "SOURCE_UNAVAILABLE") {
+          setSourceStatus((currentStatus) =>
+            currentStatus ?? {
+              official: "unavailable",
+              canlii: "unavailable",
+            }
+          );
+        }
         const statusMessage = buildCaseSearchErrorStatusMessage({
           code: caseSearchResult.error.code,
           message: caseSearchResult.error.message,
@@ -1306,6 +1460,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     submissionPhase,
     chatPendingElapsedSeconds,
     isSlowChatResponse,
+    activityByTurn,
+    activeActivityTurnId,
     messages,
     submitPrompt,
     runRelatedCaseSearch,

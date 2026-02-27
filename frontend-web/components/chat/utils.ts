@@ -32,6 +32,7 @@ export function buildMessage(
     isPolicyRefusal = false,
     confidence,
     fallbackUsed,
+    activityTurnId,
   }: {
     disclaimer?: string;
     traceId?: string | null;
@@ -39,6 +40,7 @@ export function buildMessage(
     isPolicyRefusal?: boolean;
     confidence?: "low" | "medium" | "high";
     fallbackUsed?: ApiFallbackUsed;
+    activityTurnId?: string;
   } = {}
 ): ChatMessage {
   return {
@@ -51,6 +53,7 @@ export function buildMessage(
     isPolicyRefusal,
     confidence,
     fallbackUsed,
+    activityTurnId,
   };
 }
 

@@ -20,6 +20,7 @@ export function ChatShell({
   apiBaseUrl,
   legalDisclaimer,
   showOperationalPanels = false,
+  enableAgentThinkingTimeline,
 }: ChatShellProps): JSX.Element {
   const {
     textareaRef,
@@ -64,6 +65,8 @@ export function ChatShell({
     submissionPhase,
     chatPendingElapsedSeconds,
     isSlowChatResponse,
+    activityByTurn,
+    activeActivityTurnId,
     messages,
     runRelatedCaseSearch,
     runCaseExport,
@@ -273,6 +276,9 @@ export function ChatShell({
                   isChatSubmitting={isChatSubmitting}
                   chatPendingElapsedSeconds={chatPendingElapsedSeconds}
                   isSlowChatResponse={isSlowChatResponse}
+                  enableAgentThinkingTimeline={enableAgentThinkingTimeline}
+                  activityByTurn={activityByTurn}
+                  activeActivityTurnId={activeActivityTurnId}
                   messages={messages}
                   submissionPhase={submissionPhase}
                   showDiagnostics={showOperationalPanels}

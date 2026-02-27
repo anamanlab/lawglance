@@ -1,6 +1,10 @@
 import { memo, type RefObject } from "react";
 
-import type { ChatMessage, SubmissionPhase } from "@/components/chat/types";
+import type {
+  AgentActivityByTurn,
+  ChatMessage,
+  SubmissionPhase,
+} from "@/components/chat/types";
 
 type MessageListProps = {
   messages: ChatMessage[];
@@ -8,6 +12,9 @@ type MessageListProps = {
   chatPendingElapsedSeconds: number;
   isSlowChatResponse: boolean;
   submissionPhase: SubmissionPhase;
+  enableAgentThinkingTimeline: boolean;
+  activityByTurn: AgentActivityByTurn;
+  activeActivityTurnId: string | null;
   showDiagnostics?: boolean;
   endOfThreadRef: RefObject<HTMLDivElement>;
 };
@@ -141,9 +148,24 @@ export function MessageList({
   chatPendingElapsedSeconds,
   isSlowChatResponse,
   submissionPhase,
+  enableAgentThinkingTimeline,
+  activityByTurn,
+  activeActivityTurnId,
   showDiagnostics = false,
   endOfThreadRef,
 }: MessageListProps): JSX.Element {
+  const pendingActivityEvents =
+    activeActivityTurnId === null ? [] : (activityByTurn[activeActivityTurnId] ?? []);
+  const latestAssistantTurnId =
+    [...messages]
+      .reverse()
+      .find((message) => message.author === "assistant" && message.activityTurnId)
+      ?.activityTurnId ?? null;
+  const latestActivityEvents =
+    latestAssistantTurnId === null
+      ? pendingActivityEvents
+      : (activityByTurn[latestAssistantTurnId] ?? []);
+
   return (
     <section className="imm-fade-up" style={{ animationDelay: "140ms" }}>
       <div className="relative z-10">
@@ -160,6 +182,16 @@ export function MessageList({
           className="imm-scrollbar relative h-[46vh] min-h-[300px] overflow-y-auto overscroll-contain rounded-2xl border border-[rgba(176,174,165,0.45)] bg-[linear-gradient(180deg,#f8f5ee_0%,#f3efe5_100%)] p-3 md:h-[54vh] md:min-h-[380px] md:p-4 shadow-inner"
           role="log"
         >
+          <span
+            className="sr-only"
+            data-testid="agent-activity-pending"
+            data-thinking-enabled={enableAgentThinkingTimeline ? "true" : "false"}
+          >
+            {JSON.stringify(pendingActivityEvents)}
+          </span>
+          <span className="sr-only" data-testid="agent-activity-latest">
+            {JSON.stringify(latestActivityEvents)}
+          </span>
           <div className="pointer-events-none absolute inset-0 opacity-60" aria-hidden="true">
             <div className="h-full w-full bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_39px,rgba(176,174,165,0.14)_39px,rgba(176,174,165,0.14)_40px)]" />
           </div>

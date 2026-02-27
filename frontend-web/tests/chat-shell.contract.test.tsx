@@ -814,6 +814,7 @@ describe("chat shell contract behavior", () => {
         )
       ).length
     ).toBeGreaterThan(0);
+    expect(await screen.findByText("Trace ID: trace-doc-intake-https")).toBeTruthy();
     expect(screen.queryByText("Ready to find related Canadian case law.")).toBeNull();
   });
 
@@ -1389,6 +1390,93 @@ describe("chat shell contract behavior", () => {
       expect(supportMatrixCalls).toBe(2);
     });
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("surfaces support matrix failures with workflow copy and trace id", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-support-fail-001",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "record.pdf",
+                normalized_filename: "record-normalized.pdf",
+                classification: "record",
+                quality_status: "ready",
+                issues: [],
+              },
+            ],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake-success" },
+          }
+        );
+      }
+
+      if (url.includes("/api/documents/matters/matter-support-fail-001/readiness")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-support-fail-001",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness-success" },
+          }
+        );
+      }
+
+      if (url.endsWith("/api/documents/support-matrix")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "SOURCE_UNAVAILABLE",
+              message: "Support matrix unavailable",
+            },
+            trace_id: "trace-doc-support-matrix-fail-only",
+          },
+          {
+            status: 503,
+            headers: { "x-trace-id": "trace-doc-support-matrix-fail-only" },
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(await screen.findByText("Document support matrix unavailable")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Document support matrix is temporarily unavailable. Using default profile guidance."
+      )
+    ).toBeTruthy();
+    expect(await screen.findByText("Trace ID: trace-doc-support-matrix-fail-only")).toBeTruthy();
   });
 
   it("renders remediation guidance for unreadable failed uploads", async () => {

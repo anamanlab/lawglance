@@ -1,5 +1,54 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-27 - Frontend Eye-Comfort Contrast Hardening
+
+### Current Focus
+- Execute a contrast-first UI pass in `frontend-web` that reduces glare/brightness while preserving accessibility and readability.
+
+### Plan
+- [x] Capture a baseline from `ui-ux-pro-max` recommendations for accessibility + low-glare light theme behavior.
+- [x] Soften global palette tokens in `frontend-web/app/globals.css` (backgrounds, surfaces, muted text, accent intensity) while preserving contrast targets.
+- [x] Replace high-glare hardcoded UI colors in chat shell components with semantic/tokenized colors.
+- [x] Verify interaction accessibility contracts remain intact (focus visibility, touch targets, warning/error readability).
+- [x] Run frontend verification (`npm run test`, `npm run lint`, `npm run typecheck`) and record evidence.
+
+### Review
+- `ui-ux-pro-max` baseline captured via skill search:
+  - `python3 /home/codespace/.codex/skills/ui-ux-pro-max/scripts/search.py "legal assistant dashboard chat accessibility low eye strain" --design-system -p "IMMCAD Chat" -f markdown`
+  - `python3 /home/codespace/.codex/skills/ui-ux-pro-max/scripts/search.py "contrast accessibility reduced glare" --domain ux -n 12`
+  - `python3 /home/codespace/.codex/skills/ui-ux-pro-max/scripts/search.py "accessible color typography comfort" --stack html-tailwind`
+- Implemented contrast-first, low-glare UI hardening in `frontend-web`:
+  - Rebalanced global color tokens and shadows in `frontend-web/app/globals.css` (darker muted text, softer backgrounds/surfaces, less intense accent radiance).
+  - Added body readability tuning (`line-height: 1.58`) to reduce eye fatigue during long reads.
+  - Aligned Tailwind semantic colors in `frontend-web/tailwind.config.ts` (`accent`, `warning`, `muted`, `ink`) with eye-comfort palette.
+  - Replaced bright hardcoded chat colors with semantic/tokens in:
+    - `frontend-web/app/page.tsx`
+    - `frontend-web/components/chat/chat-shell-container.tsx`
+    - `frontend-web/components/chat/chat-header.tsx`
+    - `frontend-web/components/chat/message-composer.tsx`
+    - `frontend-web/components/chat/message-list.tsx`
+    - `frontend-web/components/chat/quick-prompts.tsx`
+    - `frontend-web/components/chat/status-banner.tsx`
+    - `frontend-web/components/chat/support-context-panel.tsx`
+    - `frontend-web/components/chat/thinking-drawer.tsx`
+    - `frontend-web/components/chat/activity-strip.tsx`
+    - `frontend-web/components/chat/related-case-panel.tsx`
+    - `frontend-web/components/chat/utils.ts`
+  - Applied the same low-glare token palette to source-transparency UI in `frontend-web/app/sources/page.tsx` (cards, table surfaces, badge tones, warning/error cards).
+- Contrast validation (token pairs):
+  - `node - <<'NODE' ... contrast audit ... NODE` ->
+    - `text on surface: 15.53:1`
+    - `muted on surface: 7.86:1`
+    - `warning-ink on primary-soft: 5.48:1`
+    - `accent-ink on accent-soft: 5.61:1`
+    - `success-ink on success-soft: 5.27:1`
+    - `danger-ink on danger-soft: 6.66:1`
+    - `focus on surface: 4.61:1`
+- Verification evidence:
+  - `cd frontend-web && npm run test` -> `18 passed` files, `121 passed` tests.
+  - `cd frontend-web && npm run lint` -> `No ESLint warnings or errors`.
+  - `cd frontend-web && npm run typecheck` -> pass (`tsc --noEmit --incremental false`).
+
 ## Task Plan - 2026-02-27 - Prompt Capability Audit + Friendly Behavior + Eval Suite
 
 ### Current Focus
@@ -364,13 +413,46 @@
   - `frontend-web/tests/api-client.contract.test.ts` metadata passthrough assertions
   - `frontend-web/tests/chat-shell.contract.test.tsx` metadata badge/chip rendering assertion
 
+## Task Plan - 2026-02-27 - Document Endpoint 400 Debug (Proxy -> Backend)
+
+### Current Focus
+- Diagnose and fix production `400 Bad Request` responses on `/api/documents/support-matrix` and `/api/documents/intake` when routed through the frontend proxy.
+
+### Plan
+- [x] Add a failing frontend proxy contract test that captures missing forwarded protocol/client context for document endpoints.
+- [x] Patch `frontend-web/lib/backend-proxy.ts` to forward backend-required protocol/client headers safely.
+- [x] Patch workflow error banner message routing so document failures do not display stale case-law status copy.
+- [x] Run targeted frontend proxy/document contract tests.
+- [x] Run targeted backend document middleware tests to confirm policy compatibility.
+- [x] Add review notes and verification evidence.
+
+### Review
+- Root cause (confirmed):
+  - Document APIs are gated by backend HTTPS middleware in hardened mode.
+  - Frontend proxy was not forwarding protocol context (`x-forwarded-proto` / `x-forwarded-host`) and Cloudflare client header (`cf-connecting-ip`) to backend.
+  - Workflow error banner reused `relatedCasesStatus` for all non-chat errors, which rendered misleading document error copy (`Ready to find related Canadian case law.`).
+- Changes implemented:
+  - `frontend-web/lib/backend-proxy.ts`
+    - Forward `cf-connecting-ip` to backend.
+    - Forward canonical protocol/host context via `x-forwarded-proto` and `x-forwarded-host`.
+    - Forward `cf-visitor` when present.
+  - `frontend-web/components/chat/status-banner.tsx`
+    - Added endpoint-aware workflow error message selection for document endpoints.
+  - `frontend-web/components/chat/chat-shell-container.tsx`
+    - Pass `documentStatusMessage` into `StatusBanner`.
+  - Tests:
+    - `frontend-web/tests/backend-proxy.contract.test.ts`
+      - Added `forwards protocol and Cloudflare client headers for document middleware checks`.
+    - `frontend-web/tests/chat-shell.contract.test.tsx`
+      - Added `shows document error copy in workflow banner instead of stale case-law status`.
+      - Updated upload-failure assertion to handle dual rendering locations.
+
 ### Verification evidence
-- `uv run ruff check scripts/run_cloudflare_ingestion_hourly.py src/immcad_api/schemas.py src/immcad_api/sources/official_case_law_client.py src/immcad_api/services/lawyer_case_research_service.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py tests/test_official_case_law_client.py tests/test_lawyer_case_research_service.py` -> `All checks passed!`
-- `PYTHONPATH=src uv run pytest -q tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py tests/test_official_case_law_client.py tests/test_lawyer_case_research_service.py tests/test_case_search_service.py tests/test_lawyer_research_schemas.py` -> `44 passed`
-- `cd frontend-web && npm run test -- tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts` -> `37 passed`
-- `cd frontend-web && npx eslint components/chat/related-case-panel.tsx lib/api-client.ts tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts tests/fixtures/chat-contract-fixtures.ts` -> pass
-- `cd frontend-web && npm run typecheck` -> pass
-- `uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+- `cd frontend-web && npm run -s test -- tests/backend-proxy.contract.test.ts` -> `23 passed`
+- `cd frontend-web && npm run -s test -- tests/chat-shell.contract.test.tsx -t "shows document error copy in workflow banner instead of stale case-law status"` -> `1 passed`
+- `cd frontend-web && npm run -s test -- tests/backend-proxy.contract.test.ts tests/chat-shell.contract.test.tsx tests/document-intake-route.contract.test.ts` -> `48 passed`
+- `cd frontend-web && npm run -s typecheck` -> pass
+- `uv run pytest -q tests/test_api_scaffold.py::test_document_endpoints_require_https_when_enabled tests/test_api_scaffold.py::test_document_endpoints_accept_forwarded_https_proto_when_enabled tests/test_api_scaffold.py::test_rate_limit_client_id_uses_cloudflare_connecting_ip_when_direct_host_missing` -> `3 passed`
 
 ## Task Plan - 2026-02-27 - Production Incident: `/api/chat` 530 Tunnel Failure
 
@@ -760,6 +842,20 @@
 
 ### Review
 - In progress.
+
+## Task Plan - 2026-02-27 - Legal RSS and Court Source Visibility Audit
+
+### Current Focus
+- Record how FC/FCA/SCC feeds reach the app, what the UI surfaces, and what storage/state artifacts exist.
+
+### Plan
+- [ ] Describe the RSS/JSON source registry entries plus policy gating and ingestion checkpoints for FC/FCA/SCC.
+- [ ] Trace the parser/case-search pipeline (OfficialCaseLawClient + LawyerCaseResearchService) that feeds the AI agent.
+- [ ] Catalogue the front-end exposure points (source transparency page, related-case panel, intake controls) and explain the user experience available today.
+- [ ] Spell out missing coverage (superior court, FCA priority telemetry, navigation to transparency data) and propose next steps.
+
+### Review
+- Documentation is saved in `docs/plans/2026-02-27-legal-rss-audit.md` and the audit report at `docs/audits/2026-02-27-legal-rss.md` captures the current state, front-end surface area, and recommended follow-up items.
 
 ## Task Plan - 2026-02-27 - Step 4: Contract Regression Closure (Record Sections + Generate Gating)
 

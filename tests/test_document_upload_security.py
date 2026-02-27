@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 import fitz
 import pytest
 from fastapi.testclient import TestClient
@@ -16,7 +18,7 @@ def _pdf_payload(text: str) -> bytes:
     return payload
 
 
-def test_upload_rejects_unsupported_content_type() -> None:
+def test_upload_reports_unsupported_content_type_as_failed_result() -> None:
     client = TestClient(create_app())
     response = client.post(
         "/api/documents/intake",
@@ -24,13 +26,14 @@ def test_upload_rejects_unsupported_content_type() -> None:
         files=[("files", ("payload.exe", b"MZ", "application/octet-stream"))],
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 200
     body = response.json()
-    assert body["error"]["code"] == "VALIDATION_ERROR"
-    assert body["error"]["policy_reason"] == "unsupported_file_type"
+    assert len(body["results"]) == 1
+    assert body["results"][0]["quality_status"] == "failed"
+    assert body["results"][0]["issues"] == ["unsupported_file_type"]
 
 
-def test_upload_rejects_oversized_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_upload_reports_oversized_payload_as_failed_result(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOCUMENT_UPLOAD_MAX_BYTES", "1024")
     oversized_payload = b"%PDF-1.7\\n" + (b"A" * 5000)
     client = TestClient(create_app())
@@ -40,7 +43,45 @@ def test_upload_rejects_oversized_payload(monkeypatch: pytest.MonkeyPatch) -> No
         files=[("files", ("big.pdf", oversized_payload, "application/pdf"))],
     )
 
-    assert response.status_code == 413
+    assert response.status_code == 200
     body = response.json()
-    assert body["error"]["code"] == "VALIDATION_ERROR"
-    assert body["error"]["policy_reason"] == "upload_size_exceeded"
+    assert len(body["results"]) == 1
+    assert body["results"][0]["quality_status"] == "failed"
+    assert body["results"][0]["issues"] == ["upload_size_exceeded"]
+
+
+def test_upload_malformed_allowed_payload_returns_failed_result() -> None:
+    # Small malformed PNG payload that currently surfaces parser edge cases.
+    malformed_png_payload = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2L0QAAAABJRU5ErkJggg=="
+    )
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    response = client.post(
+        "/api/documents/intake",
+        data={"forum": "rpd", "matter_id": "matter-upload-malformed"},
+        files=[("files", ("scan.png", malformed_png_payload, "image/png"))],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["quality_status"] == "failed"
+    assert "file_unreadable" in body["results"][0]["issues"]
+
+
+def test_upload_valid_png_payload_returns_needs_review_result() -> None:
+    valid_png_payload = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wn2V50AAAAASUVORK5CYII="
+    )
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/documents/intake",
+        data={"forum": "rpd", "matter_id": "matter-upload-valid-png"},
+        files=[("files", ("scan.png", valid_png_payload, "image/png"))],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["quality_status"] == "needs_review"
+    assert "ocr_required" in body["results"][0]["issues"]

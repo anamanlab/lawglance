@@ -960,6 +960,7 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
+    assert payload["document_matter_store"]["backend"] in {"in_memory", "redis", "unknown"}
     assert "provider_routing_metrics" in payload
     assert "canlii_usage_metrics" in payload
 

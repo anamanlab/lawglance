@@ -1,27 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 import uuid
 
+import os
 from fastapi import APIRouter, File, Form, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from immcad_api.policy.document_requirements import FilingForum, evaluate_readiness
 from immcad_api.schemas import (
+    DocumentIntakeResult,
     DocumentIntakeResponse,
     DocumentReadinessResponse,
     ErrorEnvelope,
 )
-from immcad_api.services import DocumentIntakeService, DocumentPackageService
+from immcad_api.services import (
+    DocumentIntakeService,
+    DocumentMatterStore,
+    DocumentPackageService,
+    InMemoryDocumentMatterStore,
+)
 from immcad_api.telemetry import RequestMetrics
-
-
-@dataclass
-class _MatterRecord:
-    forum: FilingForum
-    results: list
 
 
 def build_documents_router(
@@ -29,6 +29,7 @@ def build_documents_router(
     request_metrics: RequestMetrics | None = None,
     intake_service: DocumentIntakeService | None = None,
     package_service: DocumentPackageService | None = None,
+    matter_store: DocumentMatterStore | None = None,
     upload_max_bytes: int = 10 * 1024 * 1024,
     upload_max_files: int = 25,
     allowed_content_types: tuple[str, ...] = (
@@ -41,7 +42,7 @@ def build_documents_router(
     router = APIRouter(prefix="/api/documents", tags=["documents"])
     intake_service = intake_service or DocumentIntakeService()
     package_service = package_service or DocumentPackageService()
-    matter_store: dict[str, _MatterRecord] = {}
+    matter_store = matter_store or InMemoryDocumentMatterStore()
 
     def _error_response(
         *,
@@ -92,7 +93,7 @@ def build_documents_router(
         *,
         matter_id: str,
         forum: FilingForum,
-        results: list,
+        results: list[DocumentIntakeResult] | tuple[DocumentIntakeResult, ...],
     ) -> DocumentReadinessResponse:
         classified_doc_types = {
             result.classification.strip().lower()
@@ -105,12 +106,14 @@ def build_documents_router(
             if result.quality_status in {"failed", "needs_review"}
             for issue in result.issues
         }
-        warnings = [
-            issue
-            for result in results
-            if result.quality_status == "processed"
-            for issue in result.issues
-        ]
+        warnings = sorted(
+            {
+                issue
+                for result in results
+                if result.quality_status == "processed"
+                for issue in result.issues
+            }
+        )
         readiness = evaluate_readiness(
             forum=forum,
             classified_doc_types=classified_doc_types,
@@ -123,7 +126,76 @@ def build_documents_router(
             missing_required_items=list(readiness.missing_required_items),
             blocking_issues=list(readiness.blocking_issues),
             warnings=warnings,
+            requirement_statuses=[
+                {
+                    "item": requirement.item,
+                    "status": requirement.status,
+                    "rule_scope": requirement.rule_scope,
+                    "reason": requirement.reason,
+                }
+                for requirement in readiness.requirement_statuses
+            ],
         )
+
+    def _resolve_matter_client_id(request: Request) -> str:
+        raw_client_id = getattr(request.state, "client_id", None)
+        resolved_client_id = str(raw_client_id).strip() if raw_client_id else ""
+        return resolved_client_id or "anonymous"
+
+    def _build_failed_result(*, original_filename: str, issue: str) -> DocumentIntakeResult:
+        if hasattr(intake_service, "build_failed_result"):
+            return intake_service.build_failed_result(
+                original_filename=original_filename,
+                issue=issue,
+            )
+        file_id = uuid.uuid4().hex[:10]
+        return DocumentIntakeResult(
+            file_id=file_id,
+            original_filename=original_filename,
+            normalized_filename=f"unclassified-{file_id}.pdf",
+            classification="unclassified",
+            quality_status="failed",
+            issues=[issue],
+        )
+
+    def _is_allowed_file(
+        *, content_type: str, filename: str | None, allowed_types: set[str]
+    ) -> bool:
+        filename = (filename or "").strip()
+        _, ext = os.path.splitext(filename.lower())
+        if content_type in allowed_types:
+            return True
+        if content_type == "application/octet-stream" and ext in {
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".tif",
+            ".tiff",
+        }:
+            return True
+        return False
+
+    async def _read_upload_with_size_cap(
+        upload: UploadFile,
+        *,
+        max_bytes: int,
+    ) -> tuple[bytes | None, str | None]:
+        chunk_size = max(min(max_bytes, 1024 * 1024), 64 * 1024)
+        chunks: list[bytes] = []
+        total_bytes = 0
+        try:
+            while True:
+                chunk = await upload.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > max_bytes:
+                    return None, "upload_size_exceeded"
+                chunks.append(chunk)
+        except Exception:
+            return None, "file_unreadable"
+        return b"".join(chunks), None
 
     @router.post("/intake", response_model=DocumentIntakeResponse)
     async def intake_documents(
@@ -193,54 +265,66 @@ def build_documents_router(
 
         effective_matter_id = submitted_matter_id or f"matter-{uuid.uuid4().hex[:12]}"
 
-        results = []
+        results: list[DocumentIntakeResult] = []
         allowed_content_type_set = {
             content_type.strip().lower() for content_type in allowed_content_types
         }
         for upload in files:
-            content_type = (upload.content_type or "").strip().lower()
-            if content_type not in allowed_content_type_set:
-                _record_document_intake_event(
-                    request=request,
-                    matter_id=effective_matter_id,
-                    forum=parsed_forum.value,
-                    file_count=submitted_file_count,
-                    outcome="rejected",
-                    policy_reason="unsupported_file_type",
-                )
-                return _error_response(
-                    status_code=422,
-                    trace_id=trace_id,
-                    code="VALIDATION_ERROR",
-                    message="Unsupported uploaded document content type",
-                    policy_reason="unsupported_file_type",
-                )
-            payload_bytes = await upload.read()
-            if len(payload_bytes) > upload_max_bytes:
-                _record_document_intake_event(
-                    request=request,
-                    matter_id=effective_matter_id,
-                    forum=parsed_forum.value,
-                    file_count=submitted_file_count,
-                    outcome="rejected",
-                    policy_reason="upload_size_exceeded",
-                )
-                return _error_response(
-                    status_code=413,
-                    trace_id=trace_id,
-                    code="VALIDATION_ERROR",
-                    message="Uploaded document exceeds configured maximum size",
-                    policy_reason="upload_size_exceeded",
-                )
+            try:
+                original_filename = upload.filename or "uploaded-file.pdf"
+                content_type = (upload.content_type or "").strip().lower()
+                if not _is_allowed_file(
+                    content_type=content_type,
+                    filename=original_filename,
+                    allowed_types=allowed_content_type_set,
+                ):
+                    results.append(
+                        _build_failed_result(
+                            original_filename=original_filename,
+                            issue="unsupported_file_type",
+                        )
+                    )
+                    continue
 
-            processed = await run_in_threadpool(
-                intake_service.process_file,
-                original_filename=upload.filename or "uploaded-file.pdf",
-                payload_bytes=payload_bytes,
-            )
-            results.append(processed)
+                payload_bytes, read_error = await _read_upload_with_size_cap(
+                    upload,
+                    max_bytes=upload_max_bytes,
+                )
+                if read_error:
+                    results.append(
+                        _build_failed_result(
+                            original_filename=original_filename,
+                            issue=read_error,
+                        )
+                    )
+                    continue
+                if payload_bytes is None:
+                    results.append(
+                        _build_failed_result(
+                            original_filename=original_filename,
+                            issue="file_unreadable",
+                        )
+                    )
+                    continue
 
-        matter_store[effective_matter_id] = _MatterRecord(
+                try:
+                    processed = await run_in_threadpool(
+                        intake_service.process_file,
+                        original_filename=original_filename,
+                        payload_bytes=payload_bytes,
+                    )
+                except ValueError:
+                    processed = _build_failed_result(
+                        original_filename=original_filename, issue="file_unreadable"
+                    )
+                results.append(processed)
+            finally:
+                await upload.close()
+
+        client_scope_id = _resolve_matter_client_id(request)
+        matter_store.put(
+            client_id=client_scope_id,
+            matter_id=effective_matter_id,
             forum=parsed_forum,
             results=results,
         )
@@ -250,12 +334,16 @@ def build_documents_router(
             forum=parsed_forum,
             results=results,
         )
+        all_results_failed = bool(results) and all(
+            result.quality_status == "failed" for result in results
+        )
         _record_document_intake_event(
             request=request,
             matter_id=effective_matter_id,
             forum=parsed_forum.value,
             file_count=submitted_file_count,
-            outcome="accepted",
+            outcome="rejected" if all_results_failed else "accepted",
+            policy_reason="document_all_files_failed" if all_results_failed else None,
         )
 
         return DocumentIntakeResponse(
@@ -275,7 +363,8 @@ def build_documents_router(
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
 
-        matter = matter_store.get(matter_id)
+        client_scope_id = _resolve_matter_client_id(request)
+        matter = matter_store.get(client_id=client_scope_id, matter_id=matter_id)
         if matter is None:
             return _error_response(
                 status_code=404,
@@ -300,7 +389,8 @@ def build_documents_router(
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
 
-        matter = matter_store.get(matter_id)
+        client_scope_id = _resolve_matter_client_id(request)
+        matter = matter_store.get(client_id=client_scope_id, matter_id=matter_id)
         if matter is None:
             return _error_response(
                 status_code=404,

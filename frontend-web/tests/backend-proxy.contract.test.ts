@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-import { forwardPostRequest } from "@/lib/backend-proxy";
+import { forwardGetRequest, forwardPostRequest } from "@/lib/backend-proxy";
 import {
   getServerRuntimeConfig,
   isHardenedRuntimeEnvironment,
@@ -18,6 +18,34 @@ function buildRequest(path: string, body: Record<string, unknown>): NextRequest 
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function buildBinaryMultipartRequest(path: string): {
+  request: NextRequest;
+  payload: Uint8Array;
+} {
+  const boundary = "----immcad-proxy-boundary";
+  const encoder = new TextEncoder();
+  const start = encoder.encode(
+    `--${boundary}\r\n` +
+      'Content-Disposition: form-data; name="files"; filename="scan.pdf"\r\n' +
+      "Content-Type: application/pdf\r\n\r\n"
+  );
+  const binarySegment = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff, 0x2d, 0x31]);
+  const end = encoder.encode(`\r\n--${boundary}--\r\n`);
+  const payload = new Uint8Array(start.length + binarySegment.length + end.length);
+  payload.set(start, 0);
+  payload.set(binarySegment, start.length);
+  payload.set(end, start.length + binarySegment.length);
+
+  return {
+    request: new NextRequest(`http://localhost${path}`, {
+      method: "POST",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      body: payload,
+    }),
+    payload,
+  };
 }
 
 describe("backend proxy scaffold fallback behavior", () => {
@@ -157,17 +185,17 @@ describe("backend proxy scaffold fallback behavior", () => {
     }));
 
     const pdfPayload = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(pdfPayload, {
-        status: 200,
-        headers: {
-          "content-type": "application/pdf",
-          "content-disposition": 'attachment; filename="case-export.pdf"',
-          "x-trace-id": "trace-export-success",
-          "x-export-policy-reason": "source_export_allowed",
-        },
-      })
-    );
+    const upstreamResponse = new Response(pdfPayload, {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-disposition": 'attachment; filename="case-export.pdf"',
+        "x-trace-id": "trace-export-success",
+        "x-export-policy-reason": "source_export_allowed",
+      },
+    });
+    const upstreamArrayBufferSpy = vi.spyOn(upstreamResponse, "arrayBuffer");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(upstreamResponse);
 
     const response = await forwardPostRequest(
       buildRequest("/api/export/cases", {
@@ -184,6 +212,7 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(response.headers.get("content-disposition")).toContain("case-export.pdf");
     expect(response.headers.get("x-export-policy-reason")).toBe("source_export_allowed");
     expect(response.headers.get("x-trace-id")).toBe("trace-export-success");
+    expect(upstreamArrayBufferSpy).not.toHaveBeenCalled();
 
     const responseBytes = new Uint8Array(await response.arrayBuffer());
     expect(Array.from(responseBytes)).toEqual(Array.from(pdfPayload));
@@ -244,5 +273,176 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(response.headers.get("x-trace-id")).toBe("trace-upstream-404");
     expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
     expect(body.error.message).toContain("lawyer case research");
+  });
+
+  it("forwards multipart request bodies without text decoding", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ matter_id: "matter-1", results: [] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-documents-upstream",
+        },
+      })
+    );
+
+    const { request, payload } = buildBinaryMultipartRequest("/api/documents/intake");
+    const response = await forwardPostRequest(request, "/api/documents/intake");
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const forwardedBody = init?.body;
+    const forwardedBytes = new Uint8Array(await new Response(forwardedBody as BodyInit).arrayBuffer());
+    expect(Array.from(forwardedBytes)).toEqual(Array.from(payload));
+  });
+
+  it("does not buffer non-chat multipart requests via request.arrayBuffer", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ matter_id: "matter-1", results: [] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-documents-upstream",
+        },
+      })
+    );
+
+    const { request } = buildBinaryMultipartRequest("/api/documents/intake");
+    const arrayBufferSpy = vi.spyOn(request, "arrayBuffer");
+    const response = await forwardPostRequest(request, "/api/documents/intake");
+
+    expect(response.status).toBe(200);
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+  });
+
+  it("skips TextDecoder fallback decoding for non-chat multipart uploads", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+    const decodeSpy = vi.spyOn(TextDecoder.prototype, "decode");
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ matter_id: "matter-1", results: [] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-documents-upstream",
+        },
+      })
+    );
+
+    const { request, payload } = buildBinaryMultipartRequest("/api/documents/intake");
+    const response = await forwardPostRequest(request, "/api/documents/intake");
+
+    expect(response.status).toBe(200);
+    const multipartPayloadWasDecoded = decodeSpy.mock.calls.some(([input]) => {
+      if (input === undefined || input === null) {
+        return false;
+      }
+      const view =
+        input instanceof Uint8Array
+          ? input
+          : input instanceof ArrayBuffer
+            ? new Uint8Array(input)
+            : ArrayBuffer.isView(input)
+              ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+              : null;
+      if (!view || view.length !== payload.length) {
+        return false;
+      }
+      return view.every((byte, index) => byte === payload[index]);
+    });
+    expect(multipartPayloadWasDecoded).toBe(false);
+  });
+
+  it("forwards GET requests to readiness-style upstream paths", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: "proxy-token",
+    }));
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ is_ready: false }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-doc-readiness",
+        },
+      })
+    );
+
+    const request = new NextRequest(
+      "http://localhost/api/documents/matters/matter-abc/readiness",
+      { method: "GET" }
+    );
+    const response = await forwardGetRequest(
+      request,
+      "/api/documents/matters/matter-abc/readiness"
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [upstreamUrl, init] = fetchMock.mock.calls[0]!;
+    expect(upstreamUrl).toBe("https://api.example.com/api/documents/matters/matter-abc/readiness");
+    expect(init?.method).toBe("GET");
+    expect(init?.body).toBeUndefined();
+    const forwardedHeaders = new Headers(init?.headers as HeadersInit);
+    expect(forwardedHeaders.get("authorization")).toBe("Bearer proxy-token");
+  });
+
+  it("forwards client identity headers for upstream matter scoping", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ is_ready: false }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-doc-readiness",
+        },
+      })
+    );
+
+    const request = new NextRequest(
+      "http://localhost/api/documents/matters/matter-abc/readiness",
+      {
+        method: "GET",
+        headers: {
+          "x-real-ip": "203.0.113.10",
+          "x-forwarded-for": "203.0.113.10, 10.0.0.2",
+          "cf-connecting-ip": "203.0.113.10",
+          "true-client-ip": "203.0.113.10",
+        },
+      }
+    );
+    const response = await forwardGetRequest(
+      request,
+      "/api/documents/matters/matter-abc/readiness"
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0]!;
+    const forwardedHeaders = new Headers(init?.headers as HeadersInit);
+    expect(forwardedHeaders.get("x-real-ip")).toBe("203.0.113.10");
+    expect(forwardedHeaders.get("x-forwarded-for")).toBe("203.0.113.10, 10.0.0.2");
+    expect(forwardedHeaders.get("cf-connecting-ip")).toBe("203.0.113.10");
+    expect(forwardedHeaders.get("true-client-ip")).toBe("203.0.113.10");
   });
 });

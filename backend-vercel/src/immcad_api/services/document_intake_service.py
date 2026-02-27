@@ -70,17 +70,10 @@ class DocumentIntakeService:
         try:
             extraction = extract_text_and_page_signals(payload_bytes)
         except ValueError:
-            return DocumentIntakeResult(
-                file_id=file_id,
+            return self.build_failed_result(
                 original_filename=original_filename,
-                normalized_filename=self._build_normalized_filename(
-                    classification="unclassified",
-                    original_filename=original_filename,
-                    file_id=file_id,
-                ),
-                classification="unclassified",
-                quality_status="failed",
-                issues=["file_unreadable"],
+                issue="file_unreadable",
+                file_id=file_id,
             )
 
         classification = self._classify_document(extraction.extracted_text)
@@ -94,6 +87,8 @@ class DocumentIntakeService:
             quality_status = "processed"
             if total_chars < self.low_confidence_char_count:
                 issues.append("ocr_low_confidence")
+        if extraction.ocr_limit_hit:
+            issues.append("ocr_budget_reached")
 
         return DocumentIntakeResult(
             file_id=file_id,
@@ -106,6 +101,29 @@ class DocumentIntakeService:
             classification=classification,
             quality_status=quality_status,
             issues=issues,
+            used_ocr=extraction.used_ocr,
+        )
+
+    def build_failed_result(
+        self,
+        *,
+        original_filename: str,
+        issue: str,
+        classification: str = "unclassified",
+        file_id: str | None = None,
+    ) -> DocumentIntakeResult:
+        resolved_file_id = file_id or uuid.uuid4().hex[:10]
+        return DocumentIntakeResult(
+            file_id=resolved_file_id,
+            original_filename=original_filename,
+            normalized_filename=self._build_normalized_filename(
+                classification=classification,
+                original_filename=original_filename,
+                file_id=resolved_file_id,
+            ),
+            classification=classification,
+            quality_status="failed",
+            issues=[issue],
         )
 
 

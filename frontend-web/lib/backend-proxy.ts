@@ -20,6 +20,12 @@ const FORWARDED_RESPONSE_HEADERS = [
   "content-disposition",
   "x-export-policy-reason",
 ] as const;
+const FORWARDED_CLIENT_ID_HEADERS = [
+  "x-real-ip",
+  "x-forwarded-for",
+  "cf-connecting-ip",
+  "true-client-ip",
+] as const;
 
 type ProxyErrorCode = "PROVIDER_ERROR" | "SOURCE_UNAVAILABLE";
 
@@ -121,6 +127,10 @@ function buildScaffoldFallbackResponse(
   return null;
 }
 
+function shouldCaptureFallbackRequestBody(upstreamPath: string): boolean {
+  return upstreamPath === "/api/chat";
+}
+
 function buildForwardedResponseHeaders(
   upstreamResponse: Response,
   fallbackTraceId: string
@@ -192,11 +202,45 @@ function mapUpstreamNotFoundResponse(
   );
 }
 
-export async function forwardPostRequest(
+function buildUpstreamRequestHeaders(
   request: NextRequest,
-  upstreamPath: string
+  options: {
+    backendBearerToken: string | null;
+    method: "GET" | "POST";
+  }
+): Headers {
+  const { backendBearerToken, method } = options;
+  const headers = new Headers({
+    accept: request.headers.get("accept") ?? "application/json",
+  });
+  const requestContentType = request.headers.get("content-type");
+  if (requestContentType) {
+    headers.set("content-type", requestContentType);
+  } else if (method === "POST") {
+    headers.set("content-type", "application/json");
+  }
+  if (backendBearerToken) {
+    headers.set("authorization", `Bearer ${backendBearerToken}`);
+  }
+  for (const headerName of FORWARDED_CLIENT_ID_HEADERS) {
+    const headerValue = request.headers.get(headerName);
+    if (headerValue) {
+      headers.set(headerName, headerValue);
+    }
+  }
+  return headers;
+}
+
+async function forwardRequest(
+  request: NextRequest,
+  upstreamPath: string,
+  options: {
+    method: "GET" | "POST";
+    requestBody?: BodyInit | null;
+    requestBodyTextForFallback?: string;
+  }
 ): Promise<NextResponse> {
-  const requestBody = await request.text();
+  const { method, requestBody = null, requestBodyTextForFallback = "" } = options;
   const traceId = randomUUID();
   let backendBaseUrl: string;
   let backendBearerToken: string | null;
@@ -206,7 +250,11 @@ export async function forwardPostRequest(
     backendBearerToken = runtimeConfig.backendBearerToken;
   } catch {
     if (isScaffoldFallbackAllowed()) {
-      const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
+      const scaffoldResponse = buildScaffoldFallbackResponse(
+        upstreamPath,
+        requestBodyTextForFallback,
+        traceId
+      );
       if (scaffoldResponse) {
         return scaffoldResponse;
       }
@@ -221,22 +269,22 @@ export async function forwardPostRequest(
   }
 
   const upstreamUrl = buildUpstreamUrl(backendBaseUrl, upstreamPath);
-
-  const headers = new Headers({
-    accept: request.headers.get("accept") ?? "application/json",
-    "content-type": request.headers.get("content-type") ?? "application/json",
+  const headers = buildUpstreamRequestHeaders(request, {
+    backendBearerToken,
+    method,
   });
-  if (backendBearerToken) {
-    headers.set("authorization", `Bearer ${backendBearerToken}`);
-  }
 
   try {
-    const upstreamResponse = await fetch(upstreamUrl, {
-      method: "POST",
+    const requestInit: RequestInit & { duplex?: "half" } = {
+      method,
       headers,
-      body: requestBody,
+      body: method === "POST" ? requestBody : undefined,
       cache: "no-store",
-    });
+    };
+    if (method === "POST" && requestBody instanceof ReadableStream) {
+      requestInit.duplex = "half";
+    }
+    const upstreamResponse = await fetch(upstreamUrl, requestInit);
     const mappedNotFoundResponse = mapUpstreamNotFoundResponse(
       upstreamResponse,
       upstreamPath,
@@ -245,8 +293,7 @@ export async function forwardPostRequest(
     if (mappedNotFoundResponse) {
       return mappedNotFoundResponse;
     }
-    const payload = await upstreamResponse.arrayBuffer();
-    const response = new NextResponse(payload, {
+    const response = new NextResponse(upstreamResponse.body, {
       status: upstreamResponse.status,
       headers: buildForwardedResponseHeaders(upstreamResponse, traceId),
     });
@@ -256,7 +303,11 @@ export async function forwardPostRequest(
     return response;
   } catch {
     if (isScaffoldFallbackAllowed()) {
-      const scaffoldResponse = buildScaffoldFallbackResponse(upstreamPath, requestBody, traceId);
+      const scaffoldResponse = buildScaffoldFallbackResponse(
+        upstreamPath,
+        requestBodyTextForFallback,
+        traceId
+      );
       if (scaffoldResponse) {
         return scaffoldResponse;
       }
@@ -269,4 +320,31 @@ export async function forwardPostRequest(
       errorCode
     );
   }
+}
+
+export async function forwardPostRequest(
+  request: NextRequest,
+  upstreamPath: string
+): Promise<NextResponse> {
+  if (shouldCaptureFallbackRequestBody(upstreamPath)) {
+    const requestBodyBytes = new Uint8Array(await request.arrayBuffer());
+    return forwardRequest(request, upstreamPath, {
+      method: "POST",
+      requestBody: requestBodyBytes,
+      requestBodyTextForFallback: new TextDecoder().decode(requestBodyBytes),
+    });
+  }
+  return forwardRequest(request, upstreamPath, {
+    method: "POST",
+    requestBody: request.body,
+  });
+}
+
+export async function forwardGetRequest(
+  request: NextRequest,
+  upstreamPath: string
+): Promise<NextResponse> {
+  return forwardRequest(request, upstreamPath, {
+    method: "GET",
+  });
 }

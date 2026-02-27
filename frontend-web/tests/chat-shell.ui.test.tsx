@@ -55,12 +55,14 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test/"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
 
     expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
     expect(screen.getAllByText(LEGAL_DISCLAIMER).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Sources" })).toBeTruthy();
     expect(screen.getByText("Informational only")).toBeTruthy();
     expect(screen.getByText("Cite sources")).toBeTruthy();
     expect(
@@ -73,6 +75,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -110,6 +113,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -131,6 +135,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -175,6 +180,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -217,6 +223,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -249,6 +256,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -265,6 +273,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 

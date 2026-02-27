@@ -80,6 +80,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -136,6 +137,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -179,6 +181,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -260,6 +263,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -353,6 +357,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -385,6 +390,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -420,6 +426,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -457,6 +464,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -499,6 +507,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -538,6 +547,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -576,6 +586,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -615,6 +626,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -658,6 +670,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -726,6 +739,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -804,6 +818,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -876,6 +891,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -932,6 +948,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -1056,6 +1073,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -1104,6 +1122,109 @@ describe("chat shell contract behavior", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe(
       "https://api.immcad.test/api/documents/matters/matter-abc123/package"
     );
+  });
+
+  it("retries support matrix fetch after a transient failure", async () => {
+    let supportMatrixCalls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-retry-001",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "record.pdf",
+                normalized_filename: "record-normalized.pdf",
+                classification: "record",
+                quality_status: "ready",
+                issues: [],
+              },
+            ],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake" },
+          }
+        );
+      }
+
+      if (url.includes("/api/documents/matters/matter-retry-001/readiness")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-retry-001",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness" },
+          }
+        );
+      }
+
+      if (url.endsWith("/api/documents/support-matrix")) {
+        supportMatrixCalls += 1;
+        if (supportMatrixCalls === 1) {
+          return jsonResponse(
+            {
+              error: {
+                code: "SOURCE_UNAVAILABLE",
+                message: "Support matrix unavailable",
+              },
+              trace_id: "trace-doc-support-matrix-fail",
+            },
+            {
+              status: 503,
+              headers: { "x-trace-id": "trace-doc-support-matrix-fail" },
+            }
+          );
+        }
+
+        return jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: ["work_permit"],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix-success" },
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Matter ID: matter-retry-001")).toBeTruthy();
+    expect(await screen.findByText(/Supported profiles for federal court jr: federal court jr leave\./i)).toBeTruthy();
+    expect(await screen.findByText(/Unsupported profile families: work permit\./i)).toBeTruthy();
+    await waitFor(() => {
+      expect(supportMatrixCalls).toBe(2);
+    });
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it("renders remediation guidance for unreadable failed uploads", async () => {
@@ -1173,6 +1294,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -1302,6 +1424,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -1359,6 +1482,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 

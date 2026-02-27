@@ -91,6 +91,15 @@ describe("runtime config", () => {
     expect(config.enableAgentThinkingTimeline).toBe(true);
   });
 
+  it("defaults thinking timeline to false in production for invalid input", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE = "invalid-value";
+
+    const config = getRuntimeConfig();
+
+    expect(config.enableAgentThinkingTimeline).toBe(false);
+  });
+
   it("keeps operational panels disabled in production even if explicitly enabled", () => {
     vi.stubEnv("NODE_ENV", "production");
     process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS = "true";

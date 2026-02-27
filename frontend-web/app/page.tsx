@@ -7,7 +7,12 @@ const LEGAL_DISCLAIMER =
 export const dynamic = "force-dynamic";
 
 export default function HomePage(): JSX.Element {
-  const { apiBaseUrl, enableRedesignedShell, showOperationalPanels } = getRuntimeConfig();
+  const {
+    apiBaseUrl,
+    enableRedesignedShell,
+    showOperationalPanels,
+    enableAgentThinkingTimeline,
+  } = getRuntimeConfig();
 
   if (!enableRedesignedShell) {
     return (
@@ -16,6 +21,7 @@ export default function HomePage(): JSX.Element {
           apiBaseUrl={apiBaseUrl}
           legalDisclaimer={LEGAL_DISCLAIMER}
           showOperationalPanels={showOperationalPanels}
+          enableAgentThinkingTimeline={enableAgentThinkingTimeline}
         />
       </main>
     );
@@ -43,6 +49,7 @@ export default function HomePage(): JSX.Element {
           apiBaseUrl={apiBaseUrl}
           legalDisclaimer={LEGAL_DISCLAIMER}
           showOperationalPanels={showOperationalPanels}
+          enableAgentThinkingTimeline={enableAgentThinkingTimeline}
         />
       </div>
     </main>

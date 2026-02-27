@@ -18,12 +18,25 @@ describe("runtime config", () => {
     delete process.env.NEXT_PUBLIC_IMMCAD_API_BASE_URL;
     delete process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED;
     delete process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS;
+    delete process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE;
 
     const config = getRuntimeConfig();
 
     expect(config.apiBaseUrl).toBe("/api");
     expect(config.enableRedesignedShell).toBe(true);
     expect(config.showOperationalPanels).toBe(true);
+    expect(config.enableAgentThinkingTimeline).toBe(true);
+  });
+
+  it("parses thinking timeline feature flag values", () => {
+    process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE = "false";
+
+    const disabled = getRuntimeConfig();
+    expect(disabled.enableAgentThinkingTimeline).toBe(false);
+
+    process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE = "1";
+    const enabled = getRuntimeConfig();
+    expect(enabled.enableAgentThinkingTimeline).toBe(true);
   });
 
   it("parses redesign feature flag values", () => {
@@ -40,11 +53,13 @@ describe("runtime config", () => {
   it("falls back to default flag value for invalid input", () => {
     process.env.NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED = "invalid-value";
     process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS = "invalid-value";
+    process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE = "invalid-value";
 
     const config = getRuntimeConfig();
 
     expect(config.enableRedesignedShell).toBe(true);
     expect(config.showOperationalPanels).toBe(true);
+    expect(config.enableAgentThinkingTimeline).toBe(true);
   });
 
   it("enforces production-safe API URL", () => {
@@ -59,10 +74,21 @@ describe("runtime config", () => {
   it("hides operational panels by default in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     delete process.env.NEXT_PUBLIC_IMMCAD_SHOW_OPERATIONS_PANELS;
+    delete process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE;
 
     const config = getRuntimeConfig();
 
     expect(config.showOperationalPanels).toBe(false);
+    expect(config.enableAgentThinkingTimeline).toBe(false);
+  });
+
+  it("allows enabling thinking timeline in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE = "true";
+
+    const config = getRuntimeConfig();
+
+    expect(config.enableAgentThinkingTimeline).toBe(true);
   });
 
   it("keeps operational panels disabled in production even if explicitly enabled", () => {

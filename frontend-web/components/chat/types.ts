@@ -24,6 +24,7 @@ export type ChatShellProps = {
   apiBaseUrl: string;
   legalDisclaimer: string;
   showOperationalPanels?: boolean;
+  enableAgentThinkingTimeline?: boolean;
 };
 
 export type SubmissionPhase = "idle" | "chat" | "cases" | "export";

@@ -31,7 +31,7 @@ export default function HomePage(): JSX.Element {
     <main className="min-h-screen px-4 py-6 md:px-6 md:py-10">
       <div className="mx-auto w-full max-w-6xl">
         <section
-          className="imm-fade-up mb-5 overflow-hidden rounded-[1.5rem] border border-[rgba(176,174,165,0.65)] bg-[rgba(250,249,245,0.78)] p-4 shadow-[0_12px_34px_rgba(20,20,19,0.06)] backdrop-blur-sm md:p-6"
+          className="imm-fade-up mb-5 overflow-hidden rounded-[1.5rem] border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] p-4 shadow-[0_10px_28px_rgba(20,20,19,0.07)] backdrop-blur-sm md:p-6"
           style={{ animationDelay: "40ms" }}
         >
           <div className="flex flex-col items-center justify-center text-center py-2">

@@ -12,7 +12,7 @@ export function SupportContextPanel({
   return (
     <section className="imm-paper-card imm-fade-up rounded-2xl p-4" style={{ animationDelay: "240ms" }}>
       <div className="relative z-10">
-        <div className="flex items-center justify-between gap-2 border-b border-[rgba(176,174,165,0.4)] pb-2">
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--imm-border-soft)] pb-2">
           <p className="imm-kicker">Diagnostics</p>
           <span className="imm-pill imm-pill-neutral font-mono text-[10px]">
             OPS
@@ -21,7 +21,7 @@ export function SupportContextPanel({
 
         <p className="mt-2 text-sm font-semibold text-ink">Support context</p>
 
-        <div className="imm-scrollbar mt-3 space-y-1 overflow-x-auto rounded-xl border border-[rgba(176,174,165,0.4)] bg-[rgba(247,243,234,0.62)] p-3 font-mono text-[11px] leading-6 text-muted">
+        <div className="imm-scrollbar mt-3 space-y-1 overflow-x-auto rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-3 font-mono text-[11px] leading-6 text-muted">
           <p className="whitespace-nowrap">API target: {endpointLabel}</p>
           <p className="whitespace-nowrap">Last endpoint: {supportContext?.endpoint ?? "Not called yet"}</p>
           <p>Last outcome: {supportContext ? supportContext.status : "Not available"}</p>

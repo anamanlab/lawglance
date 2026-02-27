@@ -23,16 +23,43 @@ const FORWARDED_RESPONSE_HEADERS = [
 const FORWARDED_CLIENT_ID_HEADERS = [
   "x-real-ip",
   "x-forwarded-for",
-  "cf-connecting-ip",
   "true-client-ip",
+  "cf-connecting-ip",
 ] as const;
+const FALLBACK_ORIGIN_RETRY_PATHS = new Set([
+  "/api/chat",
+  "/api/search/cases",
+  "/api/research/lawyer-cases",
+  "/api/export/cases",
+]);
 
 type ProxyErrorCode = "PROVIDER_ERROR" | "SOURCE_UNAVAILABLE";
+type ServiceBindingFetcher = {
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+};
 
 function buildUpstreamUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${normalizedBase}${normalizedPath}`;
+}
+
+async function resolveBackendServiceBinding(): Promise<ServiceBindingFetcher | null> {
+  try {
+    const cloudflareModule = await import("@opennextjs/cloudflare");
+    const context = await cloudflareModule.getCloudflareContext({ async: true });
+    const candidateBinding = (context?.env as Record<string, unknown> | undefined)
+      ?.IMMCAD_BACKEND;
+    if (
+      candidateBinding &&
+      typeof (candidateBinding as ServiceBindingFetcher).fetch === "function"
+    ) {
+      return candidateBinding as ServiceBindingFetcher;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function buildProxyErrorResponse(
@@ -128,11 +155,11 @@ function buildScaffoldFallbackResponse(
 }
 
 function shouldCaptureFallbackRequestBody(upstreamPath: string): boolean {
-  return upstreamPath === "/api/chat";
+  return FALLBACK_ORIGIN_RETRY_PATHS.has(upstreamPath);
 }
 
-function canUseChatOriginFallback(upstreamPath: string): boolean {
-  return upstreamPath === "/api/chat";
+function canUseFallbackOrigin(upstreamPath: string): boolean {
+  return FALLBACK_ORIGIN_RETRY_PATHS.has(upstreamPath);
 }
 
 function buildForwardedResponseHeaders(
@@ -183,7 +210,8 @@ function resolveProxyErrorCode(upstreamPath: string): ProxyErrorCode {
   if (
     upstreamPath === "/api/search/cases" ||
     upstreamPath === "/api/research/lawyer-cases" ||
-    upstreamPath.startsWith("/api/export/cases")
+    upstreamPath.startsWith("/api/export/cases") ||
+    upstreamPath === "/api/sources/transparency"
   ) {
     return "SOURCE_UNAVAILABLE";
   }
@@ -292,6 +320,18 @@ function buildUpstreamRequestHeaders(
       headers.set(headerName, headerValue);
     }
   }
+  const requestUrl = new URL(request.url);
+  const forwardedProto = requestUrl.protocol.replace(":", "");
+  if (forwardedProto) {
+    headers.set("x-forwarded-proto", forwardedProto);
+  }
+  if (requestUrl.host) {
+    headers.set("x-forwarded-host", requestUrl.host);
+  }
+  const cfVisitorHeader = request.headers.get("cf-visitor");
+  if (cfVisitorHeader) {
+    headers.set("cf-visitor", cfVisitorHeader);
+  }
   return headers;
 }
 
@@ -334,11 +374,17 @@ async function forwardRequest(
     );
   }
 
+  const backendServiceBinding = await resolveBackendServiceBinding();
   const shouldTryFallbackOrigin =
-    canUseChatOriginFallback(upstreamPath) &&
+    !backendServiceBinding &&
+    canUseFallbackOrigin(upstreamPath) &&
     backendFallbackBaseUrl !== null &&
     backendFallbackBaseUrl !== backendBaseUrl;
   const upstreamUrl = buildUpstreamUrl(backendBaseUrl, upstreamPath);
+  const serviceBindingUpstreamUrl = buildUpstreamUrl(
+    "https://immcad-backend.internal",
+    upstreamPath
+  );
   const fallbackUpstreamUrl = shouldTryFallbackOrigin
     ? buildUpstreamUrl(backendFallbackBaseUrl!, upstreamPath)
     : null;
@@ -360,7 +406,14 @@ async function forwardRequest(
     let usedFallbackOrigin = false;
     let upstreamResponse: Response;
     try {
-      upstreamResponse = await fetch(upstreamUrl, requestInit);
+      if (backendServiceBinding) {
+        upstreamResponse = await backendServiceBinding.fetch(
+          serviceBindingUpstreamUrl,
+          requestInit
+        );
+      } else {
+        upstreamResponse = await fetch(upstreamUrl, requestInit);
+      }
     } catch (primaryError) {
       if (!fallbackUpstreamUrl) {
         throw primaryError;
@@ -368,7 +421,7 @@ async function forwardRequest(
       upstreamResponse = await fetch(fallbackUpstreamUrl, requestInit);
       usedFallbackOrigin = true;
     }
-    if (!usedFallbackOrigin && fallbackUpstreamUrl) {
+    if (!backendServiceBinding && !usedFallbackOrigin && fallbackUpstreamUrl) {
       const primaryTunnelOutage = await isCloudflareTunnelOutageResponse(
         upstreamResponse
       );

@@ -35,6 +35,7 @@ import type {
   ResearchObjective,
   ResearchPosture,
   ResearchSourceStatus,
+  PrioritySourceStatusMap,
   SubmissionPhase,
   SupportContext,
 } from "@/components/chat/types";
@@ -77,6 +78,25 @@ function buildCaseSearchErrorStatusMessage(params: {
     return "Case-law search is temporarily rate limited. Please wait a moment and try again.";
   }
   return "Case-law search is temporarily unavailable. Please try again shortly.";
+}
+
+function buildDocumentSupportMatrixErrorStatusMessage(params: {
+  code: string;
+  message: string;
+  traceId: string | null;
+  showOperationalPanels: boolean;
+}): string {
+  const { code, message, traceId, showOperationalPanels } = params;
+  if (showOperationalPanels) {
+    return `Document support matrix unavailable: ${message} (Trace ID: ${traceId ?? "Unavailable"})`;
+  }
+  if (code === "SOURCE_UNAVAILABLE") {
+    return "Document support matrix is temporarily unavailable. Using default profile guidance.";
+  }
+  if (code === "RATE_LIMITED") {
+    return "Document support matrix is temporarily rate limited. Using default profile guidance.";
+  }
+  return "Document support matrix is temporarily unavailable. Using default profile guidance.";
 }
 
 function parseCommaSeparatedValues(value: string, maxItems = 8): string[] {
@@ -344,6 +364,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [lastCaseSearchQuery, setLastCaseSearchQuery] = useState<string | null>(null);
   const [relatedCasesRetrievalMode, setRelatedCasesRetrievalMode] = useState<CaseRetrievalMode>(null);
   const [sourceStatus, setSourceStatus] = useState<ResearchSourceStatus>(null);
+  const [prioritySourceStatus, setPrioritySourceStatus] =
+    useState<PrioritySourceStatusMap | null>(null);
   const [researchConfidence, setResearchConfidence] = useState<ResearchConfidence>(null);
   const [confidenceReasons, setConfidenceReasons] = useState<string[]>([]);
   const [intakeCompleteness, setIntakeCompleteness] = useState<IntakeCompleteness>(null);
@@ -390,11 +412,56 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       const result = await apiClient.getDocumentSupportMatrix();
       if (result.ok) {
         setSupportMatrix(result.data);
+        setSupportContext((currentSupportContext) => {
+          if (currentSupportContext?.endpoint !== "/api/documents/support-matrix") {
+            return currentSupportContext;
+          }
+          return {
+            endpoint: "/api/documents/support-matrix",
+            status: "success",
+            traceId: result.traceId,
+            traceIdMismatch: false,
+          };
+        });
+      } else {
+        setSupportContext((currentSupportContext) => {
+          if (
+            currentSupportContext?.status === "error" &&
+            currentSupportContext.endpoint !== "/api/documents/support-matrix"
+          ) {
+            return currentSupportContext;
+          }
+          return {
+            endpoint: "/api/documents/support-matrix",
+            status: "error",
+            traceId: result.traceId,
+            code: result.error.code,
+            policyReason: result.policyReason,
+            traceIdMismatch: result.traceIdMismatch,
+          };
+        });
+        const supportMatrixErrorStatusMessage =
+          buildDocumentSupportMatrixErrorStatusMessage({
+            code: result.error.code,
+            message: result.error.message,
+            traceId: result.traceId,
+            showOperationalPanels,
+          });
+        setDocumentStatusMessage((currentStatusMessage) => {
+          const normalizedCurrentStatus = currentStatusMessage.trim().toLowerCase();
+          if (
+            normalizedCurrentStatus.startsWith("upload failed.") ||
+            normalizedCurrentStatus.startsWith("unable to fetch readiness")
+          ) {
+            return currentStatusMessage;
+          }
+          return supportMatrixErrorStatusMessage;
+        });
       }
     } finally {
       supportMatrixRequestInFlightRef.current = false;
     }
-  }, [apiClient, supportMatrix]);
+  }, [apiClient, showOperationalPanels, supportMatrix]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     buildMessage("assistant-bootstrap", "assistant", ASSISTANT_BOOTSTRAP_TEXT, {
@@ -534,6 +601,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setLastCaseSearchQuery(null);
       setRelatedCasesRetrievalMode(null);
       setSourceStatus(null);
+      setPrioritySourceStatus(null);
       setResearchConfidence(null);
       setConfidenceReasons([]);
       setIntakeCompleteness(null);
@@ -684,7 +752,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           setCaseSearchQuery(previewQuery);
           setLastCaseSearchQuery(previewQuery);
           setRelatedCasesRetrievalMode(researchPreview.retrieval_mode ?? "auto");
-          setSourceStatus(researchPreview.source_status ?? null);
+      setSourceStatus(researchPreview.source_status ?? null);
+      setPrioritySourceStatus(null);
           setResearchConfidence(null);
           setConfidenceReasons([]);
           setIntakeCompleteness(null);
@@ -707,7 +776,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         }
 
         setCaseSearchQuery(promptToSubmit);
-        setSourceStatus(null);
+      setSourceStatus(null);
+      setPrioritySourceStatus(null);
         setRelatedCasesStatus("Ready to find related Canadian case law.");
       } finally {
         setIsChatSubmitting(false);
@@ -804,6 +874,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
             }
           );
         }
+        setPrioritySourceStatus(null);
         const statusMessage = buildCaseSearchErrorStatusMessage({
           code: caseSearchResult.error.code,
           message: caseSearchResult.error.message,
@@ -827,6 +898,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setLastCaseSearchQuery(query);
       setRelatedCasesRetrievalMode("manual");
       setSourceStatus(caseSearchResult.data.source_status ?? null);
+      setPrioritySourceStatus(caseSearchResult.data.priority_source_status ?? null);
       setResearchConfidence(caseSearchResult.data.research_confidence);
       setConfidenceReasons(caseSearchResult.data.confidence_reasons ?? []);
       setIntakeCompleteness(caseSearchResult.data.intake_completeness);
@@ -1436,6 +1508,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     lastCaseSearchQuery,
     relatedCasesRetrievalMode,
     sourceStatus,
+    prioritySourceStatus,
     researchConfidence,
     confidenceReasons,
     intakeCompleteness,

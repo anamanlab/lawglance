@@ -59,12 +59,12 @@ export function buildMessage(
 
 export function buildStatusTone(status: SupportContext["status"] | null): string {
   if (status === "success") {
-    return "bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)] border-[#b8c6a6]";
+    return "bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)] border-[rgba(111,132,89,0.35)]";
   }
   if (status === "error") {
     return "bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)] border-[rgba(172,63,47,0.28)]";
   }
-  return "bg-[#eeeae0] text-muted border-[rgba(176,174,165,0.75)]";
+  return "bg-[var(--imm-surface-strong)] text-muted border-[var(--imm-border-soft)]";
 }
 
 export function phaseLabel(submissionPhase: "chat" | "cases" | "export" | "idle"): string {

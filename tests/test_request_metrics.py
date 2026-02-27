@@ -11,8 +11,24 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
 
     metrics.record_api_response(status_code=200, duration_seconds=0.10)
     metrics.record_api_response(status_code=502, duration_seconds=0.40)
-    metrics.record_chat_outcome(fallback_used=True, refusal_used=False)
-    metrics.record_chat_outcome(fallback_used=False, refusal_used=True)
+    metrics.record_chat_outcome(
+        fallback_used=True,
+        refusal_used=False,
+        constrained_used=True,
+        friendly_used=False,
+    )
+    metrics.record_chat_outcome(
+        fallback_used=False,
+        refusal_used=True,
+        constrained_used=False,
+        friendly_used=False,
+    )
+    metrics.record_chat_outcome(
+        fallback_used=False,
+        refusal_used=False,
+        constrained_used=False,
+        friendly_used=True,
+    )
     metrics.record_export_outcome(
         outcome="allowed", policy_reason="source_export_allowed"
     )
@@ -112,9 +128,13 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert snapshot["errors"]["total"] == 1
     assert snapshot["errors"]["rate"] == pytest.approx(0.5)
     assert snapshot["fallback"]["total"] == 1
-    assert snapshot["fallback"]["rate"] == pytest.approx(0.5)
+    assert snapshot["fallback"]["rate"] == pytest.approx(1 / 3)
     assert snapshot["refusal"]["total"] == 1
-    assert snapshot["refusal"]["rate"] == pytest.approx(0.5)
+    assert snapshot["refusal"]["rate"] == pytest.approx(1 / 3)
+    assert snapshot["constrained"]["total"] == 1
+    assert snapshot["constrained"]["rate"] == pytest.approx(1 / 3)
+    assert snapshot["friendly"]["total"] == 1
+    assert snapshot["friendly"]["rate"] == pytest.approx(1 / 3)
     assert snapshot["export"]["attempts"] == 3
     assert snapshot["export"]["allowed"] == 1
     assert snapshot["export"]["blocked"] == 1
@@ -255,6 +275,10 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["fallback"]["rate"] == 0.0
     assert snapshot["refusal"]["total"] == 0
     assert snapshot["refusal"]["rate"] == 0.0
+    assert snapshot["constrained"]["total"] == 0
+    assert snapshot["constrained"]["rate"] == 0.0
+    assert snapshot["friendly"]["total"] == 0
+    assert snapshot["friendly"]["rate"] == 0.0
     assert snapshot["export"]["attempts"] == 0
     assert snapshot["export"]["allowed"] == 0
     assert snapshot["export"]["blocked"] == 0

@@ -41,8 +41,8 @@ export function MessageComposer({
     <section className="imm-paper-card imm-fade-up rounded-2xl p-4 md:p-5" style={{ animationDelay: "180ms" }}>
       <form className="relative z-10 space-y-4" onSubmit={onSubmit} ref={formRef}>
         {isFirstRun ? (
-          <div className="rounded-xl border border-[rgba(106,155,204,0.35)] bg-[rgba(237,243,250,0.72)] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#436280]">
+          <div className="rounded-xl border border-[rgba(95,132,171,0.35)] bg-[rgba(231,237,245,0.8)] p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--imm-accent-ink)]">
               Guided Start - Step 1 of 3
             </p>
             <p className="mt-1 text-xs leading-6 text-muted">
@@ -71,7 +71,7 @@ export function MessageComposer({
           </p>
         </div>
 
-        <div className="rounded-xl border border-[rgba(176,174,165,0.45)] bg-[rgba(247,243,234,0.62)] p-3">
+        <div className="rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-3">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
             Quick prompts
           </p>
@@ -82,10 +82,10 @@ export function MessageComposer({
           />
         </div>
 
-        <div className="rounded-xl border border-[rgba(176,174,165,0.45)] bg-[rgba(253,252,248,0.86)] p-2">
+        <div className="rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] p-2">
           <textarea
             aria-describedby={`${hintId} ${countId}${isSubmitting ? ` ${statusId}` : ""}`}
-            className="imm-ledger-textarea h-32 w-full resize-y rounded-lg border border-[rgba(176,174,165,0.75)] bg-[rgba(253,252,248,0.96)] px-3 py-2 text-base leading-7 text-ink shadow-sm transition duration-200 ease-out focus:border-accent-blue focus:ring-2 focus:ring-[rgba(106,155,204,0.2)]"
+            className="imm-ledger-textarea h-32 w-full resize-y rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-3 py-2 text-base leading-7 text-ink shadow-sm transition duration-200 ease-out focus:border-accent-blue focus:ring-2 focus:ring-[rgba(95,132,171,0.2)]"
             disabled={isSubmitting}
             id="chat-input"
             maxLength={MAX_MESSAGE_LENGTH}
@@ -108,7 +108,7 @@ export function MessageComposer({
           />
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-[rgba(176,174,165,0.4)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-[var(--imm-border-soft)] pt-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <p aria-live="polite" className={`text-[11px] font-medium ${countToneClass}`} id={countId}>
               {remainingCharacters} characters remaining

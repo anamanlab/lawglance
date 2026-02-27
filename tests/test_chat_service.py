@@ -7,8 +7,9 @@ import logging
 
 import pytest
 
-from immcad_api.errors import ProviderApiError, SourceUnavailableError
+from immcad_api.errors import SourceUnavailableError
 from immcad_api.policy.compliance import DISCLAIMER_TEXT, POLICY_REFUSAL_TEXT
+from immcad_api.policy.source_policy import SourcePolicy
 from immcad_api.providers import ProviderError
 from immcad_api.providers.base import ProviderResult
 from immcad_api.providers.router import RoutingResult
@@ -23,7 +24,10 @@ from immcad_api.schemas import (
     LawyerCaseSupport,
 )
 from immcad_api.services.chat_service import ChatService
-from immcad_api.services.grounding import StaticGroundingAdapter, scaffold_grounded_citations
+from immcad_api.services.grounding import (
+    StaticGroundingAdapter,
+    scaffold_grounded_citations,
+)
 
 
 @dataclass
@@ -89,7 +93,9 @@ class _RecordingLawyerResearchService:
     error: Exception | None = None
     requests: list[LawyerCaseResearchRequest] = field(default_factory=list)
 
-    def research(self, request: LawyerCaseResearchRequest) -> LawyerCaseResearchResponse:
+    def research(
+        self, request: LawyerCaseResearchRequest
+    ) -> LawyerCaseResearchResponse:
         self.requests.append(request)
         if self.error is not None:
             raise self.error
@@ -101,7 +107,11 @@ class _RecordingLawyerResearchService:
 
 
 def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
-    return [record.audit_event for record in caplog.records if hasattr(record, "audit_event")]
+    return [
+        record.audit_event
+        for record in caplog.records
+        if hasattr(record, "audit_event")
+    ]
 
 
 def _assert_non_pii_audit_event(
@@ -159,7 +169,9 @@ def test_chat_service_emits_policy_block_audit_event(
         assert payload.message not in record.getMessage()
 
 
-def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCaptureFixture) -> None:
+def test_chat_service_emits_provider_error_audit_event(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     service = ChatService(_FailingRouter(code="timeout", message="provider timed out"))
     payload = ChatRequest(
         session_id="session-123456",
@@ -196,7 +208,7 @@ def test_chat_service_emits_provider_error_audit_event(caplog: pytest.LogCapture
         assert payload.message not in record.getMessage()
 
 
-def test_chat_service_raises_provider_error_for_non_transient_failures() -> None:
+def test_chat_service_returns_safe_fallback_when_provider_is_not_configured() -> None:
     service = ChatService(
         _FailingRouter(
             code="provider_error",
@@ -210,11 +222,19 @@ def test_chat_service_raises_provider_error_for_non_transient_failures() -> None
         mode="standard",
     )
 
-    with pytest.raises(ProviderApiError):
-        service.handle_chat(payload, trace_id="trace-provider-002")
+    response = service.handle_chat(payload, trace_id="trace-provider-002")
+
+    assert response.answer.startswith("I do not have enough grounded legal context")
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is True
+    assert response.fallback_used.reason == "provider_error"
 
 
-def test_chat_service_returns_grounded_response_when_adapter_supplies_citations() -> None:
+def test_chat_service_returns_grounded_response_when_adapter_supplies_citations() -> (
+    None
+):
     service = ChatService(
         _StaticRouter(citations=[]),
         grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
@@ -237,7 +257,9 @@ def test_chat_service_returns_grounded_response_when_adapter_supplies_citations(
     assert payload.message not in response.model_dump_json()
 
 
-def test_chat_service_uses_grounded_context_citations_when_provider_returns_none() -> None:
+def test_chat_service_uses_grounded_context_citations_when_provider_returns_none() -> (
+    None
+):
     service = ChatService(
         _NoCitationRouter(),
         grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
@@ -249,7 +271,9 @@ def test_chat_service_uses_grounded_context_citations_when_provider_returns_none
         mode="standard",
     )
 
-    response = service.handle_chat(payload, trace_id="trace-grounded-fallback-citations-001")
+    response = service.handle_chat(
+        payload, trace_id="trace-grounded-fallback-citations-001"
+    )
 
     assert response.answer == "Scaffold response"
     assert response.citations
@@ -306,7 +330,9 @@ def test_chat_service_uses_case_search_tool_for_case_law_queries(
     assert response.citations[0].source_id == "FC_DECISIONS"
     assert response.citations[0].url.startswith("https://www.canlii.org/")
     tool_events = [
-        event for event in _audit_events(caplog) if event.get("event_type") == "case_search_tool_used"
+        event
+        for event in _audit_events(caplog)
+        if event.get("event_type") == "case_search_tool_used"
     ]
     assert len(tool_events) == 1
     tool_event = tool_events[0]
@@ -331,7 +357,9 @@ def test_chat_service_skips_case_search_tool_for_non_case_prompts() -> None:
             ]
         )
     )
-    service = ChatService(_StaticRouter(citations=[]), case_search_tool=case_search_tool)
+    service = ChatService(
+        _StaticRouter(citations=[]), case_search_tool=case_search_tool
+    )
     payload = ChatRequest(
         session_id="session-123456",
         message="Summarize IRPA section 11.",
@@ -352,7 +380,9 @@ def test_chat_service_emits_case_search_tool_error_audit_event(
     case_search_tool = _RecordingCaseSearchTool(
         error=SourceUnavailableError("Official and CanLII sources are unavailable")
     )
-    service = ChatService(_StaticRouter(citations=[]), case_search_tool=case_search_tool)
+    service = ChatService(
+        _StaticRouter(citations=[]), case_search_tool=case_search_tool
+    )
     payload = ChatRequest(
         session_id="session-123456",
         message="Show me a precedent on inadmissibility.",
@@ -366,7 +396,9 @@ def test_chat_service_emits_case_search_tool_error_audit_event(
     assert response.confidence == "low"
     assert response.citations == []
     tool_error_events = [
-        event for event in _audit_events(caplog) if event.get("event_type") == "case_search_tool_error"
+        event
+        for event in _audit_events(caplog)
+        if event.get("event_type") == "case_search_tool_error"
     ]
     assert len(tool_error_events) == 1
     tool_error_event = tool_error_events[0]
@@ -380,7 +412,9 @@ def test_chat_service_emits_case_search_tool_error_audit_event(
     )
 
 
-def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grounding() -> None:
+def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grounding() -> (
+    None
+):
     service = ChatService(_StaticRouter(citations=[]))
     payload = ChatRequest(
         session_id="session-123456",
@@ -399,6 +433,66 @@ def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grou
     assert response.fallback_used.provider is None
     assert response.fallback_used.reason is None
     assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_returns_friendly_response_for_greeting_without_grounding() -> None:
+    service = ChatService(_StaticRouter(citations=[]))
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Hi",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-greeting-001")
+
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is False
+    assert "i do not have enough grounded legal context" not in response.answer.lower()
+    assert "canadian immigration and citizenship" in response.answer.lower()
+
+
+def test_chat_service_does_not_treat_legal_question_with_greeting_as_small_talk() -> None:
+    service = ChatService(
+        _StaticRouter(citations=[]),
+        grounding_adapter=StaticGroundingAdapter(scaffold_grounded_citations()),
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Hi, can you summarize IRPA section 11?",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-greeting-legal-001")
+
+    assert response.answer == "Scaffold response"
+    assert len(response.citations) == 1
+    assert response.citations[0].source_id == "IRPA"
+    assert response.confidence == "medium"
+
+
+def test_chat_service_returns_friendly_response_for_french_greeting_without_grounding() -> (
+    None
+):
+    service = ChatService(_StaticRouter(citations=[]))
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Bonjour",
+        locale="fr-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-greeting-fr-001")
+
+    assert response.citations == []
+    assert response.confidence == "low"
+    assert response.disclaimer == DISCLAIMER_TEXT
+    assert response.fallback_used.used is False
+    assert "i do not have enough grounded legal context" not in response.answer.lower()
+    assert "immigration et la citoyennete canadiennes" in response.answer.lower()
 
 
 def test_chat_service_rejects_provider_citations_not_in_grounding_set() -> None:
@@ -555,6 +649,104 @@ def test_chat_service_accepts_citations_from_configured_trusted_domains() -> Non
     assert response.fallback_used.reason is None
     assert payload.message not in response.answer
     assert payload.message not in response.model_dump_json()
+
+
+def test_chat_service_blocks_citations_when_source_policy_disallows_answer_citation() -> (
+    None
+):
+    blocked_citation = Citation(
+        source_id="A2AJ",
+        title="A2J Article",
+        url="https://laws-lois.justice.gc.ca/eng/acts/I-2.5/page-1.html",
+        pin="s. 11",
+        snippet="Informational citation",
+    )
+    source_policy = SourcePolicy.model_validate(
+        {
+            "version": "2026-02-27",
+            "jurisdiction": "ca",
+            "sources": [
+                {
+                    "source_id": "A2AJ",
+                    "source_class": "unofficial",
+                    "internal_ingest_allowed": True,
+                    "production_ingest_allowed": False,
+                    "answer_citation_allowed": False,
+                    "export_fulltext_allowed": False,
+                    "license_notes": "Blocked for answer citations.",
+                    "review_owner": "legal-compliance",
+                    "review_date": "2026-02-27",
+                }
+            ],
+        }
+    )
+    service = ChatService(
+        _StaticRouter(citations=[blocked_citation]),
+        grounding_adapter=StaticGroundingAdapter([blocked_citation]),
+        trusted_citation_domains=("laws-lois.justice.gc.ca",),
+        source_policy=source_policy,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-policy-citation-block-001")
+
+    assert response.answer.startswith("I do not have enough grounded legal context")
+    assert response.citations == []
+    assert response.confidence == "low"
+
+
+def test_chat_service_allows_unknown_source_ids_with_source_policy_when_domain_is_trusted() -> (
+    None
+):
+    trusted_citation = Citation(
+        source_id="CUSTOM_SOURCE",
+        title="Trusted Source",
+        url="https://trusted.example/legal",
+        pin="s. 11",
+        snippet="Trusted domain citation",
+    )
+    source_policy = SourcePolicy.model_validate(
+        {
+            "version": "2026-02-27",
+            "jurisdiction": "ca",
+            "sources": [
+                {
+                    "source_id": "IRPA",
+                    "source_class": "official",
+                    "internal_ingest_allowed": True,
+                    "production_ingest_allowed": True,
+                    "answer_citation_allowed": True,
+                    "export_fulltext_allowed": True,
+                    "license_notes": "Allowed.",
+                    "review_owner": "legal-compliance",
+                    "review_date": "2026-02-27",
+                }
+            ],
+        }
+    )
+    service = ChatService(
+        _StaticRouter(citations=[trusted_citation]),
+        grounding_adapter=StaticGroundingAdapter([trusted_citation]),
+        trusted_citation_domains=("trusted.example",),
+        source_policy=source_policy,
+    )
+    payload = ChatRequest(
+        session_id="session-123456",
+        message="Summarize section 11.",
+        locale="en-CA",
+        mode="standard",
+    )
+
+    response = service.handle_chat(payload, trace_id="trace-policy-citation-allow-001")
+
+    assert response.answer == "Scaffold response"
+    assert len(response.citations) == 1
+    assert response.citations[0].source_id == "CUSTOM_SOURCE"
 
 
 def test_chat_service_includes_auto_research_preview_for_case_law_queries() -> None:

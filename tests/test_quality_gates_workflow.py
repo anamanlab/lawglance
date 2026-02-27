@@ -20,7 +20,9 @@ REQUIRED_SECURITY_AND_INGESTION_STEPS = [
     "Backend typecheck",
     "Validate Cloudflare environment configuration",
     "Validate backend runtime source sync",
+    "Run SCC/FC API smoke checks",
     "Run ingestion smoke checks",
+    "Upload SCC/FC API smoke artifact",
     "Upload ingestion smoke artifact",
 ]
 

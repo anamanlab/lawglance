@@ -15,6 +15,7 @@ type StatusBannerProps = {
       }
     | null;
   relatedCasesStatus?: string;
+  documentStatusMessage?: string;
   isSubmitting: boolean;
   retryPrompt: string | null;
   submissionPhase?: SubmissionPhase;
@@ -31,6 +32,9 @@ function buildWorkflowErrorTitle(endpoint: SupportContext["endpoint"] | undefine
   if (endpoint === "/api/export/cases" || endpoint === "/api/export/cases/approval") {
     return "Case export unavailable";
   }
+  if (endpoint === "/api/documents/support-matrix") {
+    return "Document support matrix unavailable";
+  }
   return "Service temporarily unavailable";
 }
 
@@ -41,17 +45,49 @@ function buildWorkflowErrorAction(endpoint: SupportContext["endpoint"] | undefin
   if (endpoint === "/api/export/cases" || endpoint === "/api/export/cases/approval") {
     return "The case result may still be usable online. Open the decision link directly and retry export later.";
   }
+  if (endpoint === "/api/documents/support-matrix") {
+    return "Upload and readiness can continue with fallback profile guidance. Retry in a moment and share the trace ID with support if it persists.";
+  }
   return "Retry in a moment. If the issue persists, capture the trace ID for support.";
+}
+
+function buildWorkflowErrorMessage(params: {
+  endpoint: SupportContext["endpoint"] | undefined;
+  relatedCasesStatus: string;
+  documentStatusMessage: string;
+}): string {
+  const { endpoint, relatedCasesStatus, documentStatusMessage } = params;
+  const normalizedCaseStatus = relatedCasesStatus.trim();
+  const normalizedDocumentStatus = documentStatusMessage.trim();
+
+  if (endpoint?.startsWith("/api/documents")) {
+    return (
+      normalizedDocumentStatus || "A document workflow request could not be completed."
+    );
+  }
+  if (
+    endpoint === "/api/research/lawyer-cases" ||
+    endpoint === "/api/search/cases" ||
+    endpoint === "/api/export/cases" ||
+    endpoint === "/api/export/cases/approval"
+  ) {
+    return normalizedCaseStatus || "A related workflow request could not be completed.";
+  }
+  return (
+    normalizedCaseStatus ||
+    normalizedDocumentStatus ||
+    "A related workflow request could not be completed."
+  );
 }
 
 function workflowToneClasses(tone: "info" | "success" | "warning"): string {
   if (tone === "success") {
-    return "border-[rgba(120,140,93,0.35)] bg-[rgba(238,242,231,0.95)] text-[#4f603d]";
+    return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
   }
   if (tone === "warning") {
-    return "border-[rgba(217,119,87,0.35)] bg-[rgba(248,238,232,0.95)] text-[#6b362a]";
+    return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-[var(--imm-danger-ink)]";
   }
-  return "border-[rgba(106,155,204,0.35)] bg-[rgba(238,243,248,0.95)] text-[#36506b]";
+  return "border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]";
 }
 
 export function StatusBanner({
@@ -59,6 +95,7 @@ export function StatusBanner({
   supportContext = null,
   workflowStatus = null,
   relatedCasesStatus = "",
+  documentStatusMessage = "",
   isSubmitting,
   retryPrompt,
   submissionPhase,
@@ -71,6 +108,7 @@ export function StatusBanner({
     !chatError &&
     supportContext?.status === "error" &&
     supportContext.endpoint !== "/api/chat";
+  const showWorkflowTraceId = showDiagnostics || Boolean(supportContext?.traceId);
   const showSlowResponseBanner =
     !chatError &&
     !hasNonChatWorkflowError &&
@@ -90,7 +128,7 @@ export function StatusBanner({
     return (
       <div
         aria-live="polite"
-        className="imm-paper-card imm-fade-up rounded-2xl border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.95)] p-4 text-sm text-ink"
+        className="imm-paper-card imm-fade-up rounded-2xl border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] p-4 text-sm text-ink"
         style={{ animationDelay: "120ms" }}
       >
         <div className="relative z-10">
@@ -99,7 +137,7 @@ export function StatusBanner({
               <span className="inline-block h-2 w-2 rounded-full bg-[var(--imm-brand-orange)]" aria-hidden="true" />
               Response In Progress
             </p>
-            <span className="imm-pill rounded-full border-[rgba(176,174,165,0.45)] bg-[rgba(255,255,255,0.6)] px-2.5 py-1 text-[10px] text-muted">
+            <span className="imm-pill rounded-full border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-2.5 py-1 text-[10px] text-muted">
               {chatPendingElapsedSeconds}s
             </span>
           </div>
@@ -118,7 +156,7 @@ export function StatusBanner({
     return (
       <div
         aria-live="assertive"
-        className="imm-paper-card imm-fade-up rounded-2xl border-[rgba(172,63,47,0.2)] bg-[linear-gradient(180deg,rgba(252,248,243,0.98),rgba(248,239,232,0.92))] p-4 text-sm text-[var(--imm-danger-ink)]"
+        className="imm-paper-card imm-fade-up rounded-2xl border-[rgba(172,63,47,0.2)] bg-[linear-gradient(180deg,rgba(246,238,233,0.96),rgba(242,229,224,0.92))] p-4 text-sm text-[var(--imm-danger-ink)]"
         style={{ animationDelay: "120ms" }}
       >
         <div className="relative z-10">
@@ -127,23 +165,29 @@ export function StatusBanner({
               <span className="inline-block h-2 w-2 rounded-full bg-[var(--imm-brand-orange)]" aria-hidden="true" />
               Workflow Notice
             </p>
-            <span className="imm-pill rounded-full border-[rgba(172,63,47,0.18)] bg-[rgba(255,255,255,0.6)] px-2.5 py-1 text-[10px] text-[var(--imm-danger-ink)]">
+            <span className="imm-pill rounded-full border-[rgba(172,63,47,0.18)] bg-[var(--imm-surface-soft)] px-2.5 py-1 text-[10px] text-[var(--imm-danger-ink)]">
               {supportContext?.code ?? "Error"}
             </span>
           </div>
-          <p className="mt-2 text-base font-semibold leading-snug text-[#4a2118]">
+          <p className="mt-2 text-base font-semibold leading-snug text-[var(--imm-danger-ink)]">
             {buildWorkflowErrorTitle(supportContext?.endpoint)}
           </p>
-          <p className="mt-2 leading-7 text-[#6b362a]">
-            {relatedCasesStatus || "A related workflow request could not be completed."}
+          <p className="mt-2 leading-7 text-[var(--imm-danger-ink)]">
+            {buildWorkflowErrorMessage({
+              endpoint: supportContext?.endpoint,
+              relatedCasesStatus,
+              documentStatusMessage,
+            })}
           </p>
-          <p className="mt-3 border-l-2 border-[rgba(172,63,47,0.18)] pl-3 text-xs leading-6 text-[#7a4032]">
+          <p className="mt-3 border-l-2 border-[rgba(172,63,47,0.18)] pl-3 text-xs leading-6 text-[var(--imm-danger-ink)]">
             {buildWorkflowErrorAction(supportContext?.endpoint)}
           </p>
-          {showDiagnostics ? (
-            <p className="mt-3 font-mono text-[11px] leading-5 text-[#7a4032]">
+          {showWorkflowTraceId ? (
+            <p className="mt-3 font-mono text-[11px] leading-5 text-[var(--imm-danger-ink)]">
               Trace ID: {supportContext?.traceId ?? "Unavailable"}
-              {supportContext?.policyReason ? ` • Policy: ${supportContext.policyReason}` : ""}
+              {showDiagnostics && supportContext?.policyReason
+                ? ` • Policy: ${supportContext.policyReason}`
+                : ""}
             </p>
           ) : null}
         </div>
@@ -177,7 +221,7 @@ export function StatusBanner({
   return (
     <div
       aria-live="assertive"
-      className="imm-paper-card imm-fade-up rounded-2xl border-[rgba(172,63,47,0.28)] bg-[linear-gradient(180deg,rgba(250,245,242,0.98),rgba(248,236,231,0.95))] p-4 text-sm text-[var(--imm-danger-ink)]"
+      className="imm-paper-card imm-fade-up rounded-2xl border-[rgba(172,63,47,0.28)] bg-[linear-gradient(180deg,rgba(246,238,233,0.96),rgba(241,226,221,0.95))] p-4 text-sm text-[var(--imm-danger-ink)]"
       style={{ animationDelay: "120ms" }}
     >
       <div className="relative z-10">
@@ -186,14 +230,14 @@ export function StatusBanner({
             <span className="inline-block h-2 w-2 rounded-full bg-[var(--imm-brand-orange)]" aria-hidden="true" />
             Incident Notice
           </p>
-          <span className="imm-pill rounded-full border-[rgba(172,63,47,0.22)] bg-[rgba(255,255,255,0.6)] px-2.5 py-1 text-[10px] text-[var(--imm-danger-ink)]">
+          <span className="imm-pill rounded-full border-[rgba(172,63,47,0.22)] bg-[var(--imm-surface-soft)] px-2.5 py-1 text-[10px] text-[var(--imm-danger-ink)]">
             Attention needed
           </span>
         </div>
 
-        <p className="mt-2 text-base font-semibold leading-snug text-[#4a2118]">{blockingChatError.title}</p>
-        <p className="mt-2 leading-7 text-[#6b362a]">{blockingChatError.detail}</p>
-        <p className="mt-3 border-l-2 border-[rgba(172,63,47,0.22)] pl-3 text-xs leading-6 text-[#7a4032]">
+        <p className="mt-2 text-base font-semibold leading-snug text-[var(--imm-danger-ink)]">{blockingChatError.title}</p>
+        <p className="mt-2 leading-7 text-[var(--imm-danger-ink)]">{blockingChatError.detail}</p>
+        <p className="mt-3 border-l-2 border-[rgba(172,63,47,0.22)] pl-3 text-xs leading-6 text-[var(--imm-danger-ink)]">
           {blockingChatError.action}
         </p>
 

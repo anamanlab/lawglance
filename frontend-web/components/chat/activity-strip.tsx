@@ -6,15 +6,15 @@ type ActivityStripProps = {
 
 function statusClasses(status: AgentActivityEvent["status"]): string {
   if (status === "success") {
-    return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+    return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
   }
   if (status === "warning") {
-    return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-[#8a543f]";
+    return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-[var(--imm-warning-ink)]";
   }
   if (status === "error" || status === "blocked") {
-    return "border-[rgba(172,63,47,0.22)] bg-[#fcece9] text-[#8f4635]";
+    return "border-[rgba(172,63,47,0.22)] bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)]";
   }
-  return "border-[rgba(106,155,204,0.35)] bg-[#edf3fa] text-[#4d6f95]";
+  return "border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]";
 }
 
 export function ActivityStrip({ events }: ActivityStripProps): JSX.Element | null {

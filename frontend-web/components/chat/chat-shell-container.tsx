@@ -41,6 +41,7 @@ export function ChatShell({
     lastCaseSearchQuery,
     relatedCasesRetrievalMode,
     sourceStatus,
+    prioritySourceStatus,
     researchConfidence,
     confidenceReasons,
     intakeCompleteness,
@@ -254,7 +255,7 @@ export function ChatShell({
             <div className="relative mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.68fr)_minmax(19rem,1fr)] lg:items-start">
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-0 left-[calc(62%+0.25rem)] top-0 hidden w-px bg-gradient-to-b from-transparent via-[rgba(176,174,165,0.35)] to-transparent lg:block"
+                className="pointer-events-none absolute bottom-0 left-[calc(62%+0.25rem)] top-0 hidden w-px bg-gradient-to-b from-transparent via-[var(--imm-border-soft)] to-transparent lg:block"
               />
               <div className="space-y-4">
                 <StatusBanner
@@ -262,6 +263,7 @@ export function ChatShell({
                   supportContext={supportContext}
                   workflowStatus={workflowStatus}
                   relatedCasesStatus={relatedCasesStatus}
+                  documentStatusMessage={documentStatusMessage}
                   isSubmitting={isChatSubmitting}
                   submissionPhase={submissionPhase}
                   isSlowChatResponse={isSlowChatResponse}
@@ -316,7 +318,7 @@ export function ChatShell({
                 className={`
                   space-y-4 lg:sticky lg:top-4 lg:self-start
                   ${isMobileDrawerOpen 
-                    ? "fixed bottom-0 left-0 right-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-[rgba(176,174,165,0.75)] bg-[rgba(253,252,248,0.98)] p-4 shadow-[0_-12px_48px_rgba(20,20,19,0.15)] transition-transform duration-300 ease-out translate-y-0" 
+                    ? "fixed bottom-0 left-0 right-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] p-4 shadow-[0_-12px_48px_rgba(20,20,19,0.15)] transition-transform duration-300 ease-out translate-y-0" 
                     : "hidden lg:block lg:translate-y-0"
                   }
                 `}
@@ -328,7 +330,7 @@ export function ChatShell({
                     </h3>
                     <button
                       type="button"
-                      className="imm-btn-secondary rounded-full border-[rgba(176,174,165,0.6)] bg-[rgba(247,243,234,0.8)] px-0"
+                      className="imm-btn-secondary rounded-full border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] px-0"
                       onClick={closeMobileDrawer}
                       aria-label="Close Case Law Tools drawer"
                     >
@@ -356,6 +358,7 @@ export function ChatShell({
                   lastCaseSearchQuery={lastCaseSearchQuery}
                   relatedCasesRetrievalMode={relatedCasesRetrievalMode}
                   sourceStatus={sourceStatus}
+                  prioritySourceStatus={prioritySourceStatus}
                   onCaseSearchQueryChange={onCaseSearchQueryChange}
                   onSearch={() => {
                     void runRelatedCaseSearch();
@@ -422,7 +425,7 @@ export function ChatShell({
           aria-expanded={isMobileDrawerOpen}
           aria-controls="mobile-case-law-drawer"
           aria-haspopup="dialog"
-          className="imm-btn-primary min-h-[56px] rounded-full px-5 text-sm shadow-[0_8px_24px_rgba(217,119,87,0.35)]"
+          className="imm-btn-primary min-h-[56px] rounded-full px-5 text-sm shadow-[0_8px_24px_rgba(192,106,77,0.32)]"
           onClick={openMobileDrawer}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -430,7 +433,7 @@ export function ChatShell({
           </svg>
           Case Law Tools
           {relatedCases.length > 0 ? (
-            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#faf9f5] text-[11px] text-[var(--imm-brand-orange)]">
+            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--imm-surface)] text-[11px] text-[var(--imm-brand-orange)]">
               {relatedCases.length}
             </span>
           ) : null}

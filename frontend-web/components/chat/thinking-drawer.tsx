@@ -17,7 +17,7 @@ export function ThinkingDrawer({ events }: ThinkingDrawerProps): JSX.Element | n
     <div className="mt-2">
       <button
         aria-expanded={isOpen}
-        className="imm-activity-animate rounded-full border border-[rgba(176,174,165,0.55)] bg-[#f6f3eb] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted hover:bg-[#eee9de]"
+        className="imm-activity-animate rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted hover:bg-[var(--imm-surface-muted)]"
         onClick={() => {
           setIsOpen((current) => !current);
         }}
@@ -29,7 +29,7 @@ export function ThinkingDrawer({ events }: ThinkingDrawerProps): JSX.Element | n
         <ul
           aria-label="Timeline details"
           aria-live="polite"
-          className="mt-2 space-y-1 rounded-xl border border-[rgba(176,174,165,0.45)] bg-[#f7f4ec] p-2 text-xs text-ink"
+          className="mt-2 space-y-1 rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] p-2 text-xs text-ink"
         >
           {events.map((event) => (
             <li

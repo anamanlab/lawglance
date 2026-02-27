@@ -27,6 +27,7 @@ print_debug_artifacts() {
   cat /tmp/immcad_chat_headers.txt /tmp/immcad_chat.json 2>/dev/null || true
   cat /tmp/immcad_refusal_headers.txt /tmp/immcad_refusal.json 2>/dev/null || true
   cat /tmp/immcad_cases_headers.txt /tmp/immcad_cases.json 2>/dev/null || true
+  cat /tmp/immcad_sources_headers.txt /tmp/immcad_sources.json 2>/dev/null || true
 }
 
 for _ in $(seq 1 40); do
@@ -77,6 +78,18 @@ if [[ "${case_status}" != "200" ]]; then
   exit 1
 fi
 
+sources_status=$(curl -sS -o /tmp/immcad_sources.json -w "%{http_code}" \
+  -D /tmp/immcad_sources_headers.txt \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -H "Content-Type: application/json" \
+  -X GET "${BASE_URL}/api/sources/transparency")
+
+if [[ "${sources_status}" != "200" ]]; then
+  echo "Source transparency smoke test failed with status ${sources_status}"
+  print_debug_artifacts
+  exit 1
+fi
+
 STAGING_SMOKE_REPORT_PATH="${REPORT_PATH}" python3 - <<'PY'
 import json
 import os
@@ -117,9 +130,42 @@ for result in cases["results"]:
     assert isinstance(result.get("citation"), str) and result["citation"].strip()
     assert isinstance(result.get("url"), str) and result["url"].startswith("http")
 
+with open("/tmp/immcad_sources.json", "r", encoding="utf-8") as handle:
+    sources = json.load(handle)
+assert isinstance(sources.get("supported_courts"), list)
+assert "SCC" in sources["supported_courts"]
+assert "FC" in sources["supported_courts"]
+source_items = {
+    item.get("source_id"): item for item in sources.get("case_law_sources", [])
+}
+assert "SCC_DECISIONS" in source_items
+assert "FC_DECISIONS" in source_items
+assert source_items["SCC_DECISIONS"].get("freshness_status") in {
+    "fresh",
+    "stale",
+    "missing",
+}
+assert source_items["FC_DECISIONS"].get("freshness_status") in {
+    "fresh",
+    "stale",
+    "missing",
+}
+
+allow_priority_failure = os.getenv("ALLOW_PRIORITY_SOURCE_FRESHNESS", "").strip().lower() == "true"
+if not allow_priority_failure:
+    for source_id in ("SCC_DECISIONS", "FC_DECISIONS"):
+        freshness_status = (
+            source_items.get(source_id, {}).get("freshness_status") or "missing"
+        )
+        if freshness_status != "fresh":
+            raise AssertionError(
+                f"Priority source {source_id} freshness_status={freshness_status} (must be fresh)"
+            )
+
 chat_trace_id = extract_trace_id("/tmp/immcad_chat_headers.txt")
 refusal_trace_id = extract_trace_id("/tmp/immcad_refusal_headers.txt")
 cases_trace_id = extract_trace_id("/tmp/immcad_cases_headers.txt")
+sources_trace_id = extract_trace_id("/tmp/immcad_sources_headers.txt")
 
 report = {
     "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -129,15 +175,18 @@ report = {
         "policy_refusal": "passed",
         "citation_display": "passed",
         "case_search": "passed",
+        "source_transparency": "passed",
     },
     "trace_ids": {
         "chat_submit": chat_trace_id,
         "policy_refusal": refusal_trace_id,
         "case_search": cases_trace_id,
+        "source_transparency": sources_trace_id,
     },
     "counts": {
         "chat_citations": len(chat["citations"]),
         "case_results": len(cases["results"]),
+        "source_rows": len(sources.get("case_law_sources", [])),
     },
 }
 
@@ -148,7 +197,8 @@ with open(report_path, "w", encoding="utf-8") as handle:
 
 print(
     "[OK] Trace IDs captured for staging smoke:"
-    f" chat={chat_trace_id}, refusal={refusal_trace_id}, cases={cases_trace_id}"
+    f" chat={chat_trace_id}, refusal={refusal_trace_id},"
+    f" cases={cases_trace_id}, sources={sources_trace_id}"
 )
 print(f"[OK] Smoke report written to {report_path}")
 PY

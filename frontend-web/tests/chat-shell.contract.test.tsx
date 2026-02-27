@@ -124,6 +124,9 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official courts: available | CanLII: not used")
     ).toBeTruthy();
+    expect(
+      screen.getByText((content) => content?.startsWith("Priority courts: SCC:") ?? false)
+    ).toBeTruthy();
     expect(screen.getByText("PDF available")).toBeTruthy();
     expect(screen.getByText("Intake quality: MEDIUM")).toBeTruthy();
     expect(
@@ -168,6 +171,7 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official courts: available | CanLII: not used")
     ).toBeTruthy();
+    expect(screen.getByText("Priority courts: n/a")).toBeTruthy();
     expect(
       screen.getByText(
         'Showing 1 related case for: "Need precedent on inadmissibility findings in Federal Court"'
@@ -737,7 +741,80 @@ describe("chat shell contract behavior", () => {
     expect(
       await screen.findByText("Official courts: unavailable | CanLII: unavailable")
     ).toBeTruthy();
+    expect(await screen.findByText("Priority courts: n/a")).toBeTruthy();
     expect((await screen.findAllByText("Trace ID: trace-case-search-error")).length).toBeGreaterThan(0);
+  });
+
+  it("shows document error copy in workflow banner instead of stale case-law status", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/chat")) {
+        return jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        });
+      }
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "HTTPS is required for document upload and retrieval endpoints",
+              trace_id: "trace-doc-intake-https",
+              policy_reason: "document_https_required",
+            },
+          },
+          {
+            status: 400,
+            headers: { "x-trace-id": "trace-doc-intake-https" },
+          }
+        );
+      }
+      if (url.endsWith("/api/documents/support-matrix")) {
+        return jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix" },
+          }
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(
+      (
+        await screen.findAllByText(
+          "Upload failed. HTTPS is required for document upload and retrieval endpoints"
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Ready to find related Canadian case law.")).toBeNull();
   });
 
   it("requires explicit user approval before triggering case export", async () => {
@@ -1581,7 +1658,7 @@ describe("chat shell contract behavior", () => {
     await user.upload(uploadInput, file);
 
     expect(
-      await screen.findByText("Upload failed. Unsupported file type.")
-    ).toBeTruthy();
+      (await screen.findAllByText("Upload failed. Unsupported file type.")).length
+    ).toBeGreaterThan(0);
   });
 });

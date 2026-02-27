@@ -4,6 +4,7 @@ import type {
   DocumentForum,
   FallbackUsed as ApiFallbackUsed,
   LawyerCaseSupport,
+  SourceFreshnessStatus,
 } from "@/lib/api-client";
 
 export type MessageAuthor = "assistant" | "user";
@@ -18,6 +19,7 @@ export type ChatMessage = {
   citations?: ChatCitation[];
   isPolicyRefusal?: boolean;
   fallbackUsed?: ApiFallbackUsed;
+  activityTurnId?: string;
 };
 
 export type AgentActivityStage = "intake" | "retrieval" | "grounding" | "synthesis" | "delivery";
@@ -34,6 +36,7 @@ export type AgentActivityEvent = {
   details?: string;
   meta?: AgentActivityMeta;
 };
+export type AgentActivityByTurn = Record<string, AgentActivityEvent[]>;
 
 export type ChatShellProps = {
   apiBaseUrl: string;
@@ -48,6 +51,7 @@ export type CaseRetrievalMode = "auto" | "manual" | null;
 export type ResearchConfidence = "low" | "medium" | "high" | null;
 export type IntakeCompleteness = "low" | "medium" | "high" | null;
 export type ResearchSourceStatus = Record<string, string> | null;
+export type PrioritySourceStatusMap = Record<string, SourceFreshnessStatus>;
 export type ResearchObjective =
   | "support_precedent"
   | "distinguish_precedent"
@@ -153,6 +157,7 @@ export type SupportContext = {
     | "/api/export/cases"
     | "/api/export/cases/approval"
     | "/api/documents/intake"
+    | "/api/documents/support-matrix"
     | "/api/documents/matters/{matter_id}/readiness"
     | "/api/documents/matters/{matter_id}/package"
     | "/api/documents/matters/{matter_id}/package/download";
@@ -199,6 +204,7 @@ export type RelatedCasePanelProps = {
   lastCaseSearchQuery: string | null;
   relatedCasesRetrievalMode: CaseRetrievalMode;
   sourceStatus: ResearchSourceStatus;
+  prioritySourceStatus?: PrioritySourceStatusMap | null;
   relatedCasesStatus: string;
   researchConfidence: ResearchConfidence;
   confidenceReasons: string[];

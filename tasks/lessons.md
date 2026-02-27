@@ -9,6 +9,7 @@
 - User correction (2026-02-25): E2E setup must be resilient on headless servers and use Context7 documentation when requested.
 - User correction (2026-02-25): For UI redesign requests, default implementation target to the active modern frontend (`frontend-web`) and verify before touching legacy Streamlit UI.
 - User correction (2026-02-26): Never run `apply_patch` through `exec_command`; always use the dedicated `apply_patch` tool for file edits.
+- User correction (2026-02-27): When asked to parallelize, immediately fan out independent verification/review tracks with spawned agents and keep them running concurrently until convergence.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -37,6 +38,7 @@
 - For user-facing case-search failures, map structured validation/policy errors to actionable UI guidance instead of generic "temporarily unavailable" copy.
 - In dual-service chat + case-search UIs, always show whether displayed results correspond to the current query or a previous query to prevent stale-context confusion.
 - If subagent spawn fails due thread-cap limits, do not stall implementation; report the limit once, continue sequential execution, and close any known agent IDs as soon as they are no longer needed.
+- For user-requested acceleration, default to parallel subagents for independent test/review/planning tasks instead of serial execution.
 - For Cloudflare cutovers, always record Worker version IDs, check custom-domain DNS from public resolvers (`1.1.1.1`/`8.8.8.8`), and keep a `workers.dev` fallback path active until 24h observation evidence is captured.
 - Before any production deploy sequence, run an explicit clean-worktree preflight (`make release-preflight`) so migration evidence is not mixed with unrelated local edits.
 - For Cloudflare Python Worker rollouts, keep migration staged: land scaffold + workflow tests first, then validate with authenticated perf smoke (`make backend-cf-perf-smoke`) before attempting full traffic cutover.

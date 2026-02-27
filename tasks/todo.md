@@ -1,3 +1,252 @@
+# Task Plan - 2026-02-27 - Review Follow-Up: Proxy Client Identity + Redis Decode Guard
+
+## Current Focus
+- Resolve review findings on document matter scoping stability through the frontend proxy and Redis decode hardening.
+
+## Plan
+- [x] Add frontend proxy coverage for forwarding stable client-identity headers to backend document routes.
+- [x] Update proxy request-header builder to forward the identity headers used by backend client-id resolution.
+- [x] Add Redis regression coverage for non-UTF8 stored payloads.
+- [x] Guard Redis payload UTF-8 decode in the existing decode error handling path (source + mirrored backend-vercel file).
+- [x] Run targeted backend/frontend tests and lint checks.
+
+## Review
+- Frontend proxy fix:
+  - `frontend-web/lib/backend-proxy.ts`
+    - Added forwarding of `x-real-ip`, `x-forwarded-for`, `cf-connecting-ip`, and `true-client-ip` in upstream request headers.
+  - `frontend-web/tests/backend-proxy.contract.test.ts`
+    - Added regression test validating those client-identity headers are forwarded on document-readiness proxy requests.
+- Backend Redis decode hardening:
+  - `src/immcad_api/services/document_matter_store.py`
+    - Moved UTF-8 byte decode into the guarded decode/parse block so `UnicodeDecodeError` safely returns `None`.
+  - `backend-vercel/src/immcad_api/services/document_matter_store.py`
+    - Synced the same decode hardening change.
+  - `tests/test_document_matter_store.py`
+    - Added regression test ensuring non-UTF8 Redis payloads are treated as unreadable (`None`) instead of raising.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_matter_store.py` -> `5 passed`
+  - `npm --prefix frontend-web run test -- tests/backend-proxy.contract.test.ts` -> `15 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/document_matter_store.py tests/test_document_matter_store.py backend-vercel/src/immcad_api/services/document_matter_store.py` -> pass
+  - `npm --prefix frontend-web run lint -- --file lib/backend-proxy.ts --file tests/backend-proxy.contract.test.ts` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_matter_store.py` -> `42 passed`
+  - `npm --prefix frontend-web run test -- tests/backend-proxy.contract.test.ts tests/document-intake-route.contract.test.ts tests/document-readiness-route.contract.test.ts tests/document-package-route.contract.test.ts` -> `18 passed`
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+---
+
+# Task Plan - 2026-02-27 - Disclosure Rule Metadata + Policy Matrix Hardening
+
+## Current Focus
+- Improve disclosure/readiness outputs for court/tribunal-specific rules by adding requirement-level metadata and locking expected forum behavior with a policy-matrix test suite.
+
+## Plan
+- [x] Add RED tests for readiness/package metadata fields (rule scope + reason) and route-level readiness metadata exposure.
+- [x] Add RED policy-matrix tests that assert expected missing requirements for each supported forum.
+- [x] Extend policy layer with structured requirement evaluation outputs and forum-specific rationale text.
+- [x] Wire readiness and package responses to include requirement metadata while preserving existing fields/contracts.
+- [x] Update frontend API/type contracts to accept metadata fields without regressions.
+- [x] Run targeted + broader verification and record evidence.
+
+## Review
+- Added RED-first coverage for requirement metadata and policy matrix behavior:
+  - `tests/test_document_requirements.py`
+    - `requirement_statuses` output includes `status`, `rule_scope`, and rationale text.
+  - `tests/test_document_package_service.py`
+    - Disclosure checklist entries include `rule_scope` and `reason`.
+  - `tests/test_document_routes.py`
+    - `/api/documents/matters/{matter_id}/readiness` includes `requirement_statuses`.
+  - `tests/test_document_intake_schemas.py`
+    - Readiness/package schema accepts and exposes requirement metadata.
+  - `tests/test_document_policy_matrix.py`
+    - Parametrized forum matrix asserts expected readiness/missing items for `federal_court_jr`, `rpd`, `rad`, `iad`, and `id`.
+- Extended policy layer with structured requirement outputs:
+  - `src/immcad_api/policy/document_requirements.py`
+    - Added `RequirementRule`/`RequirementStatus` models.
+    - Added `requirement_rules_for_forum(...)` and expanded per-forum rationale text.
+    - `evaluate_readiness(...)` now returns `requirement_statuses`.
+- Wired metadata through runtime responses:
+  - `src/immcad_api/schemas.py`
+    - Added `DocumentRequirementStatus`.
+    - Added `requirement_statuses` to `DocumentReadinessResponse`.
+    - Extended `DocumentDisclosureChecklistEntry` with `rule_scope` and `reason`.
+  - `src/immcad_api/api/routes/documents.py`
+    - Readiness response now serializes requirement metadata.
+  - `src/immcad_api/services/document_package_service.py`
+    - Checklist generation now carries per-rule scope/reason metadata.
+- Updated frontend contracts/UX to consume rule metadata safely:
+  - `frontend-web/lib/api-client.ts`
+  - `frontend-web/components/chat/types.ts`
+  - `frontend-web/components/chat/use-chat-logic.ts`
+  - `frontend-web/components/chat/related-case-panel.tsx`
+  - Added optional metadata parsing and a “Rule guidance” section for unresolved requirement rules.
+- Synced mirrored backend runtime files:
+  - `backend-vercel/src/immcad_api/policy/document_requirements.py`
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+  - `backend-vercel/src/immcad_api/schemas.py`
+- Verification evidence:
+  - RED phase:
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_requirements.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_policy_matrix.py tests/test_document_intake_schemas.py` -> `7 failed` (expected).
+  - Green + targeted:
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_requirements.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_policy_matrix.py tests/test_document_intake_schemas.py` -> `37 passed`
+    - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/document_requirements.py src/immcad_api/services/document_package_service.py src/immcad_api/api/routes/documents.py src/immcad_api/schemas.py tests/test_document_requirements.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_policy_matrix.py tests/test_document_intake_schemas.py` -> pass
+    - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx tests/backend-proxy.contract.test.ts` -> `40 passed`
+    - `npm --prefix frontend-web run typecheck` -> pass
+    - `npm --prefix frontend-web run lint -- --file components/chat/related-case-panel.tsx --file components/chat/types.ts --file components/chat/use-chat-logic.ts --file lib/api-client.ts` -> pass
+  - Broader closeout:
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_matter_store.py tests/test_document_extraction.py tests/test_document_policy_matrix.py tests/test_api_scaffold.py` -> `96 passed`
+    - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+---
+
+# Task Plan - 2026-02-27 - Document Intake Regression Recovery + Tribunal Rule Depth
+
+## Current Focus
+- Fix newly identified intake/storage regressions with root-cause coverage first, then improve disclosure-readiness handling for court/tribunal-specific rule differences.
+
+## Plan
+- [x] Add RED tests for: JPEG signature handling, Redis store transient failures, invalid OCR env limits, and unexpected intake-service errors.
+- [x] Add RED tests for expanded forum/tribunal disclosure rules and checklist alignment.
+- [x] Implement minimal extraction/store/router hardening to satisfy regression tests.
+- [x] Implement forum-rule profile helpers so readiness + disclosure checklist share deterministic conditional requirements.
+- [x] Sync mirrored backend-vercel source files and run targeted backend/frontend verification.
+
+## Review
+- Added RED-first regression coverage:
+  - `tests/test_document_extraction.py`
+    - JPEG payload signature acceptance.
+    - Defensive fallback when OCR limit env vars are invalid.
+  - `tests/test_document_matter_store.py`
+    - Redis write/read transient failure handling.
+  - `tests/test_document_routes.py`
+    - Unexpected intake-service exceptions now surface as server errors.
+- Added RED-first forum-specific disclosure/readiness coverage:
+  - `tests/test_document_requirements.py`
+    - RAD requires `decision_under_review`.
+    - FC JR translation upload requires `translator_declaration`.
+  - `tests/test_document_package_service.py`
+    - Disclosure checklist includes conditional required items from policy rules.
+- Implemented hardening fixes:
+  - `src/immcad_api/services/document_extraction.py`
+    - Fixed signature normalization to preserve JPEG magic bytes.
+    - Added safe integer env parsing with defaults for OCR limits.
+    - Removed duplicate dataclass fields.
+  - `src/immcad_api/services/document_matter_store.py`
+    - Guarded Redis `setex/get` with warning logs and safe fallback behavior.
+  - `src/immcad_api/api/routes/documents.py`
+    - Narrowed per-file fallback exception handling to `ValueError` only.
+- Implemented tribunal/court disclosure rule depth improvements:
+  - `src/immcad_api/policy/document_requirements.py`
+    - Added `required_doc_types_for_forum(...)` helper shared by policy consumers.
+    - Expanded RAD/IAD required set to include `decision_under_review`.
+    - Applied translation -> `translator_declaration` conditional requirement consistently.
+  - `src/immcad_api/services/document_package_service.py`
+    - Checklist generation now derives from shared required-rule helper.
+    - Updated TOC priority maps for improved forum-specific ordering.
+- Synced mirrored runtime files:
+  - `backend-vercel/src/immcad_api/services/document_extraction.py`
+  - `backend-vercel/src/immcad_api/services/document_matter_store.py`
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+  - `backend-vercel/src/immcad_api/policy/document_requirements.py`
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+- Verification evidence:
+  - RED phase:
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_extraction.py tests/test_document_matter_store.py tests/test_document_routes.py tests/test_document_requirements.py tests/test_document_package_service.py` -> `9 failed` (expected for red).
+  - Green verification:
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_extraction.py tests/test_document_matter_store.py tests/test_document_routes.py tests/test_document_requirements.py tests/test_document_package_service.py` -> `32 passed`
+    - `PYTHONPATH=src uv run ruff check src/immcad_api/services/document_extraction.py src/immcad_api/services/document_matter_store.py src/immcad_api/api/routes/documents.py src/immcad_api/policy/document_requirements.py src/immcad_api/services/document_package_service.py tests/test_document_extraction.py tests/test_document_matter_store.py tests/test_document_routes.py tests/test_document_requirements.py tests/test_document_package_service.py` -> pass
+    - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_matter_store.py tests/test_document_extraction.py tests/test_api_scaffold.py` -> `84 passed`
+    - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+    - `npm --prefix frontend-web run test -- tests/backend-proxy.contract.test.ts tests/document-intake-route.contract.test.ts tests/document-readiness-route.contract.test.ts tests/document-package-route.contract.test.ts` -> `17 passed`
+
+---
+
+# Task Plan - 2026-02-27 - Scoped Persistent Document Matter Storage
+
+## Current Focus
+- Replace in-route in-memory document matter storage with client-scoped store abstraction backed by Redis when configured, with safe in-memory fallback.
+
+## Plan
+- [x] Add RED tests for scoped matter access and new store behavior.
+- [x] Implement `DocumentMatterStore` abstraction (in-memory + Redis backends + builder).
+- [x] Wire documents router to use the new store and scope reads/writes by client ID.
+- [x] Wire app bootstrap to construct Redis-backed store via existing `REDIS_URL`.
+- [x] Sync mirrored backend-vercel source files and run targeted verification.
+
+## Review
+- Added client-scoped matter storage abstraction in:
+  - `src/immcad_api/services/document_matter_store.py`
+    - `InMemoryDocumentMatterStore`
+    - `RedisDocumentMatterStore`
+    - `build_document_matter_store(redis_url=...)` with Redis ping/fallback behavior.
+- Updated documents API router to use the store abstraction instead of local per-process dict:
+  - `src/immcad_api/api/routes/documents.py`
+  - Matter writes/reads now scoped by resolved `request.state.client_id` (fallback `"anonymous"`).
+- Wired app bootstrap to inject Redis-backed matter store when configured:
+  - `src/immcad_api/main.py`
+  - `build_documents_router(..., matter_store=build_document_matter_store(redis_url=settings.redis_url), ...)`
+- Exported store types/builders for internal use:
+  - `src/immcad_api/services/__init__.py`
+- Added regression tests:
+  - `tests/test_document_matter_store.py` (in-memory scope + Redis round-trip)
+  - `tests/test_document_routes.py::test_documents_matter_access_is_scoped_to_client_id`
+- Synced backend-vercel mirrored runtime sources:
+  - `backend-vercel/src/immcad_api/main.py`
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+  - `backend-vercel/src/immcad_api/services/__init__.py`
+  - `backend-vercel/src/immcad_api/services/document_matter_store.py`
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py::test_documents_matter_access_is_scoped_to_client_id tests/test_document_matter_store.py` -> `3 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_matter_store.py tests/test_api_scaffold.py` -> `64 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/main.py src/immcad_api/api/routes/documents.py src/immcad_api/services/__init__.py src/immcad_api/services/document_matter_store.py tests/test_document_routes.py tests/test_document_matter_store.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+---
+
+# Task Plan - 2026-02-27 - Document Upload + Disclosure Service Hardening
+
+## Current Focus
+- Execute prioritized hardening for document upload/disclosure flow step-by-step: reduce upload memory amplification, align image intake behavior with allowlist policy, and then close telemetry/source-transparency follow-ups.
+
+## Plan
+- [x] Step 1: Reduce upload-path memory amplification (chunked backend file reads with max-size cap + avoid proxy fallback text-decoding on non-chat multipart requests).
+- [x] Step 2: Align extraction behavior with allowed image formats (deterministic filetype detection and parse fallback for approved image uploads).
+- [x] Step 3: Tighten all-failed intake semantics (telemetry/reporting distinction for full-request failure outcomes).
+- [x] Step 4: Remove frontend hardcoded source-bucket assumptions and rely on backend-provided source status/classification.
+- [x] Run verification for this step (backend pytest + ruff, frontend proxy contract tests + lint, backend/vercel source sync check).
+
+## Review
+- Backend behavior changes:
+  - Parser edge cases now return `file_unreadable` per-file instead of bubbling as 500.
+  - Intake now supports partial outcomes in one request (`unsupported_file_type` / `upload_size_exceeded` become per-file `failed` results).
+  - Intake now reads uploads in bounded chunks with early oversize stop, reducing request-time memory spikes.
+  - Extraction now supports approved image payload signatures (`png`/`jpeg`/`tiff`) in addition to PDF.
+- Frontend/proxy changes:
+  - Added document proxy routes:
+    - `frontend-web/app/api/documents/intake/route.ts`
+    - `frontend-web/app/api/documents/matters/[matterId]/readiness/route.ts`
+    - `frontend-web/app/api/documents/matters/[matterId]/package/route.ts`
+  - `frontend-web/lib/backend-proxy.ts` now supports:
+    - byte-safe POST body forwarding (no text-decoding corruption),
+    - explicit `forwardGetRequest` for readiness calls.
+    - fallback body text decoding only for `/api/chat`, avoiding unnecessary binary multipart decode on document routes.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_requirements.py tests/test_document_intake_schemas.py` -> `21 passed`
+  - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx tests/backend-proxy.contract.test.ts tests/document-intake-route.contract.test.ts tests/document-readiness-route.contract.test.ts tests/document-package-route.contract.test.ts` -> `33 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/api/routes/documents.py src/immcad_api/services/document_extraction.py src/immcad_api/services/document_intake_service.py tests/test_document_routes.py tests/test_document_upload_security.py` -> pass
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `npm --prefix frontend-web run lint` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py` -> `15 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/api/routes/documents.py src/immcad_api/services/document_extraction.py tests/test_document_upload_security.py` -> pass
+  - `npm --prefix frontend-web run test -- tests/backend-proxy.contract.test.ts tests/document-intake-route.contract.test.ts tests/document-readiness-route.contract.test.ts tests/document-package-route.contract.test.ts` -> `16 passed`
+  - `npm --prefix frontend-web run lint -- --file lib/backend-proxy.ts --file tests/backend-proxy.contract.test.ts` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_request_metrics.py` -> `21 passed`
+  - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `26 passed`
+  - `npm --prefix frontend-web run typecheck` -> pass
+
+---
+
 # Task Plan - 2026-02-26 - Canada Document Intake + Filing Readiness
 
 ## Current Focus
@@ -1940,3 +2189,70 @@
 - Verification:
   - `bash scripts/run_free_tier_runtime_validation.sh` (with production env vars loaded) -> passed.
   - `./scripts/venv_exec.sh pytest -q tests/test_canlii_live_smoke_workflow.py tests/test_free_tier_runtime_validation_script.py tests/test_release_preflight_script.py tests/test_cloudflare_free_plan_readiness_script.py` -> `10 passed`.
+
+---
+
+# Task Plan - 2026-02-27 - Document Upload/Disclosure Consistency Continuation
+
+## Current Focus
+- Continue the document upload/disclosure hardening pass by removing remaining identifier inconsistencies and aligning allowed upload types with deterministic extraction behavior.
+
+## Plan
+- [x] Fix readiness output key mismatch for translator declaration requirements.
+- [x] Harden extraction to parse only recognized upload signatures (`pdf/png/jpeg/tiff`) instead of broad auto-detection.
+- [x] Add/adjust tests for valid PNG intake behavior and malformed image handling.
+- [x] Deduplicate readiness warnings for deterministic API output across multi-file uploads.
+- [x] Re-run document intake/readiness/upload route test suites and lint/sync verification.
+
+## Review
+- Updated readiness requirement output to use `translator_declaration` consistently across policy evaluation and package checks:
+  - `src/immcad_api/policy/document_requirements.py`
+  - `backend-vercel/src/immcad_api/policy/document_requirements.py`
+- Tightened extraction parser selection to signature-detected supported formats only:
+  - `src/immcad_api/services/document_extraction.py`
+  - `backend-vercel/src/immcad_api/services/document_extraction.py`
+- Extended service coverage for image uploads:
+  - `tests/test_document_intake_service.py` now verifies valid PNG payloads are accepted for OCR-review workflow (`needs_review` + `ocr_required`).
+  - `tests/test_document_upload_security.py` verifies both malformed-image failure behavior and valid PNG acceptance behavior.
+- Readiness API now deduplicates and sorts warning issues before response serialization, preventing duplicate warning entries across processed files:
+  - `src/immcad_api/api/routes/documents.py`
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+  - `tests/test_document_routes.py` includes regression coverage for deduplicated warnings.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py tests/test_document_requirements.py` -> `20 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/api/routes/documents.py src/immcad_api/services/document_extraction.py src/immcad_api/policy/document_requirements.py tests/test_document_routes.py tests/test_document_upload_security.py tests/test_document_intake_service.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+---
+
+# Task Plan - 2026-02-27 - Free Open-Source OCR Continuation
+
+## Current Focus
+- Continue the document upload/disclosure hardening by adding a free open-source OCR fallback for scanned files and validating runtime dependencies.
+
+## Plan
+- [x] Install free OCR runtime dependencies (Tesseract + supporting system packages) and Python OCR libraries.
+- [x] Integrate optional OCR fallback into document extraction when native text layer is empty.
+- [x] Add deterministic tests for OCR fallback and non-OCR paths.
+- [x] Verify tests, lint, and backend/source sync.
+
+## Review
+- Installed open-source OCR stack components in this environment:
+  - System packages: `tesseract-ocr`, `ghostscript`, `qpdf`, `unpaper`, `pngquant`
+  - Python packages: `pytesseract`, `ocrmypdf`
+- Integrated optional OCR fallback in extraction:
+  - `src/immcad_api/services/document_extraction.py`
+  - `backend-vercel/src/immcad_api/services/document_extraction.py`
+  - Behavior: if page text extraction is empty, OCR is attempted (Tesseract) and failures degrade gracefully to empty OCR text (no 500 regressions).
+  - Feature toggle: `IMMCAD_ENABLE_TESSERACT_OCR` (`1` by default, disable with `0/false/no/off`).
+- Added/updated tests:
+  - `tests/test_document_extraction.py` (new): unsupported signature rejection, OCR fallback path, and skip-OCR when native text exists.
+  - `tests/test_document_intake_service.py`: deterministic image test and OCR-fallback classification path.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_extraction.py tests/test_document_intake_service.py tests/test_document_upload_security.py tests/test_document_routes.py tests/test_document_requirements.py` -> `25 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/document_extraction.py tests/test_document_extraction.py tests/test_document_intake_service.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+- Dependency status snapshot:
+  - Installed binaries: `tesseract`, `gs`, `qpdf`, `unpaper`, `pngquant`
+  - Missing optional binary: `jbig2`
+  - Installed Python modules: `pytesseract`, `ocrmypdf`, `PIL`

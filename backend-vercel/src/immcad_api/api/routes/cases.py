@@ -14,7 +14,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from immcad_api.api.routes.case_query_validation import is_specific_case_query
+from immcad_api.api.routes.case_query_validation import assess_case_query
 from immcad_api.errors import ApiError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
 from immcad_api.schemas import (
@@ -402,14 +402,16 @@ def build_case_router(
     ) -> CaseSearchResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
-        if not is_specific_case_query(payload.query):
+        assessment = assess_case_query(payload.query)
+        if not assessment.is_specific:
+            refinement_hint = f" {' '.join(assessment.hints)}" if assessment.hints else ""
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
                 code="VALIDATION_ERROR",
                 message=(
                     "Case-law query is too broad. Please include specific terms such as "
-                    "program, issue, court, or citation."
+                    f"program, issue, court, or citation.{refinement_hint}"
                 ),
                 policy_reason="case_search_query_too_broad",
             )

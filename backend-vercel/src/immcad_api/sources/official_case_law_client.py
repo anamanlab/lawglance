@@ -286,7 +286,8 @@ class OfficialCaseLawClient:
         records: list[CourtDecisionRecord],
         request: CaseSearchRequest,
     ) -> CaseSearchResponse:
-        ranked_records = self._rank_records(records, request.query)
+        filtered_records = self._filter_records_by_decision_date(records, request)
+        ranked_records = self._rank_records(filtered_records, request.query)
         if ranked_records:
             return CaseSearchResponse(
                 results=[
@@ -340,6 +341,36 @@ class OfficialCaseLawClient:
             return records
 
         return []
+
+    def _filter_records_by_decision_date(
+        self,
+        records: list[CourtDecisionRecord],
+        request: CaseSearchRequest,
+    ) -> list[CourtDecisionRecord]:
+        if request.decision_date_from is None and request.decision_date_to is None:
+            return records
+        return [
+            record
+            for record in records
+            if self._is_within_decision_date_range(
+                record.decision_date,
+                decision_date_from=request.decision_date_from,
+                decision_date_to=request.decision_date_to,
+            )
+        ]
+
+    def _is_within_decision_date_range(
+        self,
+        decision_date: date,
+        *,
+        decision_date_from: date | None,
+        decision_date_to: date | None,
+    ) -> bool:
+        if decision_date_from is not None and decision_date < decision_date_from:
+            return False
+        if decision_date_to is not None and decision_date > decision_date_to:
+            return False
+        return True
 
     def _rank_records(
         self,

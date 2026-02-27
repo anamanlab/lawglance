@@ -15,6 +15,7 @@ from immcad_api.api.routes import (
     build_case_router,
     build_case_router_disabled,
     build_chat_router,
+    build_documents_router,
     build_lawyer_research_router,
     build_lawyer_research_router_disabled,
 )
@@ -210,6 +211,7 @@ def create_app() -> FastAPI:
         grounding_adapter=grounding_adapter,
         trusted_citation_domains=settings.citation_trusted_domains,
         case_search_tool=case_search_service,
+        lawyer_research_service=lawyer_case_research_service,
     )
 
     has_api_bearer_token = bool(settings.api_bearer_token)
@@ -356,6 +358,14 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_chat_router(chat_service, request_metrics=request_metrics))
+    app.include_router(
+        build_documents_router(
+            request_metrics=request_metrics,
+            upload_max_bytes=settings.document_upload_max_bytes,
+            upload_max_files=settings.document_upload_max_files,
+            allowed_content_types=settings.document_allowed_content_types,
+        )
+    )
     if case_search_service and source_policy and source_registry:
         app.include_router(
             build_case_router(

@@ -14,12 +14,15 @@ class RequestMetrics:
         *,
         max_latency_samples: int = 2048,
         max_export_audit_events: int = 256,
+        max_document_intake_audit_events: int = 256,
         time_fn: Callable[[], float] | None = None,
     ) -> None:
         if max_latency_samples < 1:
             raise ValueError("max_latency_samples must be >= 1")
         if max_export_audit_events < 1:
             raise ValueError("max_export_audit_events must be >= 1")
+        if max_document_intake_audit_events < 1:
+            raise ValueError("max_document_intake_audit_events must be >= 1")
         self._time_fn = time_fn or time.monotonic
         self._started_at = self._time_fn()
         self._lock = Lock()
@@ -36,6 +39,13 @@ class RequestMetrics:
         self._export_policy_reasons: Counter[str] = Counter()
         self._export_audit_events: deque[dict[str, object]] = deque(
             maxlen=max_export_audit_events
+        )
+        self._document_intake_attempts = 0
+        self._document_intake_accepted = 0
+        self._document_intake_rejected = 0
+        self._document_intake_policy_reasons: Counter[str] = Counter()
+        self._document_intake_audit_events: deque[dict[str, object]] = deque(
+            maxlen=max_document_intake_audit_events
         )
         self._lawyer_research_requests = 0
         self._lawyer_research_cases_returned_total = 0
@@ -124,6 +134,42 @@ class RequestMetrics:
         with self._lock:
             self._export_audit_events.append(event)
 
+    def record_document_intake_event(
+        self,
+        *,
+        trace_id: str,
+        client_id: str | None,
+        matter_id: str | None,
+        forum: str | None,
+        file_count: int,
+        outcome: str,
+        policy_reason: str | None = None,
+    ) -> None:
+        normalized_file_count = max(int(file_count), 0)
+        event: dict[str, object] = {
+            "timestamp_utc": datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "trace_id": trace_id,
+            "client_id": client_id,
+            "matter_id": matter_id,
+            "forum": forum,
+            "file_count": normalized_file_count,
+            "outcome": outcome,
+        }
+        if policy_reason:
+            event["policy_reason"] = policy_reason
+        with self._lock:
+            self._document_intake_attempts += 1
+            if outcome == "accepted":
+                self._document_intake_accepted += 1
+            elif outcome == "rejected":
+                self._document_intake_rejected += 1
+            if policy_reason:
+                self._document_intake_policy_reasons[policy_reason] += 1
+            self._document_intake_audit_events.append(event)
+
     def snapshot(self) -> dict[str, object]:
         with self._lock:
             elapsed_seconds = max(self._time_fn() - self._started_at, 1e-9)
@@ -139,6 +185,11 @@ class RequestMetrics:
             export_too_large = self._export_too_large
             export_policy_reasons = dict(self._export_policy_reasons)
             export_audit_events = list(self._export_audit_events)
+            document_intake_attempts = self._document_intake_attempts
+            document_intake_accepted = self._document_intake_accepted
+            document_intake_rejected = self._document_intake_rejected
+            document_intake_policy_reasons = dict(self._document_intake_policy_reasons)
+            document_intake_audit_events = list(self._document_intake_audit_events)
             lawyer_research_requests = self._lawyer_research_requests
             lawyer_research_cases_returned_total = (
                 self._lawyer_research_cases_returned_total
@@ -185,6 +236,13 @@ class RequestMetrics:
                 "too_large": export_too_large,
                 "policy_reasons": export_policy_reasons,
                 "audit_recent": export_audit_events,
+            },
+            "document_intake": {
+                "attempts": document_intake_attempts,
+                "accepted": document_intake_accepted,
+                "rejected": document_intake_rejected,
+                "policy_reasons": document_intake_policy_reasons,
+                "audit_recent": document_intake_audit_events,
             },
             "lawyer_research": {
                 "requests": lawyer_research_requests,

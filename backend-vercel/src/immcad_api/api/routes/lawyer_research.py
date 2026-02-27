@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
-from immcad_api.api.routes.case_query_validation import is_specific_case_query
+from immcad_api.api.routes.case_query_validation import assess_case_query
 from immcad_api.errors import ApiError, SourceUnavailableError
 from immcad_api.schemas import (
     ErrorEnvelope,
@@ -13,6 +13,30 @@ from immcad_api.schemas import (
 )
 from immcad_api.services import LawyerCaseResearchService
 from immcad_api.telemetry import RequestMetrics
+
+
+def _intake_specificity_signal_count(payload: LawyerCaseResearchRequest) -> int:
+    signal_count = 0
+    if payload.court and payload.court.strip():
+        signal_count += 1
+    intake = payload.intake
+    if intake is None:
+        return signal_count
+    if intake.objective is not None:
+        signal_count += 1
+    if intake.target_court and intake.target_court.strip():
+        signal_count += 1
+    if intake.procedural_posture is not None:
+        signal_count += 1
+    if intake.issue_tags:
+        signal_count += 1
+    if intake.anchor_citations or intake.anchor_dockets:
+        signal_count += 1
+    if intake.fact_keywords:
+        signal_count += 1
+    if intake.date_from is not None or intake.date_to is not None:
+        signal_count += 1
+    return signal_count
 
 
 def build_lawyer_research_router(
@@ -55,14 +79,17 @@ def build_lawyer_research_router(
     ) -> LawyerCaseResearchResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
-        if not is_specific_case_query(payload.matter_summary):
+        assessment = assess_case_query(payload.matter_summary)
+        intake_signal_count = _intake_specificity_signal_count(payload)
+        if not assessment.is_specific and intake_signal_count < 2:
+            refinement_hint = f" {' '.join(assessment.hints)}" if assessment.hints else ""
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
                 code="VALIDATION_ERROR",
                 message=(
                     "Case-law query is too broad. Please include specific terms such as "
-                    "program, issue, court, or citation."
+                    f"program, issue, court, or citation.{refinement_hint}"
                 ),
                 policy_reason="case_search_query_too_broad",
             )

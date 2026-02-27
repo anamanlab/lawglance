@@ -17,12 +17,16 @@ class CaseSearchService:
 
     def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
         official_response: CaseSearchResponse | None = None
-        official_error: SourceUnavailableError | None = None
+        official_error: ApiError | None = None
         if self.official_client is not None:
             try:
                 official_response = self.official_client.search_cases(request)
-            except SourceUnavailableError as exc:
+            except ApiError as exc:
                 official_error = exc
+            except Exception:
+                official_error = SourceUnavailableError(
+                    "Official case-law source failed while processing the request."
+                )
 
         canlii_response: CaseSearchResponse | None = None
         canlii_error: ApiError | None = None

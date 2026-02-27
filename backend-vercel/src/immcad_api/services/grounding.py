@@ -62,15 +62,24 @@ class KeywordGroundingAdapter:
         mode: str,
     ) -> list[Citation]:
         del locale, mode
-        tokens = set(re.findall(r"[a-z0-9]+", message.lower()))
+        normalized_message = re.sub(r"\s+", " ", message.lower()).strip()
+        tokens = set(re.findall(r"[a-z0-9]+", normalized_message))
 
-        baseline_citation = self._catalog[0][0].model_copy(deep=True)
-        selected: list[Citation] = [baseline_citation]
-        selected_keys = {(baseline_citation.source_id, baseline_citation.pin)}
+        selected: list[Citation] = []
+        selected_keys: set[tuple[str, str]] = set()
 
         scored: list[tuple[int, int, Citation]] = []
-        for index, (citation, keywords) in enumerate(self._catalog[1:], start=1):
-            score = sum(1 for keyword in keywords if keyword in tokens)
+        for index, (citation, keywords) in enumerate(self._catalog):
+            score = 0
+            for keyword in keywords:
+                if not keyword:
+                    continue
+                if " " in keyword:
+                    if keyword in normalized_message:
+                        score += 2
+                    continue
+                if keyword in tokens:
+                    score += 1
             if score <= 0:
                 continue
             scored.append((score, -index, citation))
@@ -233,6 +242,111 @@ def official_grounding_catalog() -> list[tuple[Citation, tuple[str, ...]]]:
                 "skilled",
                 "worker",
                 "points",
+            ),
+        ),
+        (
+            Citation(
+                source_id="IRCC",
+                snippet=(
+                    "Official IRCC guidance for extending status as an international "
+                    "student in Canada before study permit expiry."
+                ),
+                title="IRCC: Extend your study permit",
+                url=(
+                    "https://www.canada.ca/en/immigration-refugees-citizenship/services/"
+                    "study-canada/study-permit/extend.html"
+                ),
+                pin="Study permit extension guide",
+            ),
+            (
+                "study permit",
+                "study",
+                "permit",
+                "student",
+                "international student",
+                "extend",
+                "extension",
+                "expire",
+                "expiry",
+                "status",
+            ),
+        ),
+        (
+            Citation(
+                source_id="IRCC",
+                snippet=(
+                    "Official IRCC family sponsorship pathway for sponsoring a spouse, "
+                    "partner, or dependent child for permanent residence."
+                ),
+                title="IRCC: Sponsor your spouse, partner or dependent child",
+                url=(
+                    "https://www.canada.ca/en/immigration-refugees-citizenship/services/"
+                    "immigrate-canada/family-sponsorship/spouse-partner-children.html"
+                ),
+                pin="Spousal sponsorship guide",
+            ),
+            (
+                "spouse",
+                "partner",
+                "spousal",
+                "family sponsorship",
+                "sponsorship",
+                "sponsor",
+                "dependent child",
+                "marriage",
+                "common law",
+            ),
+        ),
+        (
+            Citation(
+                source_id="IRCC",
+                snippet=(
+                    "Official IRCC guidance for applying for work permits, including "
+                    "eligibility and application pathways from inside or outside Canada."
+                ),
+                title="IRCC: Work in Canada",
+                url=(
+                    "https://www.canada.ca/en/immigration-refugees-citizenship/services/"
+                    "work-canada.html"
+                ),
+                pin="Work permit guide",
+            ),
+            (
+                "work permit",
+                "work",
+                "permit",
+                "open work permit",
+                "closed work permit",
+                "lmia",
+                "employment",
+                "inside canada",
+                "outside canada",
+            ),
+        ),
+        (
+            Citation(
+                source_id="IRCC",
+                snippet=(
+                    "Official IRCC process for extending visitor status in Canada "
+                    "through a visitor record before current status expires."
+                ),
+                title="IRCC: Extend your stay in Canada as a visitor",
+                url=(
+                    "https://www.canada.ca/en/immigration-refugees-citizenship/services/"
+                    "visit-canada/extend-stay.html"
+                ),
+                pin="Visitor status extension guide",
+            ),
+            (
+                "visitor",
+                "visitor status",
+                "visitor record",
+                "extend stay",
+                "extension",
+                "expiring",
+                "status expires",
+                "remain in canada",
+                "temporary resident",
             ),
         ),
     ]

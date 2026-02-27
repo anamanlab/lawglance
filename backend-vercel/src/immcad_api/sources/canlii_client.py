@@ -71,7 +71,7 @@ class CanLIIClient:
 
         ranked_cases = self._rank_cases(cases, request.query)
         results: list[CaseSearchResult] = []
-        for item in ranked_cases[: request.limit]:
+        for item in ranked_cases:
             decision_date = self._parse_decision_date(
                 item.get("decisionDate") or item.get("publishedDate") or item.get("date")
             )
@@ -97,7 +97,8 @@ class CanLIIClient:
                 )
             )
 
-        return CaseSearchResponse(results=results)
+        filtered_results = self._filter_results_by_decision_date(results, request)
+        return CaseSearchResponse(results=filtered_results[: request.limit])
 
     def _fallback(self, request: CaseSearchRequest) -> CaseSearchResponse:
         court = request.court or self.default_database_id
@@ -117,7 +118,8 @@ class CanLIIClient:
                 )
             )
 
-        return CaseSearchResponse(results=results)
+        filtered_results = self._filter_results_by_decision_date(results, request)
+        return CaseSearchResponse(results=filtered_results[: request.limit])
 
     def _fallback_or_error(self, request: CaseSearchRequest) -> CaseSearchResponse:
         if self.allow_scaffold_fallback:
@@ -233,3 +235,33 @@ class CanLIIClient:
             return date.fromisoformat(normalized)
         except ValueError:
             return date.today()
+
+    def _filter_results_by_decision_date(
+        self,
+        results: list[CaseSearchResult],
+        request: CaseSearchRequest,
+    ) -> list[CaseSearchResult]:
+        if request.decision_date_from is None and request.decision_date_to is None:
+            return results
+        return [
+            result
+            for result in results
+            if self._is_within_decision_date_range(
+                result.decision_date,
+                decision_date_from=request.decision_date_from,
+                decision_date_to=request.decision_date_to,
+            )
+        ]
+
+    def _is_within_decision_date_range(
+        self,
+        decision_date: date,
+        *,
+        decision_date_from: date | None,
+        decision_date_to: date | None,
+    ) -> bool:
+        if decision_date_from is not None and decision_date < decision_date_from:
+            return False
+        if decision_date_to is not None and decision_date > decision_date_to:
+            return False
+        return True

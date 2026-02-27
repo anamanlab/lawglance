@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, Request, Response
 
 from immcad_api.schemas import ChatRequest, ChatResponse
@@ -18,7 +19,11 @@ def build_chat_router(
     async def chat(payload: ChatRequest, request: Request, response: Response) -> ChatResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
-        chat_response = chat_service.handle_chat(payload, trace_id=trace_id)
+        chat_response = await run_in_threadpool(
+            chat_service.handle_chat,
+            payload,
+            trace_id=trace_id,
+        )
         if request_metrics:
             request_metrics.record_chat_outcome(
                 fallback_used=chat_response.fallback_used.used,

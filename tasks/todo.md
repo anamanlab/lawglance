@@ -6,15 +6,38 @@
 - Systematically audit prompt/runtime capability coverage (including tool orchestration), fix missed issues from prior prompt pass, and add a production-safe prompt behavior eval suite with friendly greeting support.
 
 ### Plan
-- [ ] Audit current prompt/runtime capability coverage and document concrete gaps from the first prompt pass.
-- [ ] Add failing tests for friendly greeting behavior and prompt capability/tool-awareness content.
-- [ ] Implement chat + prompt changes to support friendly non-legal greetings without weakening grounding policy.
-- [ ] Add a prompt behavior eval suite (data + evaluator + tests) to track greeting/policy/grounding/injection expectations.
-- [ ] Run targeted lint/tests and record verification evidence.
-- [ ] Update lessons with this user-correction pattern.
+- [x] Audit current prompt/runtime capability coverage and document concrete gaps from the first prompt pass.
+- [x] Add failing tests for friendly greeting behavior and prompt capability/tool-awareness content.
+- [x] Implement chat + prompt changes to support friendly non-legal greetings without weakening grounding policy.
+- [x] Add a prompt behavior eval suite (data + evaluator + tests) to track greeting/policy/grounding/injection expectations.
+- [x] Run targeted lint/tests and record verification evidence.
+- [x] Update lessons with this user-correction pattern.
 
 ### Review
-- Pending implementation.
+- Audit findings (missed in first pass):
+  - Greeting UX gap: with no grounding, chat always collapsed to constrained response, so `Hi` was not friendly/helpful.
+  - Capability disclosure gap: prompts did not explicitly describe runtime capabilities/limitations for users and downstream model behavior.
+  - Tool orchestration gap: prompts did not explain that case-law search/lawyer-research signals are system-orchestrated context, not executable instructions.
+  - Measurement gap: no dedicated behavior suite covered friendliness + constrained/policy/grounded routing together.
+- Implemented changes:
+  - Added capability/limitations/tooling/friendly interaction sections to canonical prompts (`src/immcad_api/policy/prompts.py`) and synced compatibility file (`config/prompts.yaml`).
+  - Added runtime context lines for capabilities/tooling in `src/immcad_api/providers/prompt_builder.py`.
+  - Added greeting/small-talk handling in `src/immcad_api/services/chat_service.py` so non-legal social messages get a friendly reply instead of constrained fallback.
+  - Added locale-aware greeting responses (`en-CA`/`fr-CA`) and French greeting detection safeguards that still route mixed greeting+legal prompts into grounded flow.
+  - Added chat observability counters for `friendly` and `constrained` outcomes in request metrics + route wiring.
+  - Added prompt behavior eval module/data:
+    - `src/immcad_api/evaluation/prompt_behavior_suite.py`
+    - `data/evals/prompt-behavior-suite-v1.json`
+    - exported via `src/immcad_api/evaluation/__init__.py`
+  - Expanded behavior suite dataset with adversarial prompt-injection and mixed greeting+legal cases.
+  - Added/extended tests:
+    - `tests/test_prompt_jurisdiction.py`
+    - `tests/test_chat_service.py`
+    - `tests/test_prompt_behavior_suite.py`
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_prompt_jurisdiction.py tests/test_chat_service.py tests/test_prompt_behavior_suite.py tests/test_prompt_compatibility.py tests/test_gemini_provider.py tests/test_openai_provider.py tests/test_request_metrics.py tests/test_api_scaffold.py` -> `86 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/prompts.py src/immcad_api/services/chat_service.py src/immcad_api/providers/prompt_builder.py src/immcad_api/evaluation/prompt_behavior_suite.py src/immcad_api/evaluation/__init__.py tests/test_prompt_jurisdiction.py tests/test_chat_service.py tests/test_prompt_behavior_suite.py` -> `All checks passed!`
+  - `PYTHONPATH=src uv run python - <<'PY' ... evaluate_prompt_behavior_suite ... PY` -> `data/evals/prompt-behavior-suite-v1.json 2026-02-27 pass 8 0 {'friendly_ack': 2, 'policy_refusal': 3, 'grounded_info': 2, 'safe_constrained': 1}`
 
 ## Task Plan - 2026-02-27 - Gemini Prompt Review + Hardening
 
@@ -3675,3 +3698,18 @@
   - `make test-document-compilation` -> `168 passed`
   - `make docs-audit` -> pass (`[docs-maintenance] audited files: 80`)
   - `PYTHONPATH=src uv run pytest -q tests/test_doc_maintenance.py` -> `13 passed`
+
+## Task Plan - 2026-02-27 - Federal RSS Ingestion Audit
+
+### Current Focus
+- Audit the federal and federal appeals RSS ingestion pipeline end-to-end, document current behavior/policy gating, and capture actionable next steps in `docs/audits/2026-02-27-legal-rss.md`.
+
+### Plan
+- [ ] Inventory RSS references (`rg` federal/federal-appeal keywords in `src/immcad_api`).
+- [ ] Trace ingestion/policy/frontend flow through the identified files.
+- [ ] Draft `docs/audits/2026-02-27-legal-rss.md` with working details, gaps, and recommendations.
+- [ ] Run verification commands (`rg` rerun if needed, `git status`) and note their results in the docs.
+- [ ] Commit the audit doc with `docs(audit): add rc court rss catalog`.
+
+### Review
+- Pending new findings.

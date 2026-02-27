@@ -5,14 +5,15 @@
 
 ## Plan
 - [x] Publish documentation-first package (feature spec, API contract draft, security/compliance checklist) before implementation.
-- [ ] Finalize V1 forum/rule matrix and implement deterministic readiness policy checks.
-- [ ] Add backend intake schemas/contracts for multi-file upload, document issues, readiness, and package generation.
-- [ ] Implement intake pipeline (text extraction/OCR signals, classification, normalized naming, issue detection).
-- [ ] Implement package builder (TOC/index ordering, disclosure checklist, cover-letter draft, readiness summary).
-- [ ] Add `/api/documents/*` routes with multipart handling, traceability, and consistent error envelopes.
-- [ ] Add upload security controls (file type/size/count limits) plus intake audit events.
-- [ ] Add frontend drag/drop intake panel with per-document status and readiness UX.
-- [ ] Run targeted backend/frontend verification and record evidence.
+- [x] Finalize V1 forum/rule matrix and implement deterministic readiness policy checks.
+- [x] Add backend intake schemas/contracts for multi-file upload, document issues, readiness, and package generation.
+- [x] Implement intake pipeline (text extraction/OCR signals, classification, normalized naming, issue detection).
+- [x] Implement package builder (TOC/index ordering, disclosure checklist, cover-letter draft, readiness summary).
+- [x] Add `/api/documents/*` routes with multipart handling, traceability, and consistent error envelopes.
+- [x] Add upload security controls (file type/size/count limits).
+- [x] Add intake audit events for document-intake requests.
+- [x] Add frontend drag/drop intake panel with per-document status and readiness UX.
+- [x] Run targeted backend/frontend verification and record evidence.
 
 ## Review
 - Documentation-first deliverables completed:
@@ -20,6 +21,25 @@
   - `docs/architecture/document-intake-api-contracts-draft.md` (draft API contracts and issue/error codes)
   - `docs/release/document-intake-security-compliance-checklist.md` (security/compliance and go-live readiness checks)
 - Detailed execution plan: `docs/plans/2026-02-26-document-intake-filing-readiness-implementation-plan.md`
+- Implementation completion update (2026-02-26):
+  - Added document-intake audit telemetry (`document_intake` counters + recent audit events) in `src/immcad_api/telemetry/request_metrics.py` and wired intake route event recording in `src/immcad_api/api/routes/documents.py`.
+  - Added frontend document-intake UX in the case-law sidebar with drag/drop + picker upload, per-document status, readiness refresh, and package generation actions via:
+    - `frontend-web/components/chat/related-case-panel.tsx`
+    - `frontend-web/components/chat/use-chat-logic.ts`
+    - `frontend-web/components/chat/types.ts`
+    - `frontend-web/components/chat/chat-shell-container.tsx`
+    - `frontend-web/lib/api-client.ts`
+  - Extended regression coverage:
+    - `tests/test_request_metrics.py`
+    - `tests/test_document_routes.py`
+    - `frontend-web/tests/chat-shell.contract.test.tsx`
+    - `frontend-web/tests/chat-shell.ui.test.tsx`
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_request_metrics.py tests/test_document_routes.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_upload_security.py` -> `23 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/telemetry/request_metrics.py src/immcad_api/api/routes/documents.py tests/test_request_metrics.py tests/test_document_routes.py tests/test_document_requirements.py tests/test_document_intake_schemas.py tests/test_document_intake_service.py tests/test_document_package_service.py tests/test_document_upload_security.py` -> pass
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `24 passed`
+  - `cd frontend-web && npm run typecheck` -> pass
+  - `make quality` -> pass
 
 ---
 
@@ -1778,20 +1798,42 @@
 
 ## Plan
 - [x] Align prompt/runtime contract (remove unsupported chat-history claims or implement memory injection).
-- [ ] Fix citation semantics so frontend-displayed citations reflect verified grounding, not provider passthrough placeholders.
+- [x] Fix citation semantics so frontend-displayed citations reflect verified grounding, not provider passthrough placeholders.
 - [x] Split frontend async state by workflow (chat vs case search vs export) so the composer stays responsive.
 - [x] Add slow-response detection UX (elapsed time, degraded-state messaging, trace-aware retry/cancel guidance).
-- [ ] Unify incident/degraded banners across chat + case-law + export failures; mount diagnostics panel when enabled.
+- [x] Unify incident/degraded banners across chat + case-law + export failures; mount diagnostics panel when enabled.
 - [x] Run `/api/chat` blocking backend work in a threadpool to reduce event-loop contention.
 - [x] Harden case-search fallback behavior (official-source errors should not prevent CanLII fallback when available).
-- [ ] Revisit case-law query validation/planner interaction so valid matter summaries are not rejected too early.
-- [ ] Separate lawyer-research result visibility from export eligibility so useful cases do not appear “broken.”
-- [ ] Expand eval/regression coverage for prompt correctness, case-law reliability, and frontend slow-state UX.
+- [x] Revisit case-law query validation/planner interaction so valid matter summaries are not rejected too early.
+- [x] Separate lawyer-research result visibility from export eligibility so useful cases do not appear “broken.”
+- [x] Expand eval/regression coverage for prompt correctness, case-law reliability, and frontend slow-state UX.
 
 ## Review (2026-02-26 - Batch 1 Progress)
 - Completed a first stabilization batch covering prompt/runtime contract accuracy, frontend async-state split, chat slow-response loading cues, chat degraded/fallback response labeling, `/api/chat` threadpool execution, and case-search fallback hardening for official-source `ApiError` failures.
 - Verification run: `uv run pytest -q tests/test_case_search_service.py tests/test_openai_provider.py tests/test_chat_service.py` (pass), `uv run pytest -q tests/test_api_scaffold.py::test_chat_endpoint_contract_shape tests/test_api_scaffold.py::test_chat_policy_block_response tests/test_api_scaffold.py::test_chat_case_law_query_uses_case_search_tool_citations tests/test_api_scaffold.py::test_chat_validation_error_for_unsupported_locale_and_mode` (pass), `npm --prefix frontend-web run typecheck` (pass), `npm --prefix frontend-web run test -- tests/message-list.performance.test.tsx` (pass).
-- Remaining high-priority gaps from this plan: citation semantics (provider passthrough vs verified references), unified error/degraded banner hierarchy, case-law query validation tuning, and retrieval-backed grounding improvements for answer correctness.
+- Remaining high-priority gaps from this plan: none in this stabilization slice (follow-on quality work can continue under separate roadmap items).
+- Batch 2 progress (2026-02-26):
+  - Lawyer research validation now allows broad matter summaries when intake specificity is sufficiently structured (2+ intake signals), avoiding early rejection of otherwise actionable requests.
+  - Added targeted frontend regression coverage for unified non-chat workflow error banners (case-law search and export paths) with diagnostics-enabled trace visibility.
+  - Confirmed export-policy blocks preserve result visibility with explicit “online review still available” messaging.
+- Batch 2 verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_lawyer_research_api.py -k "broad_summary or generic_query"` -> `3 passed, 5 deselected`
+  - `PYTHONPATH=src uv run pytest -q tests/test_lawyer_research_api.py tests/test_lawyer_case_research_service.py tests/test_lawyer_research_planner.py tests/test_lawyer_research_schemas.py` -> `28 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/api/routes/lawyer_research.py tests/test_lawyer_research_api.py` -> pass
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `26 passed`
+  - `cd frontend-web && npm run typecheck` -> pass
+- Batch 3 progress (2026-02-26):
+  - Expanded official grounding catalog coverage for high-frequency immigration intents (study permit extension and spousal sponsorship) so chat grounding has stronger authoritative source recall.
+  - Confirmed citation semantics path is grounded-only: providers emit plain text without model-provided citations, and chat response citations remain filtered through grounding validation.
+- Batch 3 verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_grounding.py tests/test_chat_service.py tests/test_openai_provider.py tests/test_gemini_provider.py` -> `26 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/grounding.py tests/test_grounding.py tests/test_chat_service.py tests/test_openai_provider.py tests/test_gemini_provider.py` -> pass
+- Batch 4 progress (2026-02-26):
+  - Further expanded retrieval-backed grounding coverage with official IRCC sources for work permits and visitor-status extensions to improve answer grounding recall on high-frequency intake queries.
+- Batch 4 verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_grounding.py tests/test_chat_service.py tests/test_openai_provider.py tests/test_gemini_provider.py` -> `28 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/grounding.py tests/test_grounding.py tests/test_chat_service.py tests/test_openai_provider.py tests/test_gemini_provider.py` -> pass
+  - `make quality` -> pass
 
 ## Review (Pre-Implementation Findings)
 - Frontend uses a single pending flag across chat, case search, and export flows (`frontend-web/components/chat/use-chat-logic.ts`), which disables unrelated interactions and makes long-running actions feel like the entire app is frozen.

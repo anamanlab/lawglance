@@ -15,6 +15,30 @@ from immcad_api.services import LawyerCaseResearchService
 from immcad_api.telemetry import RequestMetrics
 
 
+def _intake_specificity_signal_count(payload: LawyerCaseResearchRequest) -> int:
+    signal_count = 0
+    if payload.court and payload.court.strip():
+        signal_count += 1
+    intake = payload.intake
+    if intake is None:
+        return signal_count
+    if intake.objective is not None:
+        signal_count += 1
+    if intake.target_court and intake.target_court.strip():
+        signal_count += 1
+    if intake.procedural_posture is not None:
+        signal_count += 1
+    if intake.issue_tags:
+        signal_count += 1
+    if intake.anchor_citations or intake.anchor_dockets:
+        signal_count += 1
+    if intake.fact_keywords:
+        signal_count += 1
+    if intake.date_from is not None or intake.date_to is not None:
+        signal_count += 1
+    return signal_count
+
+
 def build_lawyer_research_router(
     lawyer_case_research_service: LawyerCaseResearchService,
     *,
@@ -56,7 +80,8 @@ def build_lawyer_research_router(
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
         assessment = assess_case_query(payload.matter_summary)
-        if not assessment.is_specific:
+        intake_signal_count = _intake_specificity_signal_count(payload)
+        if not assessment.is_specific and intake_signal_count < 2:
             refinement_hint = f" {' '.join(assessment.hints)}" if assessment.hints else ""
             return _error_response(
                 status_code=422,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import cast
-
 from immcad_api.policy.document_requirements import FilingForum, evaluate_readiness
 from immcad_api.schemas import (
     DocumentDisclosureChecklistEntry,
@@ -89,7 +87,7 @@ class DocumentPackageService:
             checklist.append(
                 DocumentDisclosureChecklistEntry(
                     item=required_doc_type,
-                    status=cast("present | missing | warning", status),
+                    status=status,
                 )
             )
         return checklist

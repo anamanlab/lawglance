@@ -39,6 +39,23 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
         outcome="allowed",
         policy_reason="source_export_allowed",
     )
+    metrics.record_document_intake_event(
+        trace_id="trace-doc-1",
+        client_id="198.51.100.2",
+        matter_id="matter-doc-1",
+        forum="federal_court_jr",
+        file_count=2,
+        outcome="accepted",
+    )
+    metrics.record_document_intake_event(
+        trace_id="trace-doc-2",
+        client_id="198.51.100.3",
+        matter_id="matter-doc-2",
+        forum="iad",
+        file_count=0,
+        outcome="rejected",
+        policy_reason="document_files_missing",
+    )
 
     clock["now"] = 160.0
     snapshot = metrics.snapshot()
@@ -79,6 +96,28 @@ def test_request_metrics_snapshot_reports_rates_and_percentiles() -> None:
     assert snapshot["lawyer_research"]["pdf_available_total"] == 1
     assert snapshot["lawyer_research"]["pdf_unavailable_total"] == 1
     assert snapshot["lawyer_research"]["source_unavailable_events"] == 0
+    assert snapshot["document_intake"]["attempts"] == 2
+    assert snapshot["document_intake"]["accepted"] == 1
+    assert snapshot["document_intake"]["rejected"] == 1
+    assert snapshot["document_intake"]["policy_reasons"]["document_files_missing"] == 1
+    assert len(snapshot["document_intake"]["audit_recent"]) == 2
+    accepted_event, rejected_event = snapshot["document_intake"]["audit_recent"]
+    assert accepted_event["trace_id"] == "trace-doc-1"
+    assert accepted_event["client_id"] == "198.51.100.2"
+    assert accepted_event["matter_id"] == "matter-doc-1"
+    assert accepted_event["forum"] == "federal_court_jr"
+    assert accepted_event["file_count"] == 2
+    assert accepted_event["outcome"] == "accepted"
+    assert "policy_reason" not in accepted_event
+    assert accepted_event["timestamp_utc"].endswith("Z")
+    assert rejected_event["trace_id"] == "trace-doc-2"
+    assert rejected_event["client_id"] == "198.51.100.3"
+    assert rejected_event["matter_id"] == "matter-doc-2"
+    assert rejected_event["forum"] == "iad"
+    assert rejected_event["file_count"] == 0
+    assert rejected_event["outcome"] == "rejected"
+    assert rejected_event["policy_reason"] == "document_files_missing"
+    assert rejected_event["timestamp_utc"].endswith("Z")
     assert snapshot["latency_ms"]["sample_count"] == 2
     assert snapshot["latency_ms"]["p50"] == pytest.approx(250.0)
     assert snapshot["latency_ms"]["p95"] == pytest.approx(385.0)
@@ -110,6 +149,11 @@ def test_request_metrics_snapshot_handles_empty_state() -> None:
     assert snapshot["lawyer_research"]["pdf_available_total"] == 0
     assert snapshot["lawyer_research"]["pdf_unavailable_total"] == 0
     assert snapshot["lawyer_research"]["source_unavailable_events"] == 0
+    assert snapshot["document_intake"]["attempts"] == 0
+    assert snapshot["document_intake"]["accepted"] == 0
+    assert snapshot["document_intake"]["rejected"] == 0
+    assert snapshot["document_intake"]["policy_reasons"] == {}
+    assert snapshot["document_intake"]["audit_recent"] == []
     assert snapshot["latency_ms"]["sample_count"] == 0
     assert snapshot["latency_ms"]["p50"] == 0.0
     assert snapshot["latency_ms"]["p95"] == 0.0

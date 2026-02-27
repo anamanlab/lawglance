@@ -65,6 +65,29 @@ def build_documents_router(
             headers={"x-trace-id": trace_id},
         )
 
+    def _record_document_intake_event(
+        *,
+        request: Request,
+        matter_id: str | None,
+        forum: str | None,
+        file_count: int,
+        outcome: str,
+        policy_reason: str | None = None,
+    ) -> None:
+        if request_metrics is None:
+            return
+        raw_client_id = getattr(request.state, "client_id", None)
+        client_id = str(raw_client_id).strip() if raw_client_id else None
+        request_metrics.record_document_intake_event(
+            trace_id=getattr(request.state, "trace_id", ""),
+            client_id=client_id,
+            matter_id=matter_id,
+            forum=forum,
+            file_count=file_count,
+            outcome=outcome,
+            policy_reason=policy_reason,
+        )
+
     def _readiness_response_for_matter(
         *,
         matter_id: str,
@@ -108,12 +131,23 @@ def build_documents_router(
         response: Response,
         forum: str = Form(...),
         matter_id: str | None = Form(default=None),
-        files: list[UploadFile] = File(...),
+        files: list[UploadFile] | None = File(default=None),
     ) -> DocumentIntakeResponse | JSONResponse:
         trace_id = getattr(request.state, "trace_id", "")
         response.headers["x-trace-id"] = trace_id
+        normalized_forum = forum.strip().lower()
+        submitted_matter_id = (matter_id or "").strip() or None
+        submitted_file_count = len(files or [])
 
         if not files:
+            _record_document_intake_event(
+                request=request,
+                matter_id=submitted_matter_id,
+                forum=normalized_forum or None,
+                file_count=0,
+                outcome="rejected",
+                policy_reason="document_files_missing",
+            )
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
@@ -122,6 +156,14 @@ def build_documents_router(
                 policy_reason="document_files_missing",
             )
         if len(files) > upload_max_files:
+            _record_document_intake_event(
+                request=request,
+                matter_id=submitted_matter_id,
+                forum=normalized_forum or None,
+                file_count=submitted_file_count,
+                outcome="rejected",
+                policy_reason="document_file_count_exceeded",
+            )
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
@@ -131,8 +173,16 @@ def build_documents_router(
             )
 
         try:
-            parsed_forum = FilingForum(forum.strip().lower())
+            parsed_forum = FilingForum(normalized_forum)
         except ValueError:
+            _record_document_intake_event(
+                request=request,
+                matter_id=submitted_matter_id,
+                forum=normalized_forum or None,
+                file_count=submitted_file_count,
+                outcome="rejected",
+                policy_reason="document_forum_invalid",
+            )
             return _error_response(
                 status_code=422,
                 trace_id=trace_id,
@@ -141,7 +191,7 @@ def build_documents_router(
                 policy_reason="document_forum_invalid",
             )
 
-        effective_matter_id = (matter_id or "").strip() or f"matter-{uuid.uuid4().hex[:12]}"
+        effective_matter_id = submitted_matter_id or f"matter-{uuid.uuid4().hex[:12]}"
 
         results = []
         allowed_content_type_set = {
@@ -150,6 +200,14 @@ def build_documents_router(
         for upload in files:
             content_type = (upload.content_type or "").strip().lower()
             if content_type not in allowed_content_type_set:
+                _record_document_intake_event(
+                    request=request,
+                    matter_id=effective_matter_id,
+                    forum=parsed_forum.value,
+                    file_count=submitted_file_count,
+                    outcome="rejected",
+                    policy_reason="unsupported_file_type",
+                )
                 return _error_response(
                     status_code=422,
                     trace_id=trace_id,
@@ -159,6 +217,14 @@ def build_documents_router(
                 )
             payload_bytes = await upload.read()
             if len(payload_bytes) > upload_max_bytes:
+                _record_document_intake_event(
+                    request=request,
+                    matter_id=effective_matter_id,
+                    forum=parsed_forum.value,
+                    file_count=submitted_file_count,
+                    outcome="rejected",
+                    policy_reason="upload_size_exceeded",
+                )
                 return _error_response(
                     status_code=413,
                     trace_id=trace_id,
@@ -183,6 +249,13 @@ def build_documents_router(
             matter_id=effective_matter_id,
             forum=parsed_forum,
             results=results,
+        )
+        _record_document_intake_event(
+            request=request,
+            matter_id=effective_matter_id,
+            forum=parsed_forum.value,
+            file_count=submitted_file_count,
+            outcome="accepted",
         )
 
         return DocumentIntakeResponse(

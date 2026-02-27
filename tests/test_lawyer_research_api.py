@@ -129,6 +129,73 @@ def test_lawyer_research_endpoint_rejects_generic_query_with_refinement_hints() 
     assert "add a court" in body["error"]["message"].lower()
 
 
+def test_lawyer_research_endpoint_allows_broad_summary_when_intake_is_specific(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _mock_case_search(self, request):
+        del self, request
+        return CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2025-FC-88",
+                    title="Sample Intake Driven Match",
+                    citation="2025 FC 88",
+                    decision_date=date(2025, 5, 10),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/987654/index.do",
+                    source_id="FC_DECISIONS",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/987654/index.do",
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_case_search,
+    )
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "help with immigration",
+            "jurisdiction": "ca",
+            "intake": {
+                "objective": "support_precedent",
+                "target_court": "fc",
+            },
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cases"]
+    assert body["cases"][0]["citation"] == "2025 FC 88"
+
+
+def test_lawyer_research_endpoint_rejects_broad_summary_with_insufficient_intake() -> None:
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "help with immigration",
+            "jurisdiction": "ca",
+            "intake": {
+                "objective": "support_precedent",
+            },
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert body["error"]["policy_reason"] == "case_search_query_too_broad"
+
+
 def test_lawyer_research_endpoint_handles_long_matter_summary_without_internal_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

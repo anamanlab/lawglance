@@ -1,5 +1,5 @@
 {
-  "version": "2026-02-25",
+  "version": "2026-02-27",
   "rules": [
     {
       "name": "error_rate",
@@ -30,6 +30,22 @@
       "metric_path": "request_metrics.latency_ms.p95",
       "comparison": "gt",
       "threshold": 8000,
+      "duration_minutes": 10,
+      "min_request_count": 20
+    },
+    {
+      "name": "document_intake_rejected_rate",
+      "metric_path": "request_metrics.document_intake.rejected_rate",
+      "comparison": "gt",
+      "threshold": 0.25,
+      "duration_minutes": 10,
+      "min_request_count": 20
+    },
+    {
+      "name": "document_intake_parser_failure_rate",
+      "metric_path": "request_metrics.document_intake.parser_failure_rate",
+      "comparison": "gt",
+      "threshold": 0.15,
       "duration_minutes": 10,
       "min_request_count": 20
     },

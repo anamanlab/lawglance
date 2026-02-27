@@ -10,6 +10,10 @@
 - User correction (2026-02-25): For UI redesign requests, default implementation target to the active modern frontend (`frontend-web`) and verify before touching legacy Streamlit UI.
 - User correction (2026-02-26): Never run `apply_patch` through `exec_command`; always use the dedicated `apply_patch` tool for file edits.
 - User correction (2026-02-27): When asked to parallelize, immediately fan out independent verification/review tracks with spawned agents and keep them running concurrently until convergence.
+- User correction (2026-02-27): Reviewer findings on compilation contracts must be resolved end-to-end across backend readiness semantics and frontend payload rendering/mapping, not as isolated one-file fixes.
+- User correction (2026-02-27): Cloudflare is the active platform; avoid framing Vercel as primary deployment/runtime and migrate operational env defaults to Cloudflare-first paths.
+- Incident pattern (2026-02-27): Cloudflare Tunnel outages surfaced as raw `530` HTML in chat flows; proxy layer must normalize tunnel `1033` failures into structured JSON errors with trace ids.
+- Incident recovery pattern (2026-02-27): keep an explicit emergency fallback origin variable (`IMMCAD_API_BASE_URL_FALLBACK`) for chat path retries so primary tunnel outages do not become total frontend chat outages.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -39,6 +43,8 @@
 - In dual-service chat + case-search UIs, always show whether displayed results correspond to the current query or a previous query to prevent stale-context confusion.
 - If subagent spawn fails due thread-cap limits, do not stall implementation; report the limit once, continue sequential execution, and close any known agent IDs as soon as they are no longer needed.
 - For user-requested acceleration, default to parallel subagents for independent test/review/planning tasks instead of serial execution.
+- When backend response contracts evolve (for example object vs string summary shapes or renamed keys), update frontend runtime mapping, TypeScript payload types, and contract tests in the same change.
+- For compilation/readiness pipelines with selectable profiles, compute readiness against the resolved profile requirements rather than forum defaults.
 - For Cloudflare cutovers, always record Worker version IDs, check custom-domain DNS from public resolvers (`1.1.1.1`/`8.8.8.8`), and keep a `workers.dev` fallback path active until 24h observation evidence is captured.
 - Before any production deploy sequence, run an explicit clean-worktree preflight (`make release-preflight`) so migration evidence is not mixed with unrelated local edits.
 - For Cloudflare Python Worker rollouts, keep migration staged: land scaffold + workflow tests first, then validate with authenticated perf smoke (`make backend-cf-perf-smoke`) before attempting full traffic cutover.
@@ -55,4 +61,7 @@
 - Treat edge proxy contract checks as a preflight gate (script + CI workflow step), not just a unit test, so release/deploy paths fail fast when worker headers/envelope drift from frontend expectations.
 - When a user explicitly requests interactive CLI setup/auth in a remote Codespace, execute the interactive flow first (and show live status) before proposing token-based automation; only pivot after proving callback constraints or completing the interactive step.
 - If the user says the runtime path is Cloudflare-only and not Vercel, use Vercel only as a secret-recovery source (if needed) and avoid proposing Vercel deploys as a primary fix path.
+- For Cloudflare-only operations, enforce explicit `ENVIRONMENT`/`IMMCAD_ENVIRONMENT` values in Wrangler/runtime config and validate them in CI.
+- Treat Cloudflare Tunnel `1033`/`530` responses as provider-source outages at the proxy boundary and convert them into stable API error envelopes (`503`) instead of forwarding raw HTML.
+- For critical chat availability, support a bounded fallback-origin retry path in frontend proxy routing and expose a response marker header when fallback is used.
 - Never invoke `apply_patch` via shell execution; use the direct patch tool so edits remain deterministic and policy-compliant.

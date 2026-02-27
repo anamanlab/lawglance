@@ -34,12 +34,13 @@ def test_build_metrics_url_strips_api_suffix() -> None:
 def test_evaluate_alert_rules_marks_threshold_breaches() -> None:
     rules = load_alert_rules(THRESHOLDS_PATH)
     metrics_payload = {
-            "request_metrics": {
+        "request_metrics": {
             "requests": {"total": 100, "rate_per_minute": 10},
             "errors": {"rate": 0.06},
             "fallback": {"rate": 0.01},
             "refusal": {"rate": 0.1},
             "latency_ms": {"p95": 9000},
+            "document_intake": {"rejected_rate": 0.02, "parser_failure_rate": 0.01},
         }
     }
     checks = evaluate_alert_rules(metrics_payload=metrics_payload, rules=rules)
@@ -49,6 +50,25 @@ def test_evaluate_alert_rules_marks_threshold_breaches() -> None:
     assert report.failing_checks == 2
     failing_names = {check.name for check in report.checks if check.status == "fail"}
     assert failing_names == {"error_rate", "latency_p95_ms"}
+
+
+def test_evaluate_alert_rules_breaches_document_intake_failure_rules() -> None:
+    rules = load_alert_rules(THRESHOLDS_PATH)
+    metrics_payload = {
+        "request_metrics": {
+            "requests": {"total": 120, "rate_per_minute": 5},
+            "errors": {"rate": 0.01},
+            "fallback": {"rate": 0.01},
+            "refusal": {"rate": 0.05},
+            "latency_ms": {"p95": 1000},
+            "document_intake": {"rejected_rate": 0.33, "parser_failure_rate": 0.2},
+        }
+    }
+    checks = evaluate_alert_rules(metrics_payload=metrics_payload, rules=rules)
+
+    failing_names = {check.name for check in checks if check.status == "fail"}
+    assert "document_intake_rejected_rate" in failing_names
+    assert "document_intake_parser_failure_rate" in failing_names
 
 
 def test_evaluate_alert_rules_handles_missing_metric_paths_as_failures() -> None:

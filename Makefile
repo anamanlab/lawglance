@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-native-secrets-sync backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health backend-cf-codespace-runtime-start backend-cf-codespace-runtime-stop backend-cf-codespace-runtime-health backend-origin-env-recover-from-vercel cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke chat-case-law-smoke free-tier-runtime-validate hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-native-secrets-sync backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health backend-cf-codespace-runtime-start backend-cf-codespace-runtime-stop backend-cf-codespace-runtime-health backend-origin-env-prepare backend-origin-env-recover-from-vercel cloudflare-env-sync cloudflare-env-validate cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test test-document-compilation arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-runtime-sync-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke chat-case-law-smoke free-tier-runtime-validate hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
@@ -56,6 +56,11 @@ backend-cf-native-deploy: backend-cf-native-sync
 backend-cf-native-secrets-sync:
 	bash scripts/sync_cloudflare_backend_native_secrets.sh
 
+cloudflare-env-sync: backend-cf-native-secrets-sync
+
+cloudflare-env-validate:
+	./scripts/venv_exec.sh python scripts/validate_cloudflare_env_configuration.py
+
 backend-cf-perf-smoke:
 	bash scripts/run_cloudflare_backend_perf_smoke.sh
 
@@ -86,8 +91,11 @@ backend-cf-codespace-runtime-stop:
 backend-cf-codespace-runtime-health:
 	bash scripts/check_cloudflare_named_tunnel_codespace_runtime_health.sh --with-search --with-chat-case-law --with-canlii
 
+backend-origin-env-prepare:
+	bash scripts/prepare_backend_origin_env.sh
+
 backend-origin-env-recover-from-vercel:
-	bash scripts/recover_backend_env_from_vercel.sh
+	bash scripts/prepare_backend_origin_env.sh --from-vercel
 
 cloudflare-free-preflight:
 	bash scripts/check_cloudflare_free_plan_readiness.sh
@@ -139,6 +147,23 @@ format:
 test:
 	./scripts/venv_exec.sh pytest -q
 
+test-document-compilation:
+	./scripts/venv_exec.sh pytest -q \
+		tests/test_document_compilation_rules.py \
+		tests/test_document_compilation_validator.py \
+		tests/test_document_assembly_service.py \
+		tests/test_record_builders.py \
+		tests/test_document_compilation_state.py \
+		tests/test_document_compilation_routes.py \
+		tests/test_document_package_service.py \
+		tests/test_document_routes.py \
+		tests/test_document_intake_schemas.py \
+		tests/test_document_matter_store.py \
+		tests/test_document_extraction.py \
+		tests/test_document_extraction_limits.py \
+		tests/test_document_compilation_e2e.py \
+		tests/test_request_metrics.py
+
 arch-generate:
 	./scripts/venv_exec.sh python scripts/generate_module_dependency_diagram.py
 
@@ -154,8 +179,10 @@ docs-fix:
 source-registry-validate:
 	./scripts/venv_exec.sh python scripts/validate_source_registry.py
 
-backend-vercel-sync-validate:
-	./scripts/venv_exec.sh python scripts/validate_backend_vercel_source_sync.py
+backend-runtime-sync-validate:
+	./scripts/venv_exec.sh python scripts/validate_backend_runtime_source_sync.py
+
+backend-vercel-sync-validate: backend-runtime-sync-validate
 
 legal-review-validate:
 	./scripts/venv_exec.sh python scripts/validate_legal_review_checklist.py
@@ -215,7 +242,7 @@ git-secret-list:
 git-secret-changes:
 	bash scripts/git_secret_env.sh changes $(GIT_SECRET_ARGS)
 
-quality: lint-api typecheck test arch-validate docs-audit source-registry-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
+quality: lint-api typecheck test arch-validate docs-audit source-registry-validate backend-runtime-sync-validate cloudflare-env-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 
 integration-quality: quality ingestion-smoke
 

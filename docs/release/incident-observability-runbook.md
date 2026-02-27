@@ -17,6 +17,9 @@ Key fields:
 - `request_metrics.latency_ms.p50`
 - `request_metrics.latency_ms.p95`
 - `request_metrics.latency_ms.p99`
+- `request_metrics.document_intake.rejected_rate`
+- `request_metrics.document_intake.parser_failure_rate`
+- `request_metrics.document_classification_override.rejected_rate`
 
 ## 2) Alert Threshold Triage
 
@@ -26,6 +29,10 @@ Use these thresholds to classify severity:
 - `request_metrics.fallback.rate > 0.20` for 10 minutes: primary provider instability likely; verify OpenAI health and circuit-breaker state.
 - `request_metrics.refusal.rate > 0.35` for 15 minutes: potential policy matcher regression or adversarial prompt surge.
 - `request_metrics.latency_ms.p95 > 8000` for 10 minutes: degraded user experience; inspect provider latency and rate-limit pressure.
+- `request_metrics.document_intake.rejected_rate > 0.25` for 10 minutes (20+ requests): intake reliability degradation; inspect upload validation/client integration.
+- `request_metrics.document_intake.parser_failure_rate > 0.15` for 10 minutes (20+ requests): parser/readability failure surge; inspect payload quality and extraction path.
+
+For intake-specific triage and rollback steps, use `docs/release/document-intake-incident-runbook.md`.
 
 ## 3) Trace-ID Correlation Path
 

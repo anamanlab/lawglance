@@ -1,3 +1,686 @@
+# Task Plan Tracking Log
+
+## Task Plan - 2026-02-27 - Cloudflare Hourly Ingestion Checkpoint Optimization
+
+### Current Focus
+- Implement per-act federal-laws materialization checkpoints for hourly orchestration, wire safe workflow scheduling, and add regression coverage for both script behavior and workflow contract.
+
+### Plan
+- [x] Add/adjust script unit tests that prove unchanged federal-law acts are skipped across runs and full-sync windows force refresh.
+- [x] Add workflow contract test coverage for Cloudflare-hourly scheduler wiring and schedule-safety guards.
+- [x] Implement `scripts/run_cloudflare_ingestion_hourly.py` changes for per-act checkpoint persistence + cache-backed materialization reuse.
+- [x] Update `.github/workflows/ingestion-jobs.yml` to run the Cloudflare-hourly scheduler with safe schedule gating and persisted checkpoint/cache paths.
+- [x] Run targeted pytest + Ruff checks for touched files and record exact command outputs.
+
+### Review
+- Script updates (`scripts/run_cloudflare_ingestion_hourly.py`):
+  - Added per-act federal-laws materialization checkpoints (`--federal-laws-checkpoint-path`), cache-backed section reuse (`--federal-laws-cache-dir`), and full-sync override wiring (`force_full_sync` from schedule window).
+  - Added deterministic checkpoint revision hashing per index entry and cache fallback behavior that preserves full output coverage while skipping unchanged act fetch/parse work.
+  - Extended materialization report payload with `acts_skipped_checkpoint`, `full_sync_forced`, and materialization state paths.
+- Workflow updates (`.github/workflows/ingestion-jobs.yml`):
+  - Added Cloudflare-hourly schedule trigger and a schedule-safe matrix gate using `matrix.run_on_schedule` + `matrix.schedule_cron`.
+  - Added `cloudflare_hourly` matrix row running `scripts/run_cloudflare_ingestion_hourly.py`.
+  - Persisted federal-laws materialization checkpoint + cache paths through pinned `actions/cache`.
+- Test updates:
+  - Extended `tests/test_cloudflare_ingestion_hourly_script.py` with per-act skip + full-sync refresh regression coverage.
+  - Added `tests/test_ingestion_jobs_workflow.py` for Cloudflare-hourly workflow contract assertions.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py` -> `8 passed in 1.87s`
+  - `PYTHONPATH=src uv run ruff check scripts/run_cloudflare_ingestion_hourly.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py` -> `All checks passed!`
+
+## Task Plan - 2026-02-27 - Official Case Metadata Surfacing (Backend + Frontend)
+
+### Current Focus
+- Propagate SCC/FC metadata (`docket_numbers`, `source_event_type`) through backend response contracts and render it in the related-cases panel without regressing existing chat/search behavior.
+
+### Plan
+- [x] Add optional metadata fields to backend case-search/research schemas.
+- [x] Map parsed court metadata in official case client and lawyer research support transformer.
+- [x] Expose metadata in frontend API types and related-case UI badges/chips.
+- [x] Add backend/frontend regression tests for metadata propagation and rendering.
+- [x] Run integrated lint/tests/typecheck plus backend-vercel source sync validation.
+
+### Review
+- Backend updates:
+  - `src/immcad_api/schemas.py`
+    - Added optional `docket_numbers` and `source_event_type` on `CaseSearchResult` and `LawyerCaseSupport`.
+    - Added `SourceEventType` literal union.
+  - `src/immcad_api/sources/official_case_law_client.py`
+    - `_to_result(...)` now maps `record.docket_numbers` and `record.source_event_type`.
+  - `src/immcad_api/services/lawyer_case_research_service.py`
+    - `_to_support(...)` now propagates `docket_numbers` and `source_event_type`.
+  - Synced backend mirror:
+    - `backend-vercel/src/immcad_api/schemas.py`
+    - `backend-vercel/src/immcad_api/sources/official_case_law_client.py`
+    - `backend-vercel/src/immcad_api/services/lawyer_case_research_service.py`
+- Frontend updates:
+  - `frontend-web/lib/api-client.ts`
+    - Added optional `docket_numbers` and `source_event_type` to `CaseSearchResult` and `LawyerCaseSupport` payload types.
+  - `frontend-web/components/chat/related-case-panel.tsx`
+    - Render source badge, source event badge, and normalized docket chips when metadata is present.
+- Test updates:
+  - `tests/test_official_case_law_client.py` (`test_official_case_law_client_maps_court_metadata_fields`)
+  - `tests/test_lawyer_case_research_service.py` (`test_orchestrator_propagates_case_metadata_fields`)
+  - `frontend-web/tests/api-client.contract.test.ts` metadata passthrough assertions
+  - `frontend-web/tests/chat-shell.contract.test.tsx` metadata badge/chip rendering assertion
+
+### Verification evidence
+- `uv run ruff check scripts/run_cloudflare_ingestion_hourly.py src/immcad_api/schemas.py src/immcad_api/sources/official_case_law_client.py src/immcad_api/services/lawyer_case_research_service.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py tests/test_official_case_law_client.py tests/test_lawyer_case_research_service.py` -> `All checks passed!`
+- `PYTHONPATH=src uv run pytest -q tests/test_cloudflare_ingestion_hourly_script.py tests/test_ingestion_jobs_workflow.py tests/test_official_case_law_client.py tests/test_lawyer_case_research_service.py tests/test_case_search_service.py tests/test_lawyer_research_schemas.py` -> `44 passed`
+- `cd frontend-web && npm run test -- tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts` -> `37 passed`
+- `cd frontend-web && npx eslint components/chat/related-case-panel.tsx lib/api-client.ts tests/chat-shell.contract.test.tsx tests/api-client.contract.test.ts tests/fixtures/chat-contract-fixtures.ts` -> pass
+- `cd frontend-web && npm run typecheck` -> pass
+- `uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+## Task Plan - 2026-02-27 - Production Incident: `/api/chat` 530 Tunnel Failure
+
+### Current Focus
+- Eliminate opaque frontend `530` failures by mapping Cloudflare Tunnel `1033` outages to deterministic API error envelopes, and capture operational recovery steps.
+
+### Plan
+- [x] Reproduce production failure on both frontend proxy route and backend API domain.
+- [x] Confirm root cause from response payload/headers (Cloudflare Tunnel `1033`, unresolved origin tunnel host).
+- [x] Implement proxy mapping from upstream `530` tunnel outage HTML/plaintext to structured `503` JSON error with trace id.
+- [x] Implement chat-origin fallback routing (`IMMCAD_API_BASE_URL_FALLBACK`) for automatic retry when primary chat origin is unreachable/tunnel-down.
+- [x] Add frontend backend-proxy contract tests for chat/search outage mapping.
+- [ ] Complete operational tunnel recovery (requires runtime tunnel token/secrets not present in this workspace).
+
+### Review
+- Root cause evidence:
+  - `POST https://immcad.arkiteto.dpdns.org/api/chat` -> `530` with body `error code: 1033`
+  - `GET https://immcad-api.arkiteto.dpdns.org/healthz` -> Cloudflare Tunnel error page (`host ... configured as a Cloudflare Tunnel ... unable to resolve it`)
+  - Local runtime health command fails due missing runtime state: `make backend-cf-codespace-runtime-health` -> missing `/tmp/immcad-codespace-named-origin/state.env`
+- Code updates:
+  - `frontend-web/lib/backend-proxy.ts`
+    - Added `mapCloudflareTunnelOutageResponse(...)` and wired it into upstream response mapping path.
+    - Tunnel `1033` responses now become structured `503` proxy errors with preserved trace id.
+    - Added chat fallback-origin retry path using `backendFallbackBaseUrl` from runtime config.
+    - Added response header marker `x-immcad-origin-fallback: used` when fallback origin serves the request.
+  - `frontend-web/lib/server-runtime-config.ts`
+    - Added optional `IMMCAD_API_BASE_URL_FALLBACK` parsing and hardened-mode HTTPS validation.
+  - `frontend-web/wrangler.jsonc`
+    - Added production fallback origin var for emergency chat failover.
+  - `frontend-web/.dev.vars.example`
+    - Added optional fallback origin variable example.
+- `frontend-web/tests/backend-proxy.contract.test.ts`
+  - Added chat-route contract test for `530` -> `503 PROVIDER_ERROR`.
+  - Added case-search contract test for `530` -> `503 SOURCE_UNAVAILABLE`.
+  - Added fallback-origin retry tests (primary tunnel outage and primary network failure).
+- `frontend-web/tests/server-runtime-config.contract.test.ts`
+  - Added fallback var parsing + hardened validation coverage.
+- `docs/development-environment.md`
+  - Documented optional fallback var usage in Cloudflare env config section.
+- Verification:
+  - `npm run test --prefix frontend-web -- --run tests/backend-proxy.contract.test.ts tests/server-runtime-config.contract.test.ts` -> `37 passed`
+  - `npm run lint --prefix frontend-web -- --file lib/backend-proxy.ts --file tests/backend-proxy.contract.test.ts` -> pass
+  - `npm run lint --prefix frontend-web -- --file lib/server-runtime-config.ts --file tests/server-runtime-config.contract.test.ts` -> pass
+  - `npm run typecheck --prefix frontend-web` -> pass
+
+## Task Plan - 2026-02-27 - Cloudflare Environment Variable Migration Hardening
+
+### Current Focus
+- Complete Cloudflare-first environment variable migration so runtime, CI, and operations no longer depend on Vercel env artifacts for primary paths.
+
+### Plan
+- [x] Add Cloudflare env configuration validation script and wire it into `make quality`.
+- [x] Add runtime-neutral backend source-sync validation target/script and update quality/release workflows.
+- [x] Move Cloudflare runtime script/systemd default env path to `ops/runtime/.env.backend-origin`.
+- [x] Add backend-origin env materialization helper (`prepare_backend_origin_env.sh`) with transitional Vercel import mode.
+- [x] Update deploy/runbook docs and contract tests for Cloudflare env assumptions.
+- [x] Reconcile backend mirror drift reported by source-sync validator (`api/routes/documents.py`, `ingestion/jobs.py`, `services/document_package_service.py`, `sources/canada_courts.py`) and re-run parity gate.
+
+### Review
+- Added:
+  - `scripts/validate_cloudflare_env_configuration.py`
+  - `scripts/validate_backend_runtime_source_sync.py`
+  - `scripts/prepare_backend_origin_env.sh`
+  - `tests/test_validate_cloudflare_env_configuration.py`
+- Updated:
+  - `Makefile` (`cloudflare-env-sync`, `cloudflare-env-validate`, `backend-origin-env-prepare`, `backend-runtime-sync-validate`, `quality`)
+  - `.github/workflows/quality-gates.yml`
+  - `.github/workflows/release-gates.yml`
+  - `tests/test_quality_gates_workflow.py`
+  - `tests/test_release_gates_workflow.py`
+  - `scripts/run_cloudflare_quick_tunnel_bridge.sh`
+  - `scripts/run_cloudflare_named_tunnel_codespace_runtime.sh`
+  - `scripts/install_cloudflare_named_tunnel_systemd_stack.sh`
+  - `scripts/check_cloudflare_named_tunnel_codespace_runtime_health.sh`
+  - `ops/systemd/immcad-backend-local.service`
+  - `frontend-web/wrangler.jsonc`
+  - `backend-cloudflare/wrangler.toml`
+  - `frontend-web/.dev.vars.example`
+  - `tests/test_settings.py`
+  - `frontend-web/tests/server-runtime-config.contract.test.ts`
+  - `docs/development-environment.md`
+  - `docs/release/pre-deploy-command-sheet-2026-02-25.md`
+  - `docs/release/compiled-binder-rollout-playbook.md`
+- Verification evidence:
+  - `./scripts/venv_exec.sh pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_validate_cloudflare_env_configuration.py tests/test_settings.py` -> `118 passed`
+  - `npm run test --prefix frontend-web -- --run tests/server-runtime-config.contract.test.ts` -> `15 passed`
+  - `./scripts/venv_exec.sh ruff check scripts/validate_cloudflare_env_configuration.py scripts/validate_backend_runtime_source_sync.py tests/test_validate_cloudflare_env_configuration.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_settings.py` -> pass
+  - `./scripts/venv_exec.sh python scripts/validate_cloudflare_env_configuration.py` -> pass
+- `./scripts/venv_exec.sh python scripts/validate_backend_runtime_source_sync.py` -> pass
+
+## Task Plan - 2026-02-27 - Step 7: HTTPS Enforcement Guardrails for Document Endpoints
+
+### Current Focus
+- Execute Priority 1 by adding enforceable HTTPS checks for document upload/retrieval paths, while keeping proxy-compatible operation and explicit policy errors.
+
+### Plan
+- [x] Add runtime setting for document-route HTTPS enforcement with hardened-environment defaults.
+- [x] Add middleware check for `/api/documents/*` that accepts trusted proxy HTTPS signals and rejects plain HTTP.
+- [x] Add settings + API scaffold tests for blocked/non-blocked behavior.
+- [x] Update API contract + checklist notes to reflect the runtime control and remaining deployment verification.
+- [x] Sync backend-vercel mirror and verify lint/tests/parity.
+
+### Review
+- Runtime/settings:
+  - `src/immcad_api/settings.py`
+    - Added `document_require_https` setting.
+    - Added `DOCUMENT_REQUIRE_HTTPS` parsing with hardened default (`true` in `production/prod/ci`).
+    - Added hardened-environment validation: rejects `DOCUMENT_REQUIRE_HTTPS=false`.
+  - `src/immcad_api/main.py`
+    - Added HTTPS detection helper supporting:
+      - request scheme
+      - `x-forwarded-proto` / `x-forwarded-protocol`
+      - Cloudflare `cf-visitor` JSON scheme
+    - Added middleware gate for `/api/documents/*`:
+      - returns `400 VALIDATION_ERROR`
+      - `policy_reason=document_https_required`
+      - message: `HTTPS is required for document upload and retrieval endpoints`
+- Tests:
+  - `tests/test_settings.py`
+    - Added defaults/validation coverage for `DOCUMENT_REQUIRE_HTTPS`.
+  - `tests/test_api_scaffold.py`
+    - Added blocked path test when HTTPS enforcement is enabled.
+    - Added allowed path test with `x-forwarded-proto: https`.
+- Docs:
+  - `docs/architecture/api-contracts.md`
+    - Added policy note for `document_https_required`.
+  - `docs/release/document-intake-security-compliance-checklist.md`
+    - Updated TLS line to reflect runtime gate availability and pending deployment verification.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_settings.py tests/test_api_scaffold.py` -> `140 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/main.py src/immcad_api/settings.py tests/test_settings.py tests/test_api_scaffold.py` -> pass
+  - `PYTHONPATH=src uv run ruff check backend-vercel/src/immcad_api/main.py backend-vercel/src/immcad_api/settings.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+## Task Plan - 2026-02-27 - Cloudflare Free Optimization (SCC/FC/Laws Ingestion)
+
+### Current Focus
+- Execute official-source ingestion (SCC JSON, FC RSS, federal laws XML) with Cloudflare Free-safe scheduling and compute usage, while preserving legal-research freshness and correctness.
+
+### Plan
+- [ ] Phase 0 - Lock operating targets (no code changes)
+  - Define freshness SLOs:
+    - FC: `<= 2h` lag
+    - SCC: `<= 6h` lag
+    - Laws XML: `<= 7d` lag
+  - Confirm Cloudflare Free envelope assumptions from current docs:
+    - Workers Free: `100,000` requests/day, `5` Cron Triggers/account, low per-invocation CPU budget.
+  - Freeze source cadences for MVP:
+    - FC hourly or every 2h (default: every 2h)
+    - SCC every 6h
+    - Laws index check daily, full sync twice weekly
+
+- [x] Phase 1 - Correctness-first parser hardening
+  - [x] Fix FC RSS date parsing to consume namespaced `decision:date` (not only `pubDate`).
+  - [x] Normalize FC/SCC event type classification (`new`, `updated`, `translated`, `corrected`).
+  - [x] Surface SCC docket metadata from `_docket_numbers` into internal record/result path.
+  - [x] Add fixture-based tests for live payload shapes and regression assertions.
+
+- [ ] Phase 2 - Cloudflare-safe scheduler design
+  - [x] Implement a single hourly scheduler entrypoint with modulo-gated source runs:
+    - every hour: FC
+    - every 6th hour: SCC
+    - [x] specific UTC hours/days: laws checks (`daily` + `Tue/Fri full-sync window flag`)
+  - [x] Add per-source checkpoints (separate state keys/files) to avoid race/collision across runs.
+  - [x] Add `source_id`-scoped execution mode in ingestion runner to avoid unnecessary cross-source runs.
+
+- [ ] Phase 3 - Bandwidth and CPU minimization
+  - SCC/FC:
+    - fetch feed, fingerprint items by `(source_id, case_id, modified/event, url)`, process deltas only.
+    - [x] short-circuit unchanged payloads via checkpoint checksum to `not_modified` on HTTP `200`.
+  - Laws XML:
+    - [x] use `HEAD` on `Legis.xml` to read `Last-Modified`/`ETag`;
+    - [x] only `GET` + parse full index when changed;
+    - [x] fetch per-Act XML for targeted Acts during laws materialization runs.
+  - Ensure each scheduled invocation does bounded work (chunked batches) with continuation checkpoints.
+
+- [ ] Phase 4 - Ingestion materialization path
+  - Add normalized ingestion outputs for:
+    - FC/SCC decisions (metadata + source event type + document URL)
+    - [x] federal laws sections (`Act -> Part/Heading -> Section`) with version fields (`CurrentToDate`, content hash)
+  - Ensure outputs are consumable by existing citation/export policy gates.
+
+- [ ] Phase 5 - Ops guardrails and rollback
+  - Emit per-source metrics: poll success, delta count, parse failures, lag minutes.
+  - Add alert thresholds for:
+    - sustained fetch failures
+    - parser failure spike
+    - lag SLO breach
+  - Document rollback toggles:
+    - disable laws full sync
+    - widen SCC cadence
+    - FC metadata-only fallback mode
+
+- [ ] Phase 6 - Verification and release
+  - [x] Run targeted tests for parsers, ingestion runner, and policy gating.
+  - Run conformance check against live SCC/FC feeds and capture report artifact.
+  - Validate Cloudflare schedule matrix in staging for 48h and confirm no quota/CPU breaches.
+  - Update docs (`docs/research`, `docs/release`) with final cadence, limits, and runbook links.
+
+### Acceptance Criteria
+- FC records use correct decision dates from live RSS payloads.
+- SCC records include dockets for anchor matching.
+- Hourly scheduler stays within Cloudflare Free limits with zero quota alerts over 48h.
+- Feed delta processing prevents duplicate re-processing for unchanged items.
+- Laws sync does not download `Legis.xml` when `Last-Modified/ETag` unchanged.
+- All new tests and conformance checks pass.
+
+### Review
+- Implemented in this iteration:
+  - `src/immcad_api/sources/canada_courts.py`
+    - Added FC namespaced `decision:date` parsing fallback before `pubDate`.
+    - Added SCC docket extraction (`_docket_numbers` and related fields) and normalized source event classification.
+    - Added source-event classification for Decisia RSS records.
+  - `src/immcad_api/ingestion/jobs.py`
+    - Added `source_ids`-scoped execution filter to `run_ingestion_jobs(...)`.
+    - Added checksum-aware `not_modified` short-circuit on unchanged HTTP `200` payloads.
+  - `scripts/run_ingestion_jobs.py`
+    - Added repeatable CLI flag `--source-id` and wired it to ingestion runner filtering.
+  - `scripts/run_cloudflare_ingestion_hourly.py`
+    - Added Cloudflare-hourly scheduler wrapper that computes UTC window source sets:
+      - FC hourly
+      - SCC every 6 hours
+      - Federal laws daily check + Tue/Fri full-sync window flag
+    - Added dry-run and ingestion-execution modes with JSON report output.
+  - `src/immcad_api/ingestion/jobs.py`
+    - Added source-aware `HEAD` probe for `FEDERAL_LAWS_BULK_XML` to avoid downloading `Legis.xml` when `ETag`/`Last-Modified` is unchanged.
+  - `src/immcad_api/sources/federal_laws_bulk_xml.py`
+    - Added federal laws bulk index parser (`Legis.xml`) and section chunk parser (`Statute/Regulation XML`).
+    - Added registry target-source mapping for laws-backed statute/regulation sources.
+  - `scripts/run_cloudflare_ingestion_hourly.py`
+    - Added federal laws materialization step when laws source ingestion is successful.
+    - Writes JSONL section chunks artifact (`--federal-laws-output`) and includes materialization summary in scheduler report JSON.
+  - `data/sources/canada-immigration/registry.json` + `config/source_policy.yaml`
+    - Added `FEDERAL_LAWS_BULK_XML` official source registration/policy.
+  - Tests:
+    - Extended parser tests for FC namespaced date/event and SCC docket/event parsing.
+    - Added ingestion tests for `source_ids` filtering and checksum unchanged behavior.
+    - Added CLI parse test for repeated `--source-id`.
+    - Added laws `HEAD`-probe ingestion test and hourly scheduler script tests.
+    - Added federal laws parser/materialization tests (`tests/test_federal_laws_bulk_xml.py`).
+- Verification evidence:
+  - `uv run pytest -q tests/test_canada_courts.py tests/test_ingestion_jobs.py tests/test_run_ingestion_jobs_script.py tests/test_official_case_law_client.py` -> `50 passed`.
+  - `uv run ruff check src/immcad_api/sources/canada_courts.py src/immcad_api/ingestion/jobs.py scripts/run_ingestion_jobs.py tests/test_canada_courts.py tests/test_ingestion_jobs.py tests/test_run_ingestion_jobs_script.py` -> pass.
+  - `uv run pytest -q tests/test_canada_courts.py tests/test_official_case_law_client.py tests/test_ingestion_jobs.py tests/test_run_ingestion_jobs_script.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_canada_registry.py tests/test_validate_source_registry.py` -> `62 passed`.
+  - `uv run pytest -q tests/test_canada_courts.py tests/test_official_case_law_client.py tests/test_ingestion_jobs.py tests/test_run_ingestion_jobs_script.py tests/test_cloudflare_ingestion_hourly_script.py tests/test_federal_laws_bulk_xml.py tests/test_canada_registry.py tests/test_validate_source_registry.py tests/test_source_policy.py` -> `86 passed`.
+
+## Task Plan - 2026-02-27 - Step 6: Unreadable-File Remediation Guidance (API + UI)
+
+### Current Focus
+- Close the remaining checklist gap by returning user-actionable remediation guidance for unreadable/failed uploads and rendering that guidance directly in the document workflow UI.
+
+### Plan
+- [x] Extend intake result schema with structured issue details (`code`, `message`, `severity`, `remediation`) while preserving legacy `issues[]`.
+- [x] Populate deterministic remediation guidance for unreadable/type/size intake failures.
+- [x] Update frontend intake types/mapping and render remediation guidance on upload cards.
+- [x] Add backend/frontend regression tests for remediation payload + UI rendering.
+- [x] Sync backend-vercel mirror and run targeted verification/lint/parity checks.
+
+### Review
+- Backend:
+  - `src/immcad_api/schemas.py`
+    - Added `remediation` to `DocumentIssue`.
+    - Added `issue_details` to `DocumentIntakeResult`.
+  - `src/immcad_api/services/document_intake_service.py`
+    - Added deterministic failure templates and `issue_detail_for_failed_result(...)`.
+    - `build_failed_result(...)` now emits structured `issue_details`.
+  - `src/immcad_api/api/routes/documents.py`
+    - Ensured route-built failed results include structured `issue_details`, including fallback patching for custom intake stubs that omit details.
+- Frontend:
+  - `frontend-web/lib/api-client.ts`
+    - Added intake `issue_details` payload typing.
+  - `frontend-web/components/chat/types.ts`
+    - Added `DocumentUploadIssueDetail` and `DocumentUploadItem.issueDetails`.
+  - `frontend-web/components/chat/use-chat-logic.ts`
+    - Mapped `issue_details` into UI state with dedupe + fallback issue-code handling.
+  - `frontend-web/components/chat/related-case-panel.tsx`
+    - Added upload-card guidance line: `Next step: <remediation>`.
+- Tests/docs:
+  - Added/updated backend tests:
+    - `tests/test_document_intake_schemas.py`
+    - `tests/test_document_intake_service.py`
+    - `tests/test_document_routes.py`
+    - `tests/test_document_upload_security.py`
+  - Added frontend contract coverage:
+    - `frontend-web/tests/chat-shell.contract.test.tsx` (`renders remediation guidance for unreadable failed uploads`)
+  - Updated docs:
+    - `docs/architecture/api-contracts.md` (`issue_details[]` contract note)
+    - `docs/release/document-intake-security-compliance-checklist.md` (marked unreadable remediation control complete)
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_intake_schemas.py tests/test_document_intake_service.py tests/test_document_routes.py tests/test_document_upload_security.py` -> `82 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/document_intake_service.py src/immcad_api/api/routes/documents.py tests/test_document_intake_schemas.py tests/test_document_intake_service.py tests/test_document_routes.py tests/test_document_upload_security.py` -> pass
+  - `npm --prefix frontend-web run test -- --run tests/chat-shell.contract.test.tsx tests/document-compilation.contract.test.tsx` -> `24 passed`
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `npm --prefix frontend-web run lint -- --file components/chat/related-case-panel.tsx --file components/chat/types.ts --file components/chat/use-chat-logic.ts --file lib/api-client.ts --file tests/chat-shell.contract.test.tsx` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+## Task Plan - 2026-02-27 - Step 5: Classification Override Audit Trail + Deadline/Channel Guardrail Restoration
+
+### Current Focus
+- Close the remaining checklist gap for classification-override audit coverage and restore intake deadline/submission-channel enforcement paths so document readiness/package behavior remains policy-safe.
+
+### Plan
+- [x] Add a dedicated classification-override API route and record override audit events in request metrics.
+- [x] Extend `/ops/metrics` telemetry with `document_classification_override` counters/policy reasons/audit stream.
+- [x] Preserve filing-context metadata across classification overrides and enforce deadline blocks in package/download routes.
+- [x] Re-verify submission-channel constraints and deadline regression behavior in document route tests.
+- [x] Sync backend-vercel mirror, update checklist/docs, and run verification.
+
+### Review
+- API/route updates:
+  - `src/immcad_api/api/routes/documents.py`
+    - Added `PATCH /api/documents/matters/{matter_id}/classification`.
+    - Added classification-override audit recording (`updated`/`rejected`) with policy reasons.
+    - Preserved `filing_context` in matter updates after override.
+    - Restored package/package-download deadline blocking checks via `_evaluate_filing_deadline_for_matter(...)`.
+    - Preserved submission-channel + filing-context validation behavior and near-limit warnings in intake flow.
+- Telemetry updates:
+  - `src/immcad_api/telemetry/request_metrics.py`
+    - Added `record_document_classification_override_event(...)`.
+    - Added `request_metrics.document_classification_override` snapshot block:
+      - `attempts`, `updated`, `rejected`, `rejected_rate`, `policy_reasons`, `audit_recent`.
+- Schema updates:
+  - `src/immcad_api/schemas.py`
+    - Added `DocumentClassificationOverrideRequest`.
+- Mirror sync:
+  - Synced `backend-vercel/src/immcad_api/` from `src/immcad_api/` and validated parity.
+- Docs/checklist updates:
+  - `docs/release/document-intake-security-compliance-checklist.md`
+    - Marked classification-override audit-trail control complete.
+  - `docs/architecture/api-contracts.md`
+    - Added contract section for `PATCH /api/documents/matters/{matter_id}/classification`.
+  - `docs/release/document-intake-incident-runbook.md`
+    - Added override route scope + classification-override audit fields for incident evidence capture.
+  - `docs/release/incident-observability-runbook.md`
+    - Added `document_classification_override.rejected_rate` to baseline telemetry fields.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_request_metrics.py tests/test_document_matter_store.py` -> `44 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/api/routes/documents.py src/immcad_api/telemetry/request_metrics.py src/immcad_api/schemas.py src/immcad_api/services/document_matter_store.py tests/test_document_routes.py tests/test_request_metrics.py tests/test_document_matter_store.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 80`)
+  - `PYTHONPATH=src uv run pytest -q tests/test_doc_maintenance.py` -> `13 passed`
+
+## Task Plan - 2026-02-27 - Step 4: Contract Regression Closure (Record Sections + Generate Gating)
+
+### Current Focus
+- Close the active regression where `record_sections` completeness fields were dropped from backend package outputs and the frontend blocked package-generation diagnostics when readiness was false.
+
+### Plan
+- [x] Restore backend package `record_sections` contract fields (`section_status`, `slot_statuses`, `missing_document_types`, `missing_reasons`) in both source trees.
+- [x] Update frontend generate-button gating so users can request package diagnostics even when readiness is not yet satisfied.
+- [x] Re-run failing backend/frontend regression suites and confirm green.
+
+### Review
+- Backend:
+  - `src/immcad_api/services/document_package_service.py`
+    - `build_package(...)` now returns hydrated `record_sections` with completeness metadata via `_build_record_sections(...)` + `_hydrate_record_sections(...)`.
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+    - Mirrored the same contract-restoring changes.
+- Frontend:
+  - `frontend-web/components/chat/related-case-panel.tsx`
+    - Removed readiness-based disable condition from Generate Package (`disableGeneratePackage` now only depends on in-flight controls + `matter_id` presence).
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_compilation_routes.py` -> `28 passed`
+  - `npm --prefix frontend-web run test -- --run tests/document-compilation.contract.test.tsx` -> `4 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py tests/test_request_metrics.py tests/test_document_routes.py` -> `66 passed`
+  - `npm --prefix frontend-web run test -- --run tests/document-compilation.contract.test.tsx tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx` -> `31 passed`
+
+## Task Plan - 2026-02-27 - Step 3: Intake Incident Runbook (Triage + Rollback)
+
+### Current Focus
+- Close the remaining operational-readiness gap by publishing an explicit document-intake incident runbook with triage and rollback steps, then link it into release checklists.
+
+### Plan
+- [x] Add a dedicated release runbook for document-intake incidents with alert triggers, evidence capture, triage matrix, stabilization controls, rollback actions, and exit criteria.
+- [x] Link runbook into `document-intake-security-compliance-checklist.md` and mark incident-runbook control complete.
+- [x] Align `incident-observability-runbook.md` threshold guidance with intake-specific alert rules.
+- [x] Run documentation quality verification and record evidence.
+
+### Review
+- Added:
+  - `docs/release/document-intake-incident-runbook.md`
+    - Includes detection thresholds (`document_intake_rejected_rate`, `document_intake_parser_failure_rate`), `make ops-alert-eval` evidence capture, triage decision matrix, stabilization controls (`DOCUMENT_UPLOAD_MAX_*`, `DOCUMENT_ALLOWED_CONTENT_TYPES`), rollback flow, and closure criteria.
+- Updated:
+  - `docs/release/document-intake-security-compliance-checklist.md`
+    - Marked incident runbook requirement complete with direct file reference.
+  - `docs/release/incident-observability-runbook.md`
+    - Added intake metrics to baseline telemetry and intake-threshold bullets in triage guidance.
+- Verification evidence:
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 80`)
+  - `PYTHONPATH=src uv run pytest -q tests/test_doc_maintenance.py` -> `13 passed`
+
+## Task Plan - 2026-02-27 - Step 2: Intake Failure Alert Thresholds (Upload + Parser)
+
+### Current Focus
+- Define and enforce operational alert thresholds for sustained document-upload failures and parser-error spikes using `/ops/metrics` + ops alert evaluator rules.
+
+### Plan
+- [x] Extend intake telemetry with parser-failure aggregation fields in `RequestMetrics`.
+- [x] Wire documents intake route to emit parser-failure counts from deterministic issue codes.
+- [x] Add alert rules for `document_intake_rejected_rate` and `document_intake_parser_failure_rate`.
+- [x] Add/adjust tests for telemetry fields and alert-evaluator behavior with new rules.
+- [x] Sync backend-vercel mirror and verify parity/tests/lint.
+
+### Review
+- Telemetry:
+  - `src/immcad_api/telemetry/request_metrics.py`
+    - Added `parser_failure_files` + `parser_failure_rate` to `document_intake` snapshot payload.
+    - Extended intake event recording to accept and store `parser_failure_files`.
+  - `backend-vercel/src/immcad_api/telemetry/request_metrics.py`
+    - Synced mirrored telemetry implementation.
+- Route wiring:
+  - `src/immcad_api/api/routes/documents.py`
+    - Added generalized issue-code counting helper and now records parser-failure file counts (`file_unreadable`) on intake telemetry events.
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+    - Synced mirrored route instrumentation.
+- Ops alert thresholds:
+  - `config/ops_alert_thresholds.json`
+    - Added `document_intake_rejected_rate` rule.
+    - Added `document_intake_parser_failure_rate` rule.
+    - Bumped config version to `2026-02-27`.
+- Tests:
+  - `tests/test_request_metrics.py`
+    - Added assertions for parser-failure fields in populated and empty snapshots.
+    - Extended compilation/intake telemetry assertions to include new payload shape.
+  - `tests/test_document_routes.py`
+    - Added parser-failure intake telemetry regression (`_UnreadableStubIntakeService` path).
+    - Extended intake telemetry assertions with parser-failure fields.
+  - `tests/test_ops_alert_evaluator.py`
+    - Added explicit breach-case coverage for new intake-failure rules.
+- Checklist update:
+  - `docs/release/document-intake-security-compliance-checklist.md`
+    - Marked alert-threshold item complete for upload/parser failure coverage.
+    - Clarified audit-trail note: package-generation audit exists; classification-override audit remains pending.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_request_metrics.py tests/test_document_routes.py tests/test_ops_alert_evaluator.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py` -> `54 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/telemetry/request_metrics.py src/immcad_api/api/routes/documents.py tests/test_request_metrics.py tests/test_document_routes.py tests/test_ops_alert_evaluator.py backend-vercel/src/immcad_api/telemetry/request_metrics.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+## Task Plan - 2026-02-27 - Step 1: Document Telemetry Hardening (Audit + OCR Warning Aggregation)
+
+### Current Focus
+- Close one production-readiness gap from the security/compliance checklist by hardening document telemetry: full compilation-route audit events and OCR-warning aggregation in `/ops/metrics`.
+
+### Plan
+- [x] Extend `RequestMetrics` document telemetry shape:
+  - add OCR-warning aggregation fields/rates under `document_intake`
+  - add `audit_recent` event stream under `document_compilation`
+- [x] Wire documents routes to emit compilation events for all package/package-download outcomes, including `404 document_matter_not_found`.
+- [x] Include request/matter context in compilation audit events (`trace_id`, `client_id`, `matter_id`, `forum`, `route`, `http_status`).
+- [x] Add/adjust backend tests for telemetry snapshot shape and route instrumentation.
+- [x] Sync mirrored `backend-vercel` source and run targeted verification.
+
+### Review
+- Telemetry model changes:
+  - `src/immcad_api/telemetry/request_metrics.py`
+    - Added document-intake OCR warning aggregation (`files_total`, `ocr_warning_files`, `ocr_warning_rate`) and `rejected_rate`.
+    - Added document-compilation `audit_recent` event stream with optional context (`trace_id`, `client_id`, `matter_id`, `forum`, `route`, `http_status`, `policy_reason`).
+  - `backend-vercel/src/immcad_api/telemetry/request_metrics.py`
+    - Synced mirror with identical telemetry shape.
+- Route instrumentation:
+  - `src/immcad_api/api/routes/documents.py`
+    - Added OCR warning aggregation per intake request via `_count_ocr_warning_results(...)`.
+    - Added compilation telemetry recording across package and package-download success/error paths, including `404 document_matter_not_found`.
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+    - Synced mirror with identical instrumentation.
+- Test coverage updates:
+  - `tests/test_request_metrics.py`
+    - Extended telemetry assertions for new intake rates and compilation `audit_recent` event context.
+  - `tests/test_document_routes.py`
+    - Added route-level compilation telemetry assertions for package/package-download `404/409` outcomes.
+    - Added OCR-warning aggregation assertions for warning intake flow.
+- Checklist update:
+  - `docs/release/document-intake-security-compliance-checklist.md`
+    - Marked operational metrics line as complete now that OCR warning rate and route-level compilation telemetry are exposed.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_request_metrics.py tests/test_document_routes.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py` -> `41 passed`
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/telemetry/request_metrics.py src/immcad_api/api/routes/documents.py tests/test_request_metrics.py tests/test_document_routes.py backend-vercel/src/immcad_api/telemetry/request_metrics.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+
+## Task Plan - 2026-02-27 - Review Follow-Up: Compilation Readiness + Frontend Payload Contract
+
+### Current Focus
+- Resolve review findings around profile-specific package readiness and frontend document-compilation payload handling (pagination object safety + violation key mapping compatibility).
+
+### Plan
+- [x] Fix backend package readiness evaluation to use selected compilation profile requirements.
+- [x] Sync mirrored backend-vercel package service implementation for profile-aware readiness.
+- [x] Ensure frontend compilation rendering safely formats object-shaped `pagination_summary` values.
+- [x] Ensure frontend violation mapping supports backend keys (`violation_code`, `rule_source_url`) and legacy aliases.
+- [x] Run targeted backend/frontend verification and record evidence.
+
+### Review
+- Backend:
+  - `src/immcad_api/services/document_package_service.py`
+    - `build_package(...)` now evaluates readiness with `_evaluate_readiness_for_profile(...)` against the resolved compilation profile.
+    - Added helper logic for required-doc derivation from profile required + conditional rules.
+  - `tests/test_document_package_service.py`
+    - Added regression test `test_package_builder_uses_selected_profile_requirements_for_readiness`.
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+    - Synced profile-aware readiness path and helper imports.
+- Frontend:
+  - `frontend-web/components/chat/use-chat-logic.ts`
+    - `toDocumentCompilationState(...)` maps rule-violation fields with backend-first keys and legacy fallback.
+  - `frontend-web/components/chat/related-case-panel.tsx`
+    - Pagination summary display uses a formatter that safely handles object/string payloads.
+  - `frontend-web/lib/api-client.ts`
+    - `MatterPackageResponsePayload.pagination_summary` now typed for object-or-string payloads.
+  - `frontend-web/components/chat/types.ts`
+    - `DocumentCompilationState.paginationSummary` now typed for object-or-string payloads.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py::test_package_builder_uses_selected_profile_requirements_for_readiness` -> `1 passed`
+  - `npm --prefix frontend-web run test -- tests/document-compilation.contract.test.tsx` -> `3 passed`
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `npm --prefix frontend-web run lint -- --file components/chat/use-chat-logic.ts --file components/chat/related-case-panel.tsx --file components/chat/types.ts --file lib/api-client.ts` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py tests/test_document_intake_schemas.py` -> `57 passed`
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `npm --prefix frontend-web run test -- tests/document-compilation.contract.test.tsx tests/chat-shell.contract.test.tsx` -> `21 passed`
+
+## Task Plan - 2026-02-27 - Frontend Fix #3 Rule-Violation Field Mapping
+
+### Current Focus
+- Fix frontend document-compilation violation mapping so backend payload keys (`violation_code`, `rule_source_url`) populate UI rule codes/source links and blocked-reason messaging.
+
+### Plan
+- [x] Add RED frontend test coverage for backend violation keys in document compilation payload handling.
+- [x] Implement minimal typed frontend mapping support for backend keys (plus legacy aliases).
+- [x] Run targeted frontend verification and record command output.
+
+### Review
+- Updated `frontend-web/tests/document-compilation.contract.test.tsx` so the blocking violation uses backend keys (`violation_code`, `rule_source_url`) while warning violation keeps legacy keys (`code`, `source_url`) to preserve alias coverage.
+- Updated frontend mapping in `frontend-web/components/chat/use-chat-logic.ts` to read backend keys first and fall back to legacy aliases.
+- Updated `frontend-web/lib/api-client.ts` `MatterPackageRuleViolation` typing to include backend and legacy field names as optional fields.
+- Verification evidence:
+  - `npm --prefix /workspaces/lawglance/frontend-web run test -- tests/document-compilation.contract.test.tsx` -> `2 passed`
+  - `npm --prefix /workspaces/lawglance/frontend-web run typecheck` -> pass
+
+## Progress Note - 2026-02-27 - Document Compilation Capability Gap Doc
+- Updated `docs/research/2026-02-27-document-compilation-capability-gap-assessment.md` to mark the compiled binder path as partially implemented behind a feature flag and to document residual limitations.
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_matter_store.py tests/test_document_compilation_e2e.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py` -> `61 passed in 4.23s`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/document_package_service.py src/immcad_api/services/document_matter_store.py src/immcad_api/api/routes/documents.py tests/test_document_package_service.py tests/test_document_matter_store.py tests/test_document_compilation_e2e.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/services/document_matter_store.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `115 passed in 4.72s`
+
+# Task Plan - 2026-02-27 - Frontend UX Priority Execution (Step-by-Step)
+
+## Current Focus
+- Execute the prioritized UX remediation sequence for the production Next.js shell: reduce workflow overload, harden mobile accessibility, improve first-run guidance, simplify intake controls, strengthen export confirmation UX, unify status feedback, and scaffold locale-ready UI behavior.
+
+## Plan
+- [x] P0.1 Add explicit workflow modes in the sidebar (`Research` vs `Documents`) to reduce cognitive load.
+- [x] P0.2 Harden mobile drawer accessibility (focus trap, focus return, and dialog semantics).
+- [x] P0.3 Add first-run guided flow cues with recommended next action.
+- [x] P1.1 Apply progressive disclosure for advanced intake/search fields.
+- [x] P1.2 Replace native `window.confirm` export approval with accessible in-app confirmation modal.
+- [x] P1.3 Consolidate workflow status messaging into one consistent, actionable status surface.
+- [x] P2.1 Add locale-ready frontend scaffolding (user-selectable locale + locale-aware API payloads).
+- [x] Update/extend frontend tests for new UX behavior.
+- [x] Run frontend verification (`npm run test`, `npm run typecheck`, `npm run lint`) and record evidence.
+
+## Review
+- Implemented UX priority stack in production frontend (`frontend-web`) with no backend contract changes.
+- P0 delivery:
+  - Added explicit sidebar workflow tabs (`Research`, `Documents`) with tab semantics in `frontend-web/components/chat/related-case-panel.tsx`.
+  - Hardened mobile drawer accessibility (focus trap, Escape close, focus return, dialog labeling) in `frontend-web/components/chat/chat-shell-container.tsx`.
+  - Added first-run guided action card in composer (`frontend-web/components/chat/message-composer.tsx`).
+- P1 delivery:
+  - Added progressive disclosure for advanced research intake filters in `frontend-web/components/chat/related-case-panel.tsx`.
+  - Replaced native browser export confirmation with an in-app accessible modal in `frontend-web/components/chat/related-case-panel.tsx` and removed `window.confirm` dependency from `frontend-web/components/chat/use-chat-logic.ts`.
+  - Consolidated workflow update messaging via `frontend-web/components/chat/status-banner.tsx` + `frontend-web/components/chat/chat-shell-container.tsx`.
+- P2 delivery:
+  - Added locale-ready UI scaffolding (`en-CA`, `fr-CA`) with persisted selection in `frontend-web/components/chat/chat-header.tsx` and `frontend-web/components/chat/use-chat-logic.ts`.
+  - Wired locale into chat API payload in `frontend-web/components/chat/use-chat-logic.ts`.
+- Test updates:
+  - Updated UX contract/UI tests for tabbed workflows, advanced filter disclosure, and modal export confirmation:
+    - `frontend-web/tests/chat-shell.contract.test.tsx`
+    - `frontend-web/tests/chat-shell.ui.test.tsx`
+- Verification evidence:
+  - `npm --prefix frontend-web run test -- tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/document-compilation.contract.test.tsx` -> `28 passed`
+  - `npm --prefix frontend-web run test` -> `86 passed`
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `npm --prefix frontend-web run lint` -> pass
+# Task Plan - 2026-02-27 - Docs Sync for Document Intake + Matter Scoping
+
+## Current Focus
+- Align public docs with the shipped document intake/readiness/package API behavior, client-scoped matter lookup, and proxy header forwarding.
+
+## Plan
+- [x] Update canonical API contract docs with `/api/documents/*` request/response details and policy/error behavior.
+- [x] Update frontend README with document proxy route and header-forwarding notes.
+- [x] Update feature/development/root docs for requirement metadata + Redis-backed matter-state notes.
+- [x] Run docs quality verification and record evidence.
+
+## Review
+- Updated:
+  - `docs/architecture/api-contracts.md`
+  - `frontend-web/README.md`
+  - `docs/features/document-intake-filing-readiness.md`
+  - `docs/development-environment.md`
+  - `README.md`
+- Incremental progress (2026-02-27):
+  - Updated `docs/research/2026-02-27-document-compilation-capability-gap-assessment.md` to mark `compilation_output_mode` ambiguity mitigation as implemented and explicitly note current runtime mode is `metadata_plan_only`.
+  - Confirmed `docs/research/README.md` references remain correct for current research filenames.
+  - Verification evidence (incremental doc update):
+    - `make docs-audit` -> pass (`[docs-maintenance] audited files: 78`)
+- Verification evidence:
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 75`)
+
+---
+
 # Task Plan - 2026-02-27 - Review Follow-Up: Proxy Client Identity + Redis Decode Guard
 
 ## Current Focus
@@ -2256,3 +2939,414 @@
   - Installed binaries: `tesseract`, `gs`, `qpdf`, `unpaper`, `pngquant`
   - Missing optional binary: `jbig2`
   - Installed Python modules: `pytesseract`, `ocrmypdf`, `PIL`
+
+---
+
+# Task Plan - 2026-02-27 - Rule Research + Rule-Aware Compilation Plan
+
+## Current Focus
+- Research current Federal Court and IRB filing-rule requirements from primary sources, then produce a source-cited implementation plan for rule-aware document compilation.
+
+## Plan
+- [x] Gather and review primary legal sources for Federal Court JR + IRB divisions (`RPD`, `RAD`, `ID`, `IAD`).
+- [x] Identify enforceable requirements relevant to compilation (required documents, order/index/TOC, pagination, translation declarations, timing constraints).
+- [x] Draft a source-cited implementation plan mapped to current codebase components and tests.
+- [x] Save implementation plan under `docs/plans/` for execution handoff.
+
+## Review
+- Research-backed plan saved:
+  - `docs/plans/2026-02-27-rule-aware-document-compilation-implementation-plan.md`
+- Research baseline saved:
+  - `docs/research/2026-02-27-court-tribunal-document-compilation-rules-baseline.md`
+- Primary-source baseline covered:
+  - Federal Court immigration JR rules (SOR/93-22)
+  - Federal Courts Rules (SOR/98-106)
+  - IRB RPD rules (SOR/2012-256)
+  - IRB RAD rules (SOR/2012-257)
+  - IRB ID rules (SOR/2002-229)
+  - IRB IAD rules (current SOR/2022-277)
+
+---
+
+# Task Plan - 2026-02-27 - Rule-Aware Compilation Execution (Parallel Agents)
+
+## Current Focus
+- Execute the rule-aware court/tribunal document compilation implementation plan end-to-end with parallel backend/frontend tracks and verification.
+
+## Plan
+- [x] Implement versioned, source-cited document compilation rule catalog and strict loader validation.
+- [x] Implement rule validator and metadata-first assembly planner (TOC page ranges + package page map).
+- [x] Implement forum record builders and integrate package generation with compilation profiles/rule violations.
+- [x] Expand intake/store/schema contracts for per-file compilation metadata and backward-safe decoding.
+- [x] Upgrade readiness/package routes and frontend UI/contracts for violations, TOC, pagination, and block reasons.
+- [x] Add OCR capability/confidence outputs, compilation telemetry counters, and E2E compilation matrix tests.
+- [x] Sync backend-vercel source mirror and run backend/frontend verification.
+
+## Review
+- New backend policy/assembly modules:
+  - `src/immcad_api/policy/document_compilation_rules.py`
+  - `src/immcad_api/policy/document_compilation_validator.py`
+  - `src/immcad_api/services/document_assembly_service.py`
+  - `src/immcad_api/services/record_builders/*.py`
+  - `data/policy/document_compilation_rules.ca.json`
+- Integrated runtime/API/schema updates:
+  - `src/immcad_api/services/document_package_service.py`
+  - `src/immcad_api/api/routes/documents.py`
+  - `src/immcad_api/schemas.py`
+  - `src/immcad_api/services/document_intake_service.py`
+  - `src/immcad_api/services/document_matter_store.py`
+  - `src/immcad_api/services/document_extraction.py`
+  - `src/immcad_api/telemetry/request_metrics.py`
+- Frontend contract/UX updates:
+  - `frontend-web/lib/api-client.ts`
+  - `frontend-web/components/chat/types.ts`
+  - `frontend-web/components/chat/use-chat-logic.ts`
+  - `frontend-web/components/chat/related-case-panel.tsx`
+  - `frontend-web/tests/document-compilation.contract.test.tsx`
+- Added test suites:
+  - `tests/test_document_compilation_rules.py`
+  - `tests/test_document_compilation_validator.py`
+  - `tests/test_document_assembly_service.py`
+  - `tests/test_record_builders.py`
+  - `tests/test_document_compilation_state.py`
+  - `tests/test_document_compilation_routes.py`
+  - `tests/test_document_compilation_e2e.py`
+  - `tests/test_document_extraction_limits.py`
+- Verification evidence:
+  - `make test-document-compilation` -> `71 passed`
+  - `PYTHONPATH=src uv run pytest -q ...` (document compilation matrix) -> `96 passed`
+  - `npm --prefix frontend-web run test -- tests/document-compilation.contract.test.tsx tests/chat-shell.contract.test.tsx` -> `20 passed`
+  - `npm --prefix frontend-web run lint -- --file lib/api-client.ts --file components/chat/types.ts --file components/chat/use-chat-logic.ts --file components/chat/related-case-panel.tsx --file tests/document-compilation.contract.test.tsx` -> pass
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `PYTHONPATH=src uv run ruff check <changed src/backend-vercel/tests files>` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+
+---
+
+# Task Plan - 2026-02-27 - Runtime Compilation Profile Selection + Capability Gap Documentation
+
+## Current Focus
+- Complete runtime-selectable compilation profile behavior (FC JR leave vs hearing and persisted profile selection), preserve compatibility with existing package-service test stubs, and publish a plain-language capability/gap document for court/tribunal compilation.
+
+## Plan
+- [x] Finish `DocumentPackageService` profile resolver API and profile-aware rule-evaluation flow.
+- [x] Add route compatibility shims for legacy package-service stubs (missing resolver or `compilation_profile_id` arg).
+- [x] Finalize schema/store support for `compilation_profile_id` persistence + decoding.
+- [x] Add/extend backend tests for resolver behavior, route validation, legacy stub compatibility, and store round-trip behavior.
+- [x] Sync `backend-vercel` mirrored source files.
+- [x] Publish capability-gap documentation covering can-do vs cannot-yet, key risks, and prioritized improvements.
+
+## Review
+- Parallel execution via subagents (independent ownership tracks):
+  - Service/profile resolver + rule-evaluation compatibility.
+  - Route intake/package compatibility + invalid profile tests.
+  - Schema/store persistence typing + round-trip tests.
+- Runtime profile selection completed:
+  - Intake accepts optional `compilation_profile_id` and validates forum/profile consistency when resolver is available.
+  - Selected profile is persisted in matter store and reused by readiness/package endpoints.
+  - Package service now exposes `resolve_compilation_profile_id(...)` and defaults by forum when no profile is requested.
+- Backward compatibility preserved:
+  - Package service now handles monkeypatched legacy `_evaluate_rule_violations(...)` signatures used by tests.
+  - Route logic falls back when custom package stubs do not implement resolver/profile-aware build signature.
+- New documentation published:
+  - `docs/research/2026-02-27-document-compilation-capability-gap-assessment.md`
+  - `docs/research/README.md` index updated.
+- Progress note (2026-02-27):
+  - Updated `docs/research/2026-02-27-document-compilation-capability-gap-assessment.md` to reflect ranked classification candidates + confidence as implemented, and revised classification risk wording to partially mitigated/residual risk.
+  - Added integration coverage for profile defaults/overrides and persisted matter-state behavior in `tests/test_document_compilation_e2e.py`:
+    - default profile assignment by forum at intake
+    - `federal_court_jr_hearing` override persistence through readiness/package responses
+  - Updated the P0 roadmap status in `docs/research/2026-02-27-document-compilation-capability-gap-assessment.md` to mark profile-selection integration tests as implemented.
+  - Added `record_sections` contract support in readiness/package responses and wired forum/profile record-builder sections through package generation, with builder doc-type labels aligned to classifier/catalog vocabulary.
+  - Updated capability-gap documentation to mark record-section wiring as implemented and narrow the remaining gap to typed-slot validation + frontend rendering.
+  - Added a feature-flagged compiled binder metadata path:
+    - persisted per-file source payload bytes in matter state (`source_files`)
+    - package/readiness now surface `compiled_artifact` metadata when `IMMCAD_ENABLE_COMPILED_PDF` is enabled and source coverage is complete
+    - default runtime remains `metadata_plan_only` when flag is off or source coverage is incomplete
+- Verification evidence:
+  - `uv run pytest -q tests/test_document_intake_service.py tests/test_document_intake_schemas.py tests/test_document_routes.py tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_matter_store.py` -> `63 passed`
+  - `uv run pytest -q tests/test_document_compilation_e2e.py tests/test_document_routes.py tests/test_document_compilation_routes.py` -> `29 passed`
+  - `uv run pytest -q tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py tests/test_record_builders.py tests/test_document_compilation_e2e.py tests/test_document_routes.py` -> `76 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_matter_store.py tests/test_document_compilation_e2e.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py` -> `61 passed`
+  - `uv run ruff check src/immcad_api/services/document_intake_service.py src/immcad_api/schemas.py src/immcad_api/api/routes/documents.py src/immcad_api/services/document_package_service.py tests/test_document_intake_service.py tests/test_document_intake_schemas.py tests/test_document_routes.py tests/test_document_package_service.py tests/test_document_compilation_routes.py backend-vercel/src/immcad_api/services/document_intake_service.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/api/routes/documents.py backend-vercel/src/immcad_api/services/document_package_service.py` -> pass
+  - `uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/document_package_service.py src/immcad_api/api/routes/documents.py src/immcad_api/services/record_builders/*.py tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py tests/test_record_builders.py tests/test_document_compilation_e2e.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/api/routes/documents.py backend-vercel/src/immcad_api/services/record_builders/*.py` -> pass
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/document_package_service.py src/immcad_api/services/document_matter_store.py src/immcad_api/api/routes/documents.py tests/test_document_package_service.py tests/test_document_matter_store.py tests/test_document_compilation_e2e.py tests/test_document_compilation_routes.py tests/test_document_intake_schemas.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/services/document_matter_store.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `109 passed`
+  - `make test-document-compilation` -> `115 passed`
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 78`)
+
+---
+
+# Task Plan - 2026-02-27 - Compiled Binder Download Endpoint (Step-by-Step)
+
+## Current Focus
+- Expose a production-safe download path for compiled binder PDFs so clients can retrieve actual PDF bytes when a matter is ready and compiled mode is enabled.
+
+## Plan
+- [x] Add package-service API for compiled binder payload generation with metadata consistency checks.
+- [x] Add backend route (`/api/documents/matters/{matter_id}/package/download`) with policy-safe error handling and PDF response headers.
+- [x] Add backend tests for success, blocked-not-ready, disabled/unavailable binder, and not-found matter cases.
+- [x] Mirror backend changes to `backend-vercel` source tree and validate source sync.
+- [x] Add frontend proxy route and API client method for binder download, with contract tests.
+- [x] Run targeted and broader verification and record evidence.
+
+## Review
+- Backend service/runtime:
+  - Added `DocumentPackageService.build_compiled_binder(...)` to return `(package, payload_bytes)` for eligible matters, with payload-derived artifact metadata alignment.
+  - Added compiled binder download route:
+    - `GET /api/documents/matters/{matter_id}/package/download`
+    - `404` when matter is missing
+    - `409 POLICY_BLOCKED document_package_not_ready` when package is incomplete/blocked
+    - `409 POLICY_BLOCKED document_compiled_artifact_unavailable` when compiled output is unavailable
+    - `200 application/pdf` with `content-disposition` when successful
+- Frontend integration:
+  - Added proxy route `frontend-web/app/api/documents/matters/[matterId]/package/download/route.ts`.
+  - Added API client method `downloadMatterPackagePdf(matterId)` returning blob/filename/content type.
+  - Added/updated contract tests for new route and client behavior.
+- Verification evidence:
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/document_package_service.py src/immcad_api/api/routes/documents.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py backend-vercel/src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py` -> `53 passed`
+  - `npm --prefix frontend-web run test -- tests/document-package-download-route.contract.test.ts tests/api-client.contract.test.ts` -> `17 passed`
+  - `npm --prefix frontend-web run lint -- --file app/api/documents/matters/[matterId]/package/download/route.ts --file lib/api-client.ts --file tests/document-package-download-route.contract.test.ts --file tests/api-client.contract.test.ts` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `123 passed`
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 78`)
+
+---
+
+# Task Plan - 2026-02-27 - Compiled Binder Download UX Wiring
+
+## Current Focus
+- Complete frontend chat-panel UX for compiled binder download so users can trigger PDF download directly from the document workflow once compiled output is available.
+
+## Plan
+- [x] Wire document download state and callback through chat hook/container/panel props.
+- [x] Add a document-workflow "Download binder PDF" action with proper disable/enable gating for compiled mode.
+- [x] Surface compiled-binder availability metadata in the panel summary.
+- [x] Add contract test coverage for end-to-end compiled binder download behavior.
+- [x] Run frontend tests, lint, and typecheck for touched files.
+
+## Review
+- Frontend workflow updates:
+  - `frontend-web/components/chat/related-case-panel.tsx`
+    - Added `Download binder PDF` button in document actions.
+    - Added disable gating to require compiled output + artifact metadata.
+    - Included download state in control locking and workflow-mode activation.
+    - Added compiled artifact summary text (`filename`, `pageCount`) and metadata-only guidance text.
+  - `frontend-web/components/chat/use-chat-logic.ts`
+    - (Already wired in prior step) uses `downloadMatterPackagePdf` callback and browser-download helper.
+- Progress note (2026-02-27):
+  - Added a near-action download hint/tooltip message for metadata-only compilation mode:
+    - "Download unavailable: compilation mode is metadata only. Generate a compiled PDF binder to enable download."
+  - Extended contract coverage to assert the metadata-only disabled state for `Download binder PDF`.
+- Contract coverage:
+  - `frontend-web/tests/chat-shell.contract.test.tsx`
+    - Added `downloads compiled binder PDF when compiled output is available` scenario covering:
+      - intake -> readiness -> package generation (`compiled_pdf`) -> download call
+      - browser download trigger (`URL.createObjectURL`, anchor click, revoke)
+      - support-context endpoint update for package download.
+- Verification evidence:
+  - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx tests/chat-shell.ui.test.tsx tests/document-compilation.contract.test.tsx` -> `30 passed`
+  - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx` -> `19 passed`
+  - `npm --prefix frontend-web run lint -- --file components/chat/related-case-panel.tsx --file tests/chat-shell.contract.test.tsx` -> pass
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `make test-document-compilation` -> `123 passed`
+
+---
+
+# Task Plan - 2026-02-27 - Top 5 Priorities (Document Compilation)
+
+## Current Focus
+- Prioritize the next highest-impact steps to move from metadata-first compilation to production-safe, court/tribunal-ready document assembly and broader immigration coverage.
+
+## Top 5 Priorities
+1. Promote compiled binder generation from feature-flag path to production-safe default.
+2. Close document classification ambiguity with deterministic doc-type normalization and review workflow gates.
+3. Complete rule-to-record section wiring across all forums/profiles (FC JR + IRB divisions) with consistent section outputs.
+4. Implement procedural timing/deadline validation and forum/channel submission preflight checks.
+5. Expand profile coverage beyond current litigation forums (IAD subtype profiles first, then non-litigation immigration application packages).
+
+## Execution Plan
+- [x] Priority 1: Compiled Binder Production Path
+  - [x] Finalize merge/bookmark/page-stamp pipeline and artifact integrity validation.
+  - [x] Add CI matrix coverage for compiled mode (mixed scans, malformed PDFs, OCR-heavy inputs).
+  - [x] Define rollout controls: feature flag guardrails, canary metrics, and rollback playbook.
+- [x] Priority 2: Classification Reliability
+  - [x] Introduce canonical doc-type dictionary shared by classifier, rules catalog, and record builders.
+  - [x] Enforce confidence thresholds that trigger explicit `needs_review` instead of silent auto-assignment.
+  - [x] Add audit telemetry for low-confidence classifications by forum/profile.
+- [x] Priority 3: Record Section Completeness
+  - [x] Map every required/conditional rule item to a deterministic record section slot.
+  - [x] Ensure readiness/package responses include section-level status + missing rationale.
+  - [x] Add frontend rendering for section completeness and section-level remediation guidance.
+- [x] Priority 4: Deadline + Preflight Enforcement
+  - [x] Add inputs and validators for decision/hearing/service dates and filing windows.
+  - [x] Add channel constraints (file count/size limits and upload preflight blocks/warnings).
+  - [x] Add deterministic tests per forum/profile for deadline pass/fail and override behavior.
+- [x] Priority 5: Coverage Expansion
+  - [x] Split `iad` into subtype profiles (sponsorship/residency/admissibility) with source-cited constraints.
+  - [x] Add first non-litigation application profile family (start with highest-volume immigration package).
+  - [x] Publish profile support matrix and explicit “supported vs unsupported” API/UI messaging.
+
+## Sequencing / Dependency Order
+1. Priority 1 and Priority 2 in parallel (shared release gate).
+2. Priority 3 after Priority 2 canonical dictionary lands.
+3. Priority 4 after Priority 1 baseline is stable in compiled mode.
+4. Priority 5 after Priorities 1-4 are production-safe.
+
+## Verification Gates
+- Gate A (Core reliability): compiled-mode matrix green + no blocker regressions in readiness/package routes.
+- Gate B (Policy correctness): rule/section/deadline tests deterministic across FC JR + IRB profiles.
+- Gate C (Runtime safety): telemetry dashboards + alert thresholds + rollback drill complete.
+
+## Progress Note (2026-02-27)
+- Priority 1 / substep complete:
+  - Compiled binder generation now writes deterministic PDF bookmarks from assembly TOC and page stamps (`IMMCAD page X of Y`) into output artifacts.
+  - Added compiled artifact integrity validation gate:
+    - compiled page count must match assembly plan page map
+    - compiled TOC structure/title/page anchors must match expected assembly TOC
+    - fallback to `metadata_plan_only` when integrity validation fails
+  - Added compiled-mode matrix coverage for:
+    - mixed PDF + image payload sources (including image->PDF conversion path)
+    - malformed payload fallback to `metadata_plan_only`
+    - multipage OCR-heavy style payload handling with deterministic page stamps
+  - Fixed source-conversion bug in compiled mode: payloads opened as non-PDF documents are now rejected in the raw-PDF open path (`is_pdf` guard), then converted via inferred image type when applicable.
+  - Added operational rollout controls playbook for compiled binder mode:
+    - feature-flag guardrails
+    - canary success metrics and thresholds
+    - explicit rollback criteria and procedure
+- Priority 2 / substep complete:
+  - Added canonical document-type registry with normalization/validation helpers and integrated it across:
+    - rules loader validation (`required/conditional/order/pagination` document-type fields)
+    - record-builder section definitions
+    - intake classification output normalization
+  - Enforced low-confidence review gating in intake pipeline:
+    - configurable threshold (`minimum_classification_confidence_for_auto_processing`)
+    - low-confidence results now emit `classification_low_confidence` and set `quality_status=needs_review`
+  - Extended telemetry for low-confidence classification monitoring:
+    - added `low_confidence_classification_files` and `low_confidence_classification_rate` to intake metrics snapshots/events
+- Priority 3 / substep complete:
+  - Added deterministic rule-to-section slot mapping in package assembly:
+    - each required/conditional compilation rule document now resolves to exactly one record section slot
+    - package build now raises a deterministic mapping error if a rule document is unmapped/ambiguous
+  - Extended `record_sections` response contract with section-level completeness metadata:
+    - `section_status`
+    - `slot_statuses` (`document_type`, `status`, `rule_scope`, `reason`)
+    - `missing_document_types`
+    - `missing_reasons`
+  - Wired section completeness through package + readiness response payloads and added frontend rendering:
+    - new “Record section completeness” panel in document workflow
+    - explicit missing-slot guidance and remediation copy surfaced in UI
+- Priority 4 / substep complete:
+  - Added filing deadline policy evaluation for profile-specific windows with override + approaching warning behavior.
+  - Added intake schema/route inputs for `submission_channel`, `decision_date`, `hearing_date`, `service_date`, `filing_date`, and `deadline_override_reason`.
+  - Persisted `filing_context` in matter storage and preserved it through classification overrides.
+  - Enforced deadline blocking in readiness and package/package-download routes, including package-builder blocking injection for deterministic readiness parity.
+  - Added deterministic tests for deadline pass/fail/override and channel-limit preflight behavior.
+- Priority 5 / substep complete:
+  - Added three subtype-aware IAD profiles to the catalog:
+    - `iad_sponsorship`
+    - `iad_residency`
+    - `iad_admissibility`
+  - Extended compilation profile literals and route validation path to accept new IAD subtype IDs.
+  - Added subtype support in deadline-policy evaluation and record-section builders.
+  - Kept `iad` as the default forum profile for backward compatibility while enabling explicit subtype selection.
+  - Added first non-litigation forum/profile path:
+    - forum: `ircc_application`
+    - default profile: `ircc_pr_card_renewal`
+  - Added explicit profile support matrix API endpoint:
+    - `GET /api/documents/support-matrix`
+  - Added explicit supported-vs-unsupported profile messaging:
+    - actionable intake validation message for unsupported profile selection
+    - frontend documents panel copy listing currently supported and unsupported profile families.
+- Files updated:
+  - `src/immcad_api/services/document_package_service.py`
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+  - `tests/test_document_package_service.py`
+  - `docs/release/compiled-binder-rollout-playbook.md`
+  - `src/immcad_api/policy/document_types.py`
+  - `src/immcad_api/policy/document_compilation_rules.py`
+  - `src/immcad_api/services/document_intake_service.py`
+  - `src/immcad_api/services/record_builders/__init__.py`
+  - `src/immcad_api/telemetry/request_metrics.py`
+  - `src/immcad_api/api/routes/documents.py`
+  - `tests/test_document_intake_service.py`
+  - `tests/test_document_compilation_rules.py`
+  - `tests/test_record_builders.py`
+  - `tests/test_request_metrics.py`
+  - `backend-vercel/src/immcad_api/policy/document_types.py`
+  - `backend-vercel/src/immcad_api/policy/document_compilation_rules.py`
+  - `backend-vercel/src/immcad_api/services/document_intake_service.py`
+  - `backend-vercel/src/immcad_api/services/record_builders/__init__.py`
+  - `backend-vercel/src/immcad_api/telemetry/request_metrics.py`
+  - `backend-vercel/src/immcad_api/api/routes/documents.py`
+  - `src/immcad_api/schemas.py`
+  - `src/immcad_api/services/document_package_service.py`
+  - `backend-vercel/src/immcad_api/schemas.py`
+  - `backend-vercel/src/immcad_api/services/document_package_service.py`
+  - `tests/test_document_intake_schemas.py`
+  - `tests/test_document_compilation_routes.py`
+  - `tests/test_document_package_service.py`
+  - `tests/test_record_builders.py`
+  - `frontend-web/lib/api-client.ts`
+  - `frontend-web/components/chat/types.ts`
+  - `frontend-web/components/chat/use-chat-logic.ts`
+  - `frontend-web/components/chat/related-case-panel.tsx`
+  - `frontend-web/tests/document-compilation.contract.test.tsx`
+  - `src/immcad_api/policy/document_filing_deadlines.py`
+  - `backend-vercel/src/immcad_api/policy/document_filing_deadlines.py`
+  - `src/immcad_api/services/document_matter_store.py`
+  - `backend-vercel/src/immcad_api/services/document_matter_store.py`
+  - `tests/test_document_filing_deadlines.py`
+  - `data/policy/document_compilation_rules.ca.json`
+  - `src/immcad_api/services/record_builders/__init__.py`
+  - `backend-vercel/src/immcad_api/services/record_builders/__init__.py`
+  - `tests/test_document_compilation_rules.py`
+  - `tests/test_record_builders.py`
+  - `tests/test_document_compilation_e2e.py`
+  - `src/immcad_api/policy/document_requirements.py`
+  - `backend-vercel/src/immcad_api/policy/document_requirements.py`
+  - `src/immcad_api/services/record_builders/ircc_application.py`
+  - `backend-vercel/src/immcad_api/services/record_builders/ircc_application.py`
+  - `frontend-web/components/chat/related-case-panel.tsx`
+  - `frontend-web/lib/api-client.ts`
+  - `tests/test_document_policy_matrix.py`
+- Verification evidence:
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_package_service.py` -> `23 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_compilation_e2e.py tests/test_document_compilation_routes.py` -> `35 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/services/document_package_service.py tests/test_document_package_service.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `128 passed`
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 79`)
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_intake_service.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_request_metrics.py` -> `30 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_routes.py tests/test_document_intake_schemas.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py tests/test_document_package_service.py` -> `85 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/document_types.py src/immcad_api/policy/document_compilation_rules.py src/immcad_api/services/document_intake_service.py src/immcad_api/services/record_builders/__init__.py src/immcad_api/telemetry/request_metrics.py src/immcad_api/api/routes/documents.py tests/test_document_intake_service.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_request_metrics.py backend-vercel/src/immcad_api/policy/document_types.py backend-vercel/src/immcad_api/policy/document_compilation_rules.py backend-vercel/src/immcad_api/services/document_intake_service.py backend-vercel/src/immcad_api/services/record_builders/__init__.py backend-vercel/src/immcad_api/telemetry/request_metrics.py backend-vercel/src/immcad_api/api/routes/documents.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `133 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_intake_schemas.py tests/test_document_compilation_routes.py tests/test_document_package_service.py tests/test_record_builders.py tests/test_document_compilation_e2e.py` -> `77 passed`
+  - `npm --prefix frontend-web run test -- tests/document-compilation.contract.test.tsx` -> `4 passed`
+  - `npm --prefix frontend-web run test -- tests/chat-shell.contract.test.tsx` -> `19 passed`
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `npm --prefix frontend-web run lint -- --file components/chat/related-case-panel.tsx --file components/chat/use-chat-logic.ts --file components/chat/types.ts --file lib/api-client.ts --file tests/document-compilation.contract.test.tsx` -> pass
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/schemas.py src/immcad_api/services/document_package_service.py tests/test_document_intake_schemas.py tests/test_document_compilation_routes.py tests/test_document_package_service.py tests/test_record_builders.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/services/document_package_service.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `135 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_filing_deadlines.py tests/test_document_intake_schemas.py tests/test_document_routes.py` -> `72 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_matter_store.py tests/test_document_package_service.py tests/test_document_compilation_routes.py tests/test_document_compilation_e2e.py` -> `47 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/document_filing_deadlines.py src/immcad_api/api/routes/documents.py tests/test_document_filing_deadlines.py tests/test_document_intake_schemas.py tests/test_document_routes.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `147 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_intake_schemas.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_document_filing_deadlines.py tests/test_document_compilation_e2e.py` -> `86 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/schemas.py src/immcad_api/policy/document_filing_deadlines.py src/immcad_api/services/record_builders/__init__.py tests/test_document_intake_schemas.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_document_filing_deadlines.py tests/test_document_compilation_e2e.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/policy/document_filing_deadlines.py backend-vercel/src/immcad_api/services/record_builders/__init__.py` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `157 passed`
+  - `PYTHONPATH=src uv run pytest -q tests/test_document_intake_schemas.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_document_policy_matrix.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_compilation_e2e.py` -> `145 passed`
+  - `PYTHONPATH=src uv run ruff check src/immcad_api/policy/document_requirements.py src/immcad_api/schemas.py src/immcad_api/policy/document_compilation_rules.py src/immcad_api/services/document_package_service.py src/immcad_api/api/routes/documents.py src/immcad_api/services/record_builders/__init__.py src/immcad_api/services/record_builders/ircc_application.py tests/test_document_intake_schemas.py tests/test_document_compilation_rules.py tests/test_record_builders.py tests/test_document_policy_matrix.py tests/test_document_package_service.py tests/test_document_routes.py tests/test_document_compilation_e2e.py backend-vercel/src/immcad_api/policy/document_requirements.py backend-vercel/src/immcad_api/schemas.py backend-vercel/src/immcad_api/policy/document_compilation_rules.py backend-vercel/src/immcad_api/services/document_package_service.py backend-vercel/src/immcad_api/api/routes/documents.py backend-vercel/src/immcad_api/services/record_builders/__init__.py backend-vercel/src/immcad_api/services/record_builders/ircc_application.py` -> pass
+  - `npm --prefix frontend-web run test -- --run tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/document-compilation.contract.test.tsx` -> `32 passed`
+  - `npm --prefix frontend-web run lint -- --file components/chat/related-case-panel.tsx --file lib/api-client.ts` -> pass
+  - `npm --prefix frontend-web run typecheck` -> pass
+  - `PYTHONPATH=src uv run python scripts/validate_backend_vercel_source_sync.py` -> pass
+  - `make test-document-compilation` -> `168 passed`
+  - `make docs-audit` -> pass (`[docs-maintenance] audited files: 80`)
+  - `PYTHONPATH=src uv run pytest -q tests/test_doc_maintenance.py` -> `13 passed`

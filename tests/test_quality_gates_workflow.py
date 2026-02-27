@@ -18,7 +18,8 @@ REQUIRED_FRONTEND_QUALITY_STEPS = [
 REQUIRED_SECURITY_AND_INGESTION_STEPS = [
     "Dependency review (PR)",
     "Backend typecheck",
-    "Validate backend-vercel source sync",
+    "Validate Cloudflare environment configuration",
+    "Validate backend runtime source sync",
     "Run ingestion smoke checks",
     "Upload ingestion smoke artifact",
 ]

@@ -507,6 +507,10 @@ class LawyerCaseResearchService:
             decision_date=case_result.decision_date,
             url=case_result.url,
             document_url=case_result.document_url,
+            docket_numbers=(
+                list(case_result.docket_numbers) if case_result.docket_numbers else None
+            ),
+            source_event_type=case_result.source_event_type,
             pdf_status=pdf_status,
             pdf_reason=pdf_reason,
             export_allowed=export_allowed,

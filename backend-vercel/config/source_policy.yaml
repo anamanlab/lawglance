@@ -127,6 +127,15 @@ sources:
   license_notes: Ministerial instruction page; cite source URLs.
   review_owner: legal-compliance
   review_date: '2026-02-24'
+- source_id: FEDERAL_LAWS_BULK_XML
+  source_class: official
+  internal_ingest_allowed: true
+  production_ingest_allowed: true
+  answer_citation_allowed: true
+  export_fulltext_allowed: true
+  license_notes: Justice Laws Website bulk XML index under Open Government Licence.
+  review_owner: legal-compliance
+  review_date: '2026-02-27'
 - source_id: CANLII_CASE_BROWSE
   source_class: unofficial
   internal_ingest_allowed: true

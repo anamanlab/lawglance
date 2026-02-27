@@ -448,3 +448,148 @@ def test_run_ingestion_jobs_timeout_override_applies_to_all_sources(
     assert report.total == 1
     assert report.succeeded == 1
     assert captured["timeout"] == 11.0
+
+
+def test_run_ingestion_jobs_filters_by_explicit_source_ids(tmp_path: Path) -> None:
+    registry_path = _write_registry(tmp_path / "registry.json")
+    seen_source_ids: list[str] = []
+
+    def fetcher(source: SourceRegistryEntry, _: FetchContext) -> FetchResult:
+        seen_source_ids.append(source.source_id)
+        return FetchResult(payload=b"ok", http_status=200)
+
+    report = run_ingestion_jobs(
+        registry_path=registry_path,
+        source_ids=["SRC_WEEKLY"],
+        fetcher=fetcher,
+    )
+
+    assert report.total == 1
+    assert report.succeeded == 1
+    assert report.results[0].source_id == "SRC_WEEKLY"
+    assert seen_source_ids == ["SRC_WEEKLY"]
+
+
+def test_run_ingestion_jobs_marks_unchanged_checksum_as_not_modified(tmp_path: Path) -> None:
+    registry_path = _write_registry(tmp_path / "registry.json")
+    state_path = tmp_path / "state.json"
+
+    def initial_fetcher(_: SourceRegistryEntry, __: FetchContext) -> FetchResult:
+        return FetchResult(payload=b"daily-v1", http_status=200)
+
+    first_report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        state_path=state_path,
+        fetcher=initial_fetcher,
+    )
+    assert first_report.total == 1
+    assert first_report.succeeded == 1
+    assert first_report.not_modified == 0
+
+    def unchanged_fetcher(source: SourceRegistryEntry, context: FetchContext) -> FetchResult:
+        assert source.source_id == "SRC_DAILY"
+        assert context.etag is None
+        assert context.last_modified is None
+        return FetchResult(payload=b"daily-v1", http_status=200)
+
+    second_report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        state_path=state_path,
+        fetcher=unchanged_fetcher,
+    )
+
+    assert second_report.total == 1
+    assert second_report.succeeded == 0
+    assert second_report.not_modified == 1
+    assert second_report.failed == 0
+    assert second_report.results[0].status == "not_modified"
+    assert second_report.results[0].bytes_fetched == 0
+
+
+def test_run_ingestion_jobs_uses_head_probe_for_federal_laws_bulk_xml(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_path = tmp_path / "registry.json"
+    state_path = tmp_path / "state.json"
+    registry_payload = {
+        "version": "2026-02-27",
+        "jurisdiction": "ca",
+        "sources": [
+            {
+                "source_id": "FEDERAL_LAWS_BULK_XML",
+                "source_type": "statute",
+                "instrument": "Justice Laws website bulk XML index",
+                "url": "https://laws-lois.justice.gc.ca/eng/XML/Legis.xml",
+                "update_cadence": "daily",
+            }
+        ],
+    }
+    registry_path.write_text(json.dumps(registry_payload), encoding="utf-8")
+
+    calls: list[str] = []
+    etag = '"laws-v1"'
+    last_modified = "Wed, 18 Feb 2026 16:43:54 GMT"
+
+    class _FakeResponse:
+        def __init__(
+            self,
+            *,
+            status_code: int,
+            headers: dict[str, str] | None = None,
+            content: bytes = b"",
+        ) -> None:
+            self.status_code = status_code
+            self.headers = headers or {}
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _FakeClient:
+        def __enter__(self) -> "_FakeClient":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def head(self, url: str, headers=None, timeout=None) -> _FakeResponse:
+            del url, headers, timeout
+            calls.append("HEAD")
+            return _FakeResponse(
+                status_code=200,
+                headers={"ETag": etag, "Last-Modified": last_modified},
+            )
+
+        def get(self, url: str, headers=None, timeout=None) -> _FakeResponse:
+            del url, headers, timeout
+            calls.append("GET")
+            return _FakeResponse(
+                status_code=200,
+                headers={"ETag": etag, "Last-Modified": last_modified},
+                content=b"<Legis />",
+            )
+
+    monkeypatch.setattr("immcad_api.ingestion.jobs.httpx.Client", lambda *args, **kwargs: _FakeClient())
+
+    first_report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        state_path=state_path,
+    )
+    assert first_report.total == 1
+    assert first_report.succeeded == 1
+    assert calls == ["HEAD", "GET"]
+
+    second_report = run_ingestion_jobs(
+        cadence="daily",
+        registry_path=registry_path,
+        state_path=state_path,
+    )
+    assert second_report.total == 1
+    assert second_report.succeeded == 0
+    assert second_report.not_modified == 1
+    assert second_report.results[0].status == "not_modified"
+    assert calls == ["HEAD", "GET", "HEAD"]

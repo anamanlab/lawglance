@@ -101,6 +101,13 @@
       "update_cadence": "daily"
     },
     {
+      "source_id": "FEDERAL_LAWS_BULK_XML",
+      "source_type": "statute",
+      "instrument": "Justice Laws Website bulk XML index",
+      "url": "https://laws-lois.justice.gc.ca/eng/XML/Legis.xml",
+      "update_cadence": "daily"
+    },
+    {
       "source_id": "SCC_DECISIONS",
       "source_type": "case_law",
       "instrument": "Supreme Court of Canada decisions feed",

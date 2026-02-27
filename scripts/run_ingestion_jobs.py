@@ -43,6 +43,15 @@ def parse_args() -> argparse.Namespace:
         help="Select which cadence bucket to execute.",
     )
     parser.add_argument(
+        "--source-id",
+        action="append",
+        default=None,
+        help=(
+            "Optional source_id filter. Repeat the flag to run multiple specific sources "
+            "(for example: --source-id FC_DECISIONS --source-id SCC_DECISIONS)."
+        ),
+    )
+    parser.add_argument(
         "--registry",
         default=None,
         help="Optional path to source registry JSON (defaults to canonical registry).",
@@ -105,6 +114,7 @@ def main() -> int:
     report = run_ingestion_jobs(
         cadence=cadence,
         registry_path=args.registry,
+        source_ids=args.source_id,
         source_policy_path=args.source_policy,
         fetch_policy_path=args.fetch_policy,
         environment=args.environment,

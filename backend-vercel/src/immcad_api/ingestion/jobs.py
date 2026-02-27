@@ -45,6 +45,8 @@ class FetchResult:
 
 Fetcher = Callable[[SourceRegistryEntry, FetchContext], FetchResult]
 
+_HEAD_PROBE_SOURCE_IDS = frozenset({"FEDERAL_LAWS_BULK_XML"})
+
 
 @dataclass(frozen=True)
 class SourceCheckpoint:
@@ -139,15 +141,47 @@ def _save_checkpoints(state_path: str | Path | None, checkpoints: dict[str, Sour
 def _select_sources(
     registry_path: str | Path | None,
     cadence: UpdateCadence | None,
+    source_ids: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[str, str, list[SourceRegistryEntry]]:
     registry = load_source_registry(registry_path)
     plan = build_ingestion_plan_from_registry(registry)
 
     if cadence is None:
-        return plan.jurisdiction, plan.version, list(registry.sources)
+        selected = list(registry.sources)
+    else:
+        cadence_source_ids = set(plan.cadence_to_sources.get(cadence, []))
+        selected = [
+            source for source in registry.sources if source.source_id in cadence_source_ids
+        ]
 
-    source_ids = set(plan.cadence_to_sources.get(cadence, []))
-    selected = [source for source in registry.sources if source.source_id in source_ids]
+    if source_ids:
+        requested_source_ids: list[str] = []
+        seen_requested: set[str] = set()
+        for raw_source_id in source_ids:
+            normalized_source_id = raw_source_id.strip()
+            if not normalized_source_id:
+                continue
+            dedupe_key = normalized_source_id.upper()
+            if dedupe_key in seen_requested:
+                continue
+            seen_requested.add(dedupe_key)
+            requested_source_ids.append(normalized_source_id)
+
+        known_source_ids = {source.source_id for source in registry.sources}
+        unknown_source_ids = [
+            source_id for source_id in requested_source_ids if source_id not in known_source_ids
+        ]
+        if unknown_source_ids:
+            raise ValueError(
+                "Unknown source_id values requested: "
+                + ", ".join(sorted(unknown_source_ids))
+            )
+
+        requested_source_id_set = set(requested_source_ids)
+        selected = [
+            source for source in selected if source.source_id in requested_source_id_set
+        ]
+
     return plan.jurisdiction, plan.version, selected
 
 
@@ -269,6 +303,37 @@ def _execute_jobs(
                     f"Provider fetch returned empty payload for status={fetch_result.http_status}"
                 )
 
+            checksum = hashlib.sha256(fetch_result.payload).hexdigest()
+            if (
+                checkpoint is not None
+                and checkpoint.checksum_sha256 is not None
+                and checkpoint.checksum_sha256 == checksum
+            ):
+                results.append(
+                    IngestionSourceResult(
+                        source_id=source.source_id,
+                        source_type=source.source_type,
+                        update_cadence=source.update_cadence,
+                        url=str(source.url),
+                        status="not_modified",
+                        http_status=fetch_result.http_status,
+                        checksum_sha256=checksum,
+                        bytes_fetched=0,
+                        error=None,
+                        policy_reason=policy_reason,
+                        fetched_at=fetched_at,
+                    )
+                )
+                updated_checkpoints[source.source_id] = SourceCheckpoint(
+                    source_id=source.source_id,
+                    etag=fetch_result.etag or checkpoint.etag,
+                    last_modified=fetch_result.last_modified or checkpoint.last_modified,
+                    checksum_sha256=checksum,
+                    last_http_status=fetch_result.http_status,
+                    last_success_at=fetched_at,
+                )
+                continue
+
             court_validation = validate_court_source_payload(source.source_id, fetch_result.payload)
             if court_validation is not None:
                 if court_validation.records_total == 0:
@@ -283,7 +348,6 @@ def _execute_jobs(
                         f"invalid records ({first_errors})"
                     )
 
-            checksum = hashlib.sha256(fetch_result.payload).hexdigest()
             results.append(
                 IngestionSourceResult(
                     source_id=source.source_id,
@@ -369,10 +433,15 @@ def _apply_timeout_override(
     return SourceFetchPolicy(default=default_rule, by_source=source_rules)
 
 
+def _is_head_probe_source(source_id: str) -> bool:
+    return source_id in _HEAD_PROBE_SOURCE_IDS
+
+
 def run_ingestion_jobs(
     *,
     cadence: UpdateCadence | None = None,
     registry_path: str | Path | None = None,
+    source_ids: list[str] | tuple[str, ...] | None = None,
     source_policy_path: str | Path | None = None,
     fetch_policy_path: str | Path | None = None,
     environment: str = "development",
@@ -380,7 +449,11 @@ def run_ingestion_jobs(
     state_path: str | Path | None = None,
     fetcher: Fetcher | None = None,
 ) -> IngestionExecutionReport:
-    jurisdiction, version, sources = _select_sources(registry_path, cadence)
+    jurisdiction, version, sources = _select_sources(
+        registry_path,
+        cadence,
+        source_ids=source_ids,
+    )
     cadence_label = cadence or "all"
     checkpoints = _load_checkpoints(state_path)
     source_policy = load_source_policy(source_policy_path)
@@ -416,6 +489,44 @@ def run_ingestion_jobs(
                 headers["If-Modified-Since"] = context.last_modified
 
             source_fetch_policy = fetch_policy.for_source(source.source_id)
+            if _is_head_probe_source(source.source_id):
+                try:
+                    head_response = client.head(
+                        str(source.url),
+                        headers=headers or None,
+                        timeout=source_fetch_policy.timeout_seconds,
+                    )
+                    head_etag = head_response.headers.get("ETag")
+                    head_last_modified = head_response.headers.get("Last-Modified")
+                    if head_response.status_code == 304:
+                        return FetchResult(
+                            payload=None,
+                            http_status=head_response.status_code,
+                            etag=head_etag,
+                            last_modified=head_last_modified,
+                        )
+                    if 200 <= head_response.status_code < 300:
+                        unchanged = bool(
+                            (context.etag and head_etag and context.etag == head_etag)
+                            or (
+                                context.last_modified
+                                and head_last_modified
+                                and context.last_modified == head_last_modified
+                            )
+                        )
+                        if unchanged:
+                            return FetchResult(
+                                payload=None,
+                                http_status=304,
+                                etag=head_etag or context.etag,
+                                last_modified=head_last_modified or context.last_modified,
+                            )
+                    elif head_response.status_code not in {403, 405, 501}:
+                        head_response.raise_for_status()
+                except httpx.HTTPError:
+                    # Some providers do not support HEAD consistently; fallback to GET.
+                    pass
+
             response = client.get(
                 str(source.url),
                 headers=headers or None,

@@ -16,6 +16,7 @@ PRODUCTION_REQUIRED_SOURCE_IDS = frozenset(
         "IRCC_PDI",
         "EE_MI_CURRENT",
         "EE_MI_INVITES",
+        "FEDERAL_LAWS_BULK_XML",
         "SCC_DECISIONS",
         "FC_DECISIONS",
         "FCA_DECISIONS",

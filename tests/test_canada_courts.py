@@ -64,6 +64,32 @@ def test_parse_decisia_rss_feed_extracts_fc_record() -> None:
     assert record.pdf_url == "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/987/1/document.do"
 
 
+def test_parse_decisia_rss_feed_uses_decision_namespace_date_and_event_type() -> None:
+    rss = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:decision="http://lexum.com/decision/">
+  <channel>
+    <item>
+      <title>Doe v Canada, 2026 FC 272</title>
+      <link>https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/530042/index.do</link>
+      <description><![CDATA[Document translated on 2026-02-27]]></description>
+      <decision:date>2026-02-27</decision:date>
+    </item>
+  </channel>
+</rss>
+"""
+    records = parse_decisia_rss_feed(
+        rss.encode("utf-8"),
+        source_id="FC_DECISIONS",
+        court_code="FC",
+    )
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.decision_date is not None
+    assert record.decision_date.isoformat() == "2026-02-27"
+    assert record.source_event_type == "translated"
+
+
 def test_parse_scc_json_feed_coerces_numeric_case_id_to_string() -> None:
     payload = {
         "rss": {
@@ -107,6 +133,31 @@ def test_parse_scc_json_feed_handles_jsonfeed_root_items() -> None:
     assert records[0].citation == "2017 SCC 31"
     assert records[0].decision_date is not None
     assert records[0].decision_date.isoformat() == "2017-06-16"
+
+
+def test_parse_scc_json_feed_extracts_docket_numbers_and_event_type() -> None:
+    payload = {
+        "version": "https://jsonfeed.org/version/1",
+        "title": "Supreme Court Judgments",
+        "items": [
+            {
+                "id": "21365",
+                "title": "R. v. Fox - 2026 SCC 4 - 2026-02-06",
+                "url": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/21365/index.do",
+                "date_published": "2026-02-06",
+                "date_modified": "2026-02-25",
+                "_neutral_citation": "2026 SCC 4",
+                "_docket_numbers": ["41215", "41216"],
+                "content_text": "Criminal law - Document updated on 2026-02-25",
+            }
+        ],
+    }
+
+    records = parse_scc_json_feed(json.dumps(payload).encode("utf-8"))
+
+    assert len(records) == 1
+    assert records[0].docket_numbers == ("41215", "41216")
+    assert records[0].source_event_type == "updated"
 
 
 def test_parse_scc_json_feed_extracts_nested_scalar_fields() -> None:

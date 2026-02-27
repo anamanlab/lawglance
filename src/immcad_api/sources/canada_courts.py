@@ -15,6 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 CourtCode = Literal["SCC", "FC", "FCA"]
+SourceEventType = Literal["new", "updated", "translated", "corrected"]
 
 _COURT_CITATION_PATTERNS: dict[CourtCode, re.Pattern[str]] = {
     "SCC": re.compile(r"\b(19|20)\d{2}\s+SCC\s+\d+\b", re.IGNORECASE),
@@ -43,6 +44,8 @@ class CourtDecisionRecord:
     decision_date: date | None
     decision_url: str
     pdf_url: str | None
+    docket_numbers: tuple[str, ...] = ()
+    source_event_type: SourceEventType | None = None
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,74 @@ def _extract_citation(text: str, *, court_code: CourtCode) -> str:
     if not match:
         return ""
     return re.sub(r"\s+", " ", match.group(0)).strip()
+
+
+def _classify_source_event(
+    *texts: str | None,
+    date_published: date | None = None,
+    date_modified: date | None = None,
+) -> SourceEventType:
+    normalized_text = " ".join((value or "").lower() for value in texts if value)
+    if any(marker in normalized_text for marker in ("corrected", "correction", "corrigendum", "erratum")):
+        return "corrected"
+    if any(marker in normalized_text for marker in ("translated", "translation", "traduction")):
+        return "translated"
+    if any(marker in normalized_text for marker in ("updated", "update", "amended", "revised", "modified")):
+        return "updated"
+    if date_modified is not None and (date_published is None or date_modified != date_published):
+        return "updated"
+    return "new"
+
+
+def _iter_scalar_texts(value: object) -> list[str]:
+    values: list[str] = []
+    if value is None or isinstance(value, bool):
+        return values
+    if isinstance(value, (int, float)):
+        values.append(str(value))
+        return values
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            values.append(normalized)
+        return values
+    if isinstance(value, dict):
+        for candidate in value.values():
+            values.extend(_iter_scalar_texts(candidate))
+        return values
+    if isinstance(value, list):
+        for candidate in value:
+            values.extend(_iter_scalar_texts(candidate))
+        return values
+    normalized = str(value).strip()
+    if normalized:
+        values.append(normalized)
+    return values
+
+
+def _extract_docket_numbers(item: dict[str, Any]) -> tuple[str, ...]:
+    candidates = (
+        item.get("_docket_numbers"),
+        item.get("docket_numbers"),
+        item.get("docketNumbers"),
+        item.get("docketNumber"),
+        item.get("_docket_number"),
+        item.get("docket"),
+    )
+    dockets: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        for raw_value in _iter_scalar_texts(candidate):
+            for piece in re.split(r"[;,]", raw_value):
+                docket = piece.strip()
+                if not docket:
+                    continue
+                dedupe_key = docket.lower()
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                dockets.append(docket)
+    return tuple(dockets)
 
 
 def _dict_text(value: object) -> str | None:
@@ -199,14 +270,19 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
     for item in items:
         title = _dict_text(item.get("title")) or "Untitled"
         link = _dict_text(item.get("link")) or _dict_text(item.get("url")) or ""
-        decision_date = _parse_date(
+        published_date = _parse_date(
             _dict_text(item.get("decisionDate"))
             or _dict_text(item.get("publishedDate"))
             or _dict_text(item.get("pubDate"))
             or _dict_text(item.get("date"))
             or _dict_text(item.get("date_published"))
-            or _dict_text(item.get("date_modified"))
         )
+        modified_date = _parse_date(
+            _dict_text(item.get("date_modified"))
+            or _dict_text(item.get("updatedDate"))
+            or _dict_text(item.get("modifiedDate"))
+        )
+        decision_date = published_date or modified_date
         citation = (
             _dict_text(item.get("_neutral_citation"))
             or _dict_text(item.get("neutralCitation"))
@@ -225,6 +301,17 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
         )
         decision_url = link
         pdf_url = _dict_text(item.get("pdf")) or _dict_text(item.get("documentUrl")) or _derive_pdf_url(link)
+        docket_numbers = _extract_docket_numbers(item)
+        source_event_type = _classify_source_event(
+            title,
+            _dict_text(item.get("description")),
+            _dict_text(item.get("content_text")),
+            _dict_text(item.get("summary")),
+            _dict_text(item.get("status")),
+            _dict_text(item.get("_status")),
+            date_published=published_date,
+            date_modified=modified_date,
+        )
 
         if not decision_url:
             continue
@@ -238,6 +325,8 @@ def parse_scc_json_feed(payload: bytes) -> list[CourtDecisionRecord]:
                 decision_date=decision_date,
                 decision_url=decision_url,
                 pdf_url=pdf_url,
+                docket_numbers=docket_numbers,
+                source_event_type=source_event_type,
             )
         )
     return records
@@ -288,6 +377,20 @@ def _xml_text(item: ET.Element, tag_name: str) -> str | None:
     return None
 
 
+def _xml_text_by_local_name(item: ET.Element, local_name: str) -> str | None:
+    for element in item.iter():
+        tag = element.tag
+        if not isinstance(tag, str):
+            continue
+        if tag.rsplit("}", 1)[-1] != local_name:
+            continue
+        text = element.text or ""
+        normalized = text.strip()
+        if normalized:
+            return normalized
+    return None
+
+
 def parse_decisia_rss_feed(payload: bytes, *, source_id: str, court_code: CourtCode) -> list[CourtDecisionRecord]:
     root = ET.fromstring(payload.decode("utf-8"))
     items = root.findall(".//item")
@@ -298,10 +401,16 @@ def parse_decisia_rss_feed(payload: bytes, *, source_id: str, court_code: CourtC
         link = _xml_text(item, "link") or ""
         description = _xml_text(item, "description") or ""
         pub_date = _xml_text(item, "pubDate")
-        decision_date = _parse_date(pub_date)
+        decision_date_value = (
+            _xml_text_by_local_name(item, "date")
+            or _xml_text(item, "decisionDate")
+            or pub_date
+        )
+        decision_date = _parse_date(decision_date_value)
         citation = _extract_citation(f"{title} {description}", court_code=court_code)
         case_id = _extract_case_id(link)
         pdf_url = _derive_pdf_url(link)
+        source_event_type = _classify_source_event(title, description)
 
         if not link:
             continue
@@ -315,6 +424,7 @@ def parse_decisia_rss_feed(payload: bytes, *, source_id: str, court_code: CourtC
                 decision_date=decision_date,
                 decision_url=link,
                 pdf_url=pdf_url,
+                source_event_type=source_event_type,
             )
         )
     return records

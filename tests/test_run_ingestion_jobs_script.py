@@ -48,3 +48,21 @@ def test_resolve_default_runtime_environment_rejects_mismatch(
         match="ENVIRONMENT and IMMCAD_ENVIRONMENT must match when both are set",
     ):
         MODULE.resolve_default_runtime_environment()
+
+
+def test_parse_args_supports_repeated_source_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_ingestion_jobs.py",
+            "--source-id",
+            "SRC_DAILY",
+            "--source-id",
+            "SRC_WEEKLY",
+        ],
+    )
+
+    args = MODULE.parse_args()
+
+    assert args.source_id == ["SRC_DAILY", "SRC_WEEKLY"]

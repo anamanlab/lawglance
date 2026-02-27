@@ -3,21 +3,33 @@ name: Ingestion Jobs
 on:
   workflow_dispatch:
   schedule:
+    - cron: "15 * * * *"
     - cron: "15 6 * * *"
+
+concurrency:
+  group: ingestion-jobs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-ingestion:
+    if: github.event_name != 'schedule' || (matrix.run_on_schedule && github.event.schedule == matrix.schedule_cron)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
+          - cadence: cloudflare_hourly
+            run_on_schedule: true
+            schedule_cron: "15 * * * *"
           - cadence: daily
             run_on_schedule: true
+            schedule_cron: "15 6 * * *"
           - cadence: weekly
             run_on_schedule: false
+            schedule_cron: "manual-only"
           - cadence: scheduled_incremental
-            run_on_schedule: true
+            run_on_schedule: false
+            schedule_cron: "manual-only"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -33,7 +45,10 @@ jobs:
       - name: Restore ingestion checkpoint cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: .cache/immcad/ingestion-checkpoints.json
+          path: |
+            .cache/immcad/ingestion-checkpoints.json
+            .cache/immcad/federal-laws-materialization-checkpoints.json
+            .cache/immcad/federal-laws-sections
           key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}
           restore-keys: |
             ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-
@@ -42,22 +57,38 @@ jobs:
       - name: Run ingestion jobs
         run: |
           set -euo pipefail
-          uv run python scripts/run_ingestion_jobs.py \
-            --cadence "${{ matrix.cadence }}" \
-            --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" \
-            --state-path ".cache/immcad/ingestion-checkpoints.json" \
-            --fail-on-error
+          if [ "${{ matrix.cadence }}" = "cloudflare_hourly" ]; then
+            uv run python scripts/run_cloudflare_ingestion_hourly.py \
+              --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" \
+              --federal-laws-output "artifacts/ingestion/federal-laws-sections.jsonl" \
+              --state-path ".cache/immcad/ingestion-checkpoints.json" \
+              --federal-laws-checkpoint-path ".cache/immcad/federal-laws-materialization-checkpoints.json" \
+              --federal-laws-cache-dir ".cache/immcad/federal-laws-sections" \
+              --fail-on-error
+          else
+            uv run python scripts/run_ingestion_jobs.py \
+              --cadence "${{ matrix.cadence }}" \
+              --output "artifacts/ingestion/ingestion-${{ matrix.cadence }}.json" \
+              --state-path ".cache/immcad/ingestion-checkpoints.json" \
+              --fail-on-error
+          fi
 
       - name: Upload ingestion artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ingestion-${{ matrix.cadence }}-report
-          path: artifacts/ingestion/ingestion-${{ matrix.cadence }}.json
+          path: |
+            artifacts/ingestion/ingestion-${{ matrix.cadence }}.json
+            artifacts/ingestion/federal-laws-sections.jsonl
+          if-no-files-found: ignore
 
       - name: Save ingestion checkpoint cache
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: .cache/immcad/ingestion-checkpoints.json
+          path: |
+            .cache/immcad/ingestion-checkpoints.json
+            .cache/immcad/federal-laws-materialization-checkpoints.json
+            .cache/immcad/federal-laws-sections
           key: ingestion-state-${{ github.ref_name }}-${{ matrix.cadence }}-${{ github.run_id }}

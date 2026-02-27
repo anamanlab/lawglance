@@ -456,4 +456,6 @@ class OfficialCaseLawClient:
             url=record.decision_url,
             source_id=record.source_id,
             document_url=record.pdf_url or record.decision_url,
+            docket_numbers=list(record.docket_numbers) or None,
+            source_event_type=record.source_event_type,
         )

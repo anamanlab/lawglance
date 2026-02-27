@@ -414,6 +414,63 @@ describe("api client chat contract", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("downloads matter package pdf and returns binary payload metadata", async () => {
+    const pdfPayload = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(pdfPayload, {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-disposition": 'attachment; filename="matter-package.pdf"',
+          "x-trace-id": "trace-package-download-success",
+        },
+      })
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+      bearerToken: "token-123",
+    });
+    const result = await client.downloadMatterPackagePdf("matter-abc123");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.traceId).toBe("trace-package-download-success");
+    expect(result.data.filename).toBe("matter-package.pdf");
+    expect(result.data.contentType).toBe("application/pdf");
+    expect(result.data.blob.size).toBe(pdfPayload.byteLength);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.immcad.test/api/documents/matters/matter-abc123/package/download",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          accept: "application/pdf, application/json",
+          authorization: "Bearer token-123",
+        }),
+      })
+    );
+  });
+
+  it("fails fast when matter package download matter id is empty", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+
+    const result = await client.downloadMatterPackagePdf("   ");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(422);
+    expect(result.error.code).toBe("VALIDATION_ERROR");
+    expect(result.error.message).toBe("Matter ID is required.");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("posts lawyer research requests and returns structured case support payload", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(
@@ -432,6 +489,8 @@ describe("api client chat contract", () => {
               url: "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/101/index.do",
               document_url:
                 "https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/101/1/document.do",
+              docket_numbers: ["IMM-2026-101"],
+              source_event_type: "updated",
               pdf_status: "available",
               relevance_reason:
                 "Addresses procedural fairness in immigration refusal reasons.",
@@ -463,6 +522,8 @@ describe("api client chat contract", () => {
     expect(result.traceId).toBe("trace-lawyer-research");
     expect(result.data.cases).toHaveLength(1);
     expect(result.data.cases[0].pdf_status).toBe("available");
+    expect(result.data.cases[0].docket_numbers).toEqual(["IMM-2026-101"]);
+    expect(result.data.cases[0].source_event_type).toBe("updated");
     expect(result.data.source_status.official).toBe("ok");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.immcad.test/api/research/lawyer-cases",

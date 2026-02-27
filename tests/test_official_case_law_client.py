@@ -298,6 +298,49 @@ def test_official_case_law_client_keeps_matching_scc_records_for_asylum_queries(
     assert response.results[0].citation == "2022 SCC 22"
 
 
+def test_official_case_law_client_maps_court_metadata_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scc_feed = b"""{
+  "rss": {
+    "channel": {
+      "item": [
+        {
+          "title": "Refugee rights decision update",
+          "link": "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/item/41215/index.do",
+          "pubDate": "Fri, 18 Nov 2022 00:00:00 GMT",
+          "_neutral_citation": "2022 SCC 22",
+          "_docket_numbers": ["41215", "41216"],
+          "_status": "updated"
+        }
+      ]
+    }
+  }
+}
+"""
+    responses = {
+        "https://decisions.scc-csc.ca/scc-csc/scc-csc/en/json/rss.do": scc_feed,
+    }
+    monkeypatch.setattr(
+        "immcad_api.sources.official_case_law_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(responses),
+    )
+
+    client = OfficialCaseLawClient(source_registry=_registry())
+    response = client.search_cases(
+        CaseSearchRequest(
+            query="refugee rights",
+            jurisdiction="ca",
+            court="scc",
+            limit=5,
+        )
+    )
+
+    assert response.results
+    assert response.results[0].docket_numbers == ["41215", "41216"]
+    assert response.results[0].source_event_type == "updated"
+
+
 def test_official_case_law_client_uses_citation_year_when_decision_date_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

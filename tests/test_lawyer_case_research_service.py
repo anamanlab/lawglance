@@ -324,3 +324,31 @@ def test_orchestrator_filters_results_outside_requested_intake_date_range() -> N
 
     assert len(response.cases) == 1
     assert response.cases[0].citation == "2025 FC 2"
+
+
+def test_orchestrator_propagates_case_metadata_fields() -> None:
+    class _MetadataCaseSearchService:
+        def search(self, request: CaseSearchRequest) -> CaseSearchResponse:
+            del request
+            return CaseSearchResponse(
+                results=[
+                    CaseSearchResult(
+                        case_id="2026-FC-101",
+                        title="Example v Canada",
+                        citation="2026 FC 101",
+                        decision_date=date(2026, 2, 1),
+                        url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/101/index.do",
+                        source_id="FC_DECISIONS",
+                        document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/101/1/document.do",
+                        docket_numbers=["IMM-2026-101"],
+                        source_event_type="updated",
+                    )
+                ]
+            )
+
+    service = LawyerCaseResearchService(case_search_service=_MetadataCaseSearchService())
+    response = service.research(_request(limit=1))
+
+    assert response.cases
+    assert response.cases[0].docket_numbers == ["IMM-2026-101"]
+    assert response.cases[0].source_event_type == "updated"

@@ -56,6 +56,7 @@ def test_registry_uses_canonical_tribunal_and_compliance_urls() -> None:
         "IRB_RAD_RULES": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2012-257/index.html",
         "PIPEDA": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/index.html",
         "CASL": "https://laws-lois.justice.gc.ca/eng/acts/E-1.6/",
+        "FEDERAL_LAWS_BULK_XML": "https://laws-lois.justice.gc.ca/eng/XML/Legis.xml",
         "CANLII_TERMS": "https://www.canlii.org/info/terms.html",
     }
 

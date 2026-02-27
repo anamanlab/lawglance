@@ -528,6 +528,50 @@ describe("chat shell contract behavior", () => {
     expect(screen.getByRole("button", { name: "Retry last request" })).toBeTruthy();
   });
 
+  it("shows unified workflow error banner for related case-law search failures", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(SOURCE_UNAVAILABLE_ERROR, {
+          status: 503,
+          headers: { "x-trace-id": "trace-case-search-error" },
+        })
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court precedent for procedural fairness."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(await screen.findByText("Related case-law search unavailable")).toBeTruthy();
+    expect(
+      (
+        await screen.findAllByText(
+          /Unable to search related case law: Authoritative source is unavailable\./
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Trace ID: trace-case-search-error")).length).toBeGreaterThan(0);
+  });
+
   it("requires explicit user approval before triggering case export", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
@@ -791,5 +835,219 @@ describe("chat shell contract behavior", () => {
       "Case export was blocked by source policy for this source."
     );
     expect(policyBlockedMessages.length).toBeGreaterThan(0);
+  });
+
+  it("shows unified workflow error banner for export failures when diagnostics are enabled", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(LAWYER_RESEARCH_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-case-success" },
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            approval_token: "approval-token-123",
+            expires_at_epoch: 1_900_000_000,
+          },
+          {
+            headers: { "x-trace-id": "trace-approval-success" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(EXPORT_POLICY_BLOCKED_ERROR, {
+          status: 403,
+          headers: { "x-trace-id": "trace-export-policy" },
+        })
+      );
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "Find Federal Court examples for study permit refusals."
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("button", { name: "Find related cases" }));
+    await screen.findByText("Sample Tribunal Decision");
+    await user.click(screen.getByRole("button", { name: "Export PDF" }));
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(await screen.findByText("Case export unavailable")).toBeTruthy();
+    expect(
+      (
+        await screen.findAllByText(
+          /Case export blocked by source policy/
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Trace ID: trace-export-policy")).length).toBeGreaterThan(0);
+  });
+
+  it("uploads intake documents, fetches readiness, and builds a package when ready", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-abc123",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "memo.pdf",
+                normalized_filename: "memo-normalized.pdf",
+                classification: "memorandum",
+                quality_status: "ready",
+                issues: [],
+              },
+              {
+                file_id: "file-002",
+                original_filename: "affidavit.pdf",
+                normalized_filename: "affidavit-normalized.pdf",
+                classification: "affidavit",
+                quality_status: "needs_review",
+                issues: ["ocr_low_confidence"],
+              },
+            ],
+            blocking_issues: [],
+            warnings: ["translation_declaration_missing"],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-abc123",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness" },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            matter_id: "matter-abc123",
+            forum: "federal_court_jr",
+            table_of_contents: [
+              {
+                position: 1,
+                document_type: "memorandum",
+                filename: "memo-normalized.pdf",
+              },
+            ],
+            disclosure_checklist: [
+              {
+                item: "memorandum",
+                status: "present",
+              },
+            ],
+            cover_letter_draft: "Draft cover letter content",
+            is_ready: true,
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-package" },
+          }
+        )
+      );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const fileA = new File(["memo"], "memo.pdf", { type: "application/pdf" });
+    const fileB = new File(["affidavit"], "affidavit.pdf", { type: "application/pdf" });
+
+    await user.upload(uploadInput, [fileA, fileB]);
+
+    expect(await screen.findByText("Matter ID: matter-abc123")).toBeTruthy();
+    expect(await screen.findByText("memo.pdf")).toBeTruthy();
+    expect(await screen.findByText("affidavit.pdf")).toBeTruthy();
+    expect(await screen.findByText(/Ready for filing package:/i)).toBeTruthy();
+    expect(screen.getAllByText("Ready").length).toBeGreaterThan(0);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.immcad.test/api/documents/intake");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api.immcad.test/api/documents/matters/matter-abc123/readiness"
+    );
+    const intakeInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(intakeInit).toEqual(
+      expect.objectContaining({
+        method: "POST",
+      })
+    );
+    expect(intakeInit?.body instanceof FormData).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Generate package" }));
+    expect(await screen.findByText("Package generated. TOC items: 1.")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(
+      "https://api.immcad.test/api/documents/matters/matter-abc123/package"
+    );
+  });
+
+  it("shows upload failure status when document intake request fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Unsupported file type.",
+            trace_id: "trace-doc-error",
+          },
+        },
+        {
+          status: 422,
+          headers: { "x-trace-id": "trace-doc-error" },
+        }
+      )
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    const user = userEvent.setup();
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["exe"], "payload.exe", { type: "application/octet-stream" });
+
+    await user.upload(uploadInput, file);
+
+    expect(
+      await screen.findByText("Upload failed. Unsupported file type.")
+    ).toBeTruthy();
   });
 });

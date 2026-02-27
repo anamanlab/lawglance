@@ -1,6 +1,7 @@
 import type {
   ApiErrorCode,
   ChatCitation,
+  DocumentForum,
   FallbackUsed as ApiFallbackUsed,
   LawyerCaseSupport,
 } from "@/lib/api-client";
@@ -36,6 +37,20 @@ export type ResearchObjective =
   | "background_research"
   | "";
 export type ResearchPosture = "judicial_review" | "appeal" | "motion" | "application" | "";
+export type DocumentUploadStatus = "pending" | "uploaded" | "needs_review" | "failed";
+export type DocumentUploadItem = {
+  fileId: string;
+  filename: string;
+  classification: string | null;
+  status: DocumentUploadStatus;
+  issues: string[];
+};
+export type DocumentReadinessState = {
+  isReady: boolean;
+  missingRequiredItems: string[];
+  blockingIssues: string[];
+  warnings: string[];
+};
 
 export type SupportContext = {
   endpoint:
@@ -43,7 +58,10 @@ export type SupportContext = {
     | "/api/search/cases"
     | "/api/research/lawyer-cases"
     | "/api/export/cases"
-    | "/api/export/cases/approval";
+    | "/api/export/cases/approval"
+    | "/api/documents/intake"
+    | "/api/documents/matters/{matter_id}/readiness"
+    | "/api/documents/matters/{matter_id}/package";
   status: "success" | "error";
   traceId: string | null;
   code?: ApiErrorCode;
@@ -70,6 +88,14 @@ export type RelatedCasePanelProps = {
   statusToneClass?: string;
   supportStatus?: SupportContext["status"] | null;
   showDiagnostics?: boolean;
+  documentForum: DocumentForum;
+  documentMatterId: string;
+  documentStatusMessage: string;
+  documentUploads: DocumentUploadItem[];
+  documentReadiness: DocumentReadinessState | null;
+  isDocumentIntakeSubmitting: boolean;
+  isDocumentReadinessSubmitting: boolean;
+  isDocumentPackageSubmitting: boolean;
   isChatSubmitting: boolean;
   isCaseSearchSubmitting: boolean;
   isExportSubmitting: boolean;
@@ -92,6 +118,11 @@ export type RelatedCasePanelProps = {
   intakeAnchorReference: string;
   intakeDateFrom: string;
   intakeDateTo: string;
+  onDocumentForumChange: (value: DocumentForum) => void;
+  onDocumentMatterIdChange: (value: string) => void;
+  onDocumentUpload: (files: File[]) => void;
+  onRefreshDocumentReadiness: () => void;
+  onBuildDocumentPackage: () => void;
   onCaseSearchQueryChange: (value: string) => void;
   onIntakeObjectiveChange: (value: ResearchObjective) => void;
   onIntakeTargetCourtChange: (value: string) => void;

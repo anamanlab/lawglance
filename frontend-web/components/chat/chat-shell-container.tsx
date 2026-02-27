@@ -47,6 +47,14 @@ export function ChatShell({
     intakeAnchorReference,
     intakeDateFrom,
     intakeDateTo,
+    documentForum,
+    documentMatterId,
+    documentStatusMessage,
+    documentUploads,
+    documentReadiness,
+    isDocumentIntakeSubmitting,
+    isDocumentReadinessSubmitting,
+    isDocumentPackageSubmitting,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -65,6 +73,11 @@ export function ChatShell({
     onIntakeAnchorReferenceChange,
     onIntakeDateFromChange,
     onIntakeDateToChange,
+    onDocumentForumChange,
+    onDocumentMatterIdChange,
+    onDocumentUpload,
+    onRefreshDocumentReadiness,
+    onBuildDocumentPackage,
   } = useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanels });
 
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
@@ -189,6 +202,14 @@ export function ChatShell({
                 ) : null}
 
                 <RelatedCasePanel
+                  documentForum={documentForum}
+                  documentMatterId={documentMatterId}
+                  documentStatusMessage={documentStatusMessage}
+                  documentUploads={documentUploads}
+                  documentReadiness={documentReadiness}
+                  isDocumentIntakeSubmitting={isDocumentIntakeSubmitting}
+                  isDocumentReadinessSubmitting={isDocumentReadinessSubmitting}
+                  isDocumentPackageSubmitting={isDocumentPackageSubmitting}
                   isChatSubmitting={isChatSubmitting}
                   isCaseSearchSubmitting={isCaseSearchSubmitting}
                   isExportSubmitting={isExportSubmitting}
@@ -224,6 +245,15 @@ export function ChatShell({
                   onIntakeAnchorReferenceChange={onIntakeAnchorReferenceChange}
                   onIntakeDateFromChange={onIntakeDateFromChange}
                   onIntakeDateToChange={onIntakeDateToChange}
+                  onDocumentForumChange={onDocumentForumChange}
+                  onDocumentMatterIdChange={onDocumentMatterIdChange}
+                  onDocumentUpload={(files) => {
+                    void onDocumentUpload(files);
+                  }}
+                  onRefreshDocumentReadiness={onRefreshDocumentReadiness}
+                  onBuildDocumentPackage={() => {
+                    void onBuildDocumentPackage();
+                  }}
                   showDiagnostics={showOperationalPanels}
                   statusToneClass={statusToneClass}
                   submissionPhase={submissionPhase}

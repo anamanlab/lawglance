@@ -259,4 +259,20 @@ describe("chat shell ui", () => {
     expect(screen.getByLabelText("Decision date from")).toBeTruthy();
     expect(screen.getByLabelText("Decision date to")).toBeTruthy();
   });
+
+  it("renders document-intake controls in the sidebar", () => {
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+      />
+    );
+
+    expect(screen.getByText("Document intake")).toBeTruthy();
+    expect(screen.getByLabelText("Document forum")).toBeTruthy();
+    expect(screen.getByLabelText("Matter ID (optional)")).toBeTruthy();
+    expect(screen.getByLabelText("Upload documents")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh readiness" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Generate package" })).toBeTruthy();
+  });
 });

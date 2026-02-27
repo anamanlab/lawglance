@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { RelatedCasePanelProps } from "@/components/chat/types";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
 
@@ -180,10 +181,48 @@ function toCanliiSourceStatusLabel(status: string): string {
   return "CanLII: status unknown";
 }
 
+function formatIssueLabel(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function uploadStatusLabel(status: "pending" | "uploaded" | "needs_review" | "failed"): string {
+  if (status === "pending") {
+    return "Uploading";
+  }
+  if (status === "needs_review") {
+    return "Needs review";
+  }
+  if (status === "failed") {
+    return "Failed";
+  }
+  return "Uploaded";
+}
+
+function uploadStatusTone(status: "pending" | "uploaded" | "needs_review" | "failed"): string {
+  if (status === "pending") {
+    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+  }
+  if (status === "needs_review") {
+    return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+  }
+  if (status === "failed") {
+    return "border-[rgba(172,63,47,0.22)] bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)]";
+  }
+  return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+}
+
 export function RelatedCasePanel({
   statusToneClass,
   supportStatus,
   showDiagnostics = false,
+  documentForum,
+  documentMatterId,
+  documentStatusMessage,
+  documentUploads,
+  documentReadiness,
+  isDocumentIntakeSubmitting,
+  isDocumentReadinessSubmitting,
+  isDocumentPackageSubmitting,
   isChatSubmitting,
   isCaseSearchSubmitting,
   isExportSubmitting,
@@ -207,6 +246,11 @@ export function RelatedCasePanel({
   intakeAnchorReference,
   intakeDateFrom,
   intakeDateTo,
+  onDocumentForumChange,
+  onDocumentMatterIdChange,
+  onDocumentUpload,
+  onRefreshDocumentReadiness,
+  onBuildDocumentPackage,
   onIntakeObjectiveChange,
   onIntakeTargetCourtChange,
   onIntakeProceduralPostureChange,
@@ -221,6 +265,10 @@ export function RelatedCasePanel({
   const resultsListId = "related-case-results";
   const caseSearchInputId = "related-case-query";
   const caseSearchHintId = "related-case-query-hint";
+  const documentUploadInputId = "document-intake-upload";
+  const documentDropzoneHintId = "document-intake-dropzone-hint";
+  const hasMatterId = documentMatterId.trim().length > 0;
+  const [isDocumentDropActive, setIsDocumentDropActive] = useState(false);
   const normalizedCurrentQuery = caseSearchQuery.trim().toLowerCase();
   const normalizedLastSearchQuery = (lastCaseSearchQuery ?? "").trim().toLowerCase();
   const hasResults = relatedCases.length > 0;
@@ -265,9 +313,10 @@ export function RelatedCasePanel({
     matterProfile,
   });
 
-  const issueTags = matterProfile?.issue_tags;
-  const targetCourt = matterProfile?.target_court;
-  const displayTags = Array.isArray(issueTags) ? issueTags : issueTags ? [issueTags] : [];
+  const disableDocumentControls =
+    isDocumentIntakeSubmitting || isDocumentReadinessSubmitting || isDocumentPackageSubmitting;
+  const disableGeneratePackage =
+    disableDocumentControls || !hasMatterId || !documentReadiness?.isReady;
   const disableCaseSearchControls = isChatSubmitting || isCaseSearchSubmitting;
   const disableExportControls = isChatSubmitting || isCaseSearchSubmitting || isExportSubmitting;
 
@@ -296,6 +345,202 @@ export function RelatedCasePanel({
         </div>
 
         <div className="mt-4 rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+              Document intake
+            </p>
+            {documentReadiness ? (
+              <span
+                className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                  documentReadiness.isReady
+                    ? "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]"
+                    : "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning"
+                }`}
+              >
+                {documentReadiness.isReady ? "Ready" : "Not ready"}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[11px] leading-5 text-muted">
+            Upload filings, review quality flags, and confirm readiness before generating a package.
+          </p>
+
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <label className="text-[11px] text-muted">
+              Document forum
+              <select
+                aria-label="Document forum"
+                className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                disabled={disableDocumentControls}
+                onChange={(event) => onDocumentForumChange(event.target.value as typeof documentForum)}
+                value={documentForum}
+              >
+                <option value="federal_court_jr">Federal Court JR</option>
+                <option value="rpd">IRB RPD</option>
+                <option value="rad">IRB RAD</option>
+                <option value="iad">IRB IAD</option>
+                <option value="id">IRB ID</option>
+              </select>
+            </label>
+            <label className="text-[11px] text-muted">
+              Matter ID (optional)
+              <input
+                aria-label="Matter ID (optional)"
+                className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                disabled={disableDocumentControls}
+                onChange={(event) => onDocumentMatterIdChange(event.target.value)}
+                placeholder="matter-abc123"
+                type="text"
+                value={documentMatterId}
+              />
+            </label>
+          </div>
+
+          <div
+            aria-describedby={documentDropzoneHintId}
+            className={`mt-3 rounded-lg border border-dashed px-3 py-3 transition ${
+              isDocumentDropActive
+                ? "border-[rgba(106,155,204,0.8)] bg-[#eef3f8]"
+                : "border-[rgba(176,174,165,0.6)] bg-[rgba(247,243,234,0.72)]"
+            }`}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              if (disableDocumentControls) {
+                return;
+              }
+              setIsDocumentDropActive(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDocumentDropActive(false);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              if (!disableDocumentControls) {
+                setIsDocumentDropActive(true);
+              }
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDocumentDropActive(false);
+              if (disableDocumentControls) {
+                return;
+              }
+              const droppedFiles = Array.from(event.dataTransfer.files ?? []);
+              if (droppedFiles.length > 0) {
+                onDocumentUpload(droppedFiles);
+              }
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className={`imm-btn-secondary cursor-pointer px-2.5 py-1 text-[11px] ${
+                  disableDocumentControls ? "pointer-events-none opacity-60" : ""
+                }`}
+                htmlFor={documentUploadInputId}
+              >
+                {isDocumentIntakeSubmitting ? "Uploading..." : "Choose files"}
+              </label>
+              <input
+                aria-label="Upload documents"
+                className="sr-only"
+                disabled={disableDocumentControls}
+                id={documentUploadInputId}
+                multiple
+                onChange={(event) => {
+                  const selectedFiles = Array.from(event.currentTarget.files ?? []);
+                  if (selectedFiles.length > 0) {
+                    onDocumentUpload(selectedFiles);
+                  }
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+              <p className="text-[11px] leading-5 text-muted">Or drag and drop files here.</p>
+            </div>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-muted" id={documentDropzoneHintId}>
+              PDF and image files supported
+            </p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              className="imm-btn-secondary px-2.5 py-1 text-[11px]"
+              disabled={!hasMatterId || disableDocumentControls}
+              onClick={onRefreshDocumentReadiness}
+              type="button"
+            >
+              {isDocumentReadinessSubmitting ? "Refreshing..." : "Refresh readiness"}
+            </button>
+            <button
+              className="imm-btn-secondary px-2.5 py-1 text-[11px]"
+              disabled={disableGeneratePackage}
+              onClick={onBuildDocumentPackage}
+              type="button"
+            >
+              {isDocumentPackageSubmitting ? "Generating..." : "Generate package"}
+            </button>
+          </div>
+
+          <div aria-live="polite" className="mt-2 min-h-[20px]" role="status">
+            <p className="text-xs leading-5 text-muted">{documentStatusMessage}</p>
+          </div>
+
+          <div className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <p className="font-semibold text-ink">Matter ID: {documentMatterId.trim() || "Not assigned"}</p>
+            <p className="mt-1">
+              Ready for filing package:{" "}
+              <span className="font-semibold text-ink">
+                {documentReadiness ? (documentReadiness.isReady ? "Ready" : "Not ready") : "Unknown"}
+              </span>
+            </p>
+            {documentReadiness?.missingRequiredItems.length ? (
+              <p className="mt-1">
+                Missing: {documentReadiness.missingRequiredItems.map(formatIssueLabel).join(", ")}
+              </p>
+            ) : null}
+            {documentReadiness?.blockingIssues.length ? (
+              <p className="mt-1">
+                Blocking: {documentReadiness.blockingIssues.map(formatIssueLabel).join(", ")}
+              </p>
+            ) : null}
+            {documentReadiness?.warnings.length ? (
+              <p className="mt-1">
+                Warnings: {documentReadiness.warnings.map(formatIssueLabel).join(", ")}
+              </p>
+            ) : null}
+          </div>
+
+          {documentUploads.length ? (
+            <ul className="mt-2 space-y-2 text-[11px] leading-5 text-muted">
+              {documentUploads.map((uploadItem) => (
+                <li
+                  className="rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2"
+                  key={`${uploadItem.fileId}-${uploadItem.filename}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-ink">{uploadItem.filename}</p>
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${uploadStatusTone(uploadItem.status)}`}
+                    >
+                      {uploadStatusLabel(uploadItem.status)}
+                    </span>
+                  </div>
+                  {uploadItem.classification ? (
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.1em] text-muted">
+                      Type: {formatIssueLabel(uploadItem.classification)}
+                    </p>
+                  ) : null}
+                  {uploadItem.issues.length ? (
+                    <p className="mt-1">Issues: {uploadItem.issues.map(formatIssueLabel).join(", ")}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+
+        <div className="mt-3 rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-3">
           <label
             className="mb-1 block min-h-[24px] py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
             htmlFor={caseSearchInputId}

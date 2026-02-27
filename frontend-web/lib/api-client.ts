@@ -134,6 +134,65 @@ export type CaseExportApprovalResponsePayload = {
   expires_at_epoch: number;
 };
 
+export type DocumentForum =
+  | "federal_court_jr"
+  | "rpd"
+  | "rad"
+  | "iad"
+  | "id";
+
+export type DocumentIntakeRequestPayload = {
+  forum: DocumentForum;
+  matter_id?: string;
+  files: File[];
+};
+
+export type DocumentIntakeResult = {
+  file_id: string;
+  original_filename: string;
+  normalized_filename: string;
+  classification: string | null;
+  quality_status: string;
+  issues: string[];
+};
+
+export type DocumentIntakeResponsePayload = {
+  matter_id: string;
+  forum: DocumentForum;
+  results: DocumentIntakeResult[];
+  blocking_issues: string[];
+  warnings: string[];
+};
+
+export type MatterReadinessResponsePayload = {
+  matter_id: string;
+  forum: DocumentForum;
+  is_ready: boolean;
+  missing_required_items: string[];
+  blocking_issues: string[];
+  warnings: string[];
+};
+
+export type MatterPackageTocItem = {
+  position: number;
+  document_type: string;
+  filename: string;
+};
+
+export type MatterPackageChecklistItem = {
+  item: string;
+  status: string;
+};
+
+export type MatterPackageResponsePayload = {
+  matter_id: string;
+  forum: DocumentForum;
+  table_of_contents: MatterPackageTocItem[];
+  disclosure_checklist: MatterPackageChecklistItem[];
+  cover_letter_draft: string;
+  is_ready: boolean;
+};
+
 export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "VALIDATION_ERROR"
@@ -179,8 +238,11 @@ type ApiClientOptions = {
 };
 
 const DEFAULT_ERROR_MESSAGE = "Unable to complete the request. Please try again.";
+const REQUEST_ACCEPT_HEADERS: Record<string, string> = {
+  accept: "application/json"
+};
 const REQUEST_HEADERS: Record<string, string> = {
-  accept: "application/json",
+  ...REQUEST_ACCEPT_HEADERS,
   "content-type": "application/json"
 };
 const PDF_ACCEPT_HEADER = "application/pdf, application/json";
@@ -277,6 +339,20 @@ function buildApiUrl(apiBaseUrl: string, path: string): string {
 
 function buildRequestHeaders(bearerToken?: string | null): Record<string, string> {
   return buildRequestHeadersWithOverrides(bearerToken);
+}
+
+function buildRequestHeadersWithoutContentType(
+  bearerToken?: string | null,
+  overrides?: Record<string, string>
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    ...REQUEST_ACCEPT_HEADERS,
+    ...overrides,
+  };
+  if (bearerToken) {
+    headers.authorization = `Bearer ${bearerToken}`;
+  }
+  return headers;
 }
 
 function buildRequestHeadersWithOverrides(
@@ -392,6 +468,80 @@ async function postBinaryWithRetry(
   throw lastError;
 }
 
+async function postFormDataWithRetry(
+  requestUrl: string,
+  headers: Record<string, string>,
+  payload: FormData
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NETWORK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        body: payload,
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < NETWORK_RETRY_ATTEMPTS) {
+        await delay(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
+async function getJsonWithRetry(
+  requestUrl: string,
+  headers: Record<string, string>
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NETWORK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(requestUrl, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < NETWORK_RETRY_ATTEMPTS) {
+        await delay(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
+async function postWithoutBodyWithRetry(
+  requestUrl: string,
+  headers: Record<string, string>
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= NETWORK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetch(requestUrl, {
+        method: "POST",
+        headers,
+        cache: "no-store",
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < NETWORK_RETRY_ATTEMPTS) {
+        await delay(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+      throw lastError;
+    }
+  }
+  throw lastError;
+}
+
 async function postJson<TPayload>(
   options: ApiClientOptions,
   path: string,
@@ -404,6 +554,179 @@ async function postJson<TPayload>(
       requestUrl,
       buildRequestHeaders(options.bearerToken),
       payload
+    );
+    const headerTraceId = getResponseTraceId(response.headers);
+    const responseBody = await parseResponseBody(response);
+
+    if (response.ok) {
+      return {
+        ok: true,
+        status: response.status,
+        traceId: headerTraceId,
+        data: responseBody as TPayload,
+      };
+    }
+
+    const parsedError = parseErrorEnvelope(responseBody);
+    const bodyTraceId = parsedError?.traceId ?? null;
+    const traceIdMismatch =
+      Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
+
+    return {
+      ok: false,
+      status: response.status,
+      traceId,
+      traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
+      error: parsedError
+        ? {
+            code: parsedError.code,
+            message: parsedError.message,
+          }
+        : buildFallbackError(response.status),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      traceId: buildClientTraceId(),
+      traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "PROVIDER_ERROR",
+        message: "Unable to reach the IMMCAD API endpoint.",
+      },
+    };
+  }
+}
+
+async function postMultipart<TPayload>(
+  options: ApiClientOptions,
+  path: string,
+  payload: FormData
+): Promise<ApiResult<TPayload>> {
+  const requestUrl = buildApiUrl(options.apiBaseUrl, path);
+
+  try {
+    const response = await postFormDataWithRetry(
+      requestUrl,
+      buildRequestHeadersWithoutContentType(options.bearerToken),
+      payload
+    );
+    const headerTraceId = getResponseTraceId(response.headers);
+    const responseBody = await parseResponseBody(response);
+
+    if (response.ok) {
+      return {
+        ok: true,
+        status: response.status,
+        traceId: headerTraceId,
+        data: responseBody as TPayload,
+      };
+    }
+
+    const parsedError = parseErrorEnvelope(responseBody);
+    const bodyTraceId = parsedError?.traceId ?? null;
+    const traceIdMismatch =
+      Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
+
+    return {
+      ok: false,
+      status: response.status,
+      traceId,
+      traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
+      error: parsedError
+        ? {
+            code: parsedError.code,
+            message: parsedError.message,
+          }
+        : buildFallbackError(response.status),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      traceId: buildClientTraceId(),
+      traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "PROVIDER_ERROR",
+        message: "Unable to reach the IMMCAD API endpoint.",
+      },
+    };
+  }
+}
+
+async function getJson<TPayload>(
+  options: ApiClientOptions,
+  path: string
+): Promise<ApiResult<TPayload>> {
+  const requestUrl = buildApiUrl(options.apiBaseUrl, path);
+
+  try {
+    const response = await getJsonWithRetry(
+      requestUrl,
+      buildRequestHeadersWithoutContentType(options.bearerToken)
+    );
+    const headerTraceId = getResponseTraceId(response.headers);
+    const responseBody = await parseResponseBody(response);
+
+    if (response.ok) {
+      return {
+        ok: true,
+        status: response.status,
+        traceId: headerTraceId,
+        data: responseBody as TPayload,
+      };
+    }
+
+    const parsedError = parseErrorEnvelope(responseBody);
+    const bodyTraceId = parsedError?.traceId ?? null;
+    const traceIdMismatch =
+      Boolean(headerTraceId) && Boolean(bodyTraceId) && headerTraceId !== bodyTraceId;
+    const traceId = headerTraceId ?? bodyTraceId ?? buildClientTraceId();
+
+    return {
+      ok: false,
+      status: response.status,
+      traceId,
+      traceIdMismatch,
+      policyReason: parsedError?.policyReason ?? null,
+      error: parsedError
+        ? {
+            code: parsedError.code,
+            message: parsedError.message,
+          }
+        : buildFallbackError(response.status),
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      traceId: buildClientTraceId(),
+      traceIdMismatch: false,
+      policyReason: null,
+      error: {
+        code: "PROVIDER_ERROR",
+        message: "Unable to reach the IMMCAD API endpoint.",
+      },
+    };
+  }
+}
+
+async function postWithoutBody<TPayload>(
+  options: ApiClientOptions,
+  path: string
+): Promise<ApiResult<TPayload>> {
+  const requestUrl = buildApiUrl(options.apiBaseUrl, path);
+
+  try {
+    const response = await postWithoutBodyWithRetry(
+      requestUrl,
+      buildRequestHeadersWithoutContentType(options.bearerToken)
     );
     const headerTraceId = getResponseTraceId(response.headers);
     const responseBody = await parseResponseBody(response);
@@ -612,6 +935,81 @@ export function createApiClient(options: ApiClientOptions) {
       payload: CaseExportApprovalRequestPayload
     ): Promise<ApiResult<CaseExportApprovalResponsePayload>> {
       return postCaseExportApproval(options, payload);
+    },
+    uploadMatterDocuments(
+      payload: DocumentIntakeRequestPayload
+    ): Promise<ApiResult<DocumentIntakeResponsePayload>> {
+      const files = payload.files ?? [];
+      if (files.length === 0) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          traceId: null,
+          traceIdMismatch: false,
+          policyReason: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Select at least one file before uploading.",
+          },
+        });
+      }
+      const formData = new FormData();
+      formData.append("forum", payload.forum);
+      if (payload.matter_id?.trim()) {
+        formData.append("matter_id", payload.matter_id.trim());
+      }
+      for (const file of files) {
+        formData.append("files", file, file.name);
+      }
+      return postMultipart<DocumentIntakeResponsePayload>(
+        options,
+        "/documents/intake",
+        formData
+      );
+    },
+    getMatterReadiness(
+      matterId: string
+    ): Promise<ApiResult<MatterReadinessResponsePayload>> {
+      const normalizedMatterId = matterId.trim();
+      if (!normalizedMatterId) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          traceId: null,
+          traceIdMismatch: false,
+          policyReason: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Matter ID is required.",
+          },
+        });
+      }
+      return getJson<MatterReadinessResponsePayload>(
+        options,
+        `/documents/matters/${encodeURIComponent(normalizedMatterId)}/readiness`
+      );
+    },
+    buildMatterPackage(
+      matterId: string
+    ): Promise<ApiResult<MatterPackageResponsePayload>> {
+      const normalizedMatterId = matterId.trim();
+      if (!normalizedMatterId) {
+        return Promise.resolve({
+          ok: false,
+          status: 422,
+          traceId: null,
+          traceIdMismatch: false,
+          policyReason: null,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Matter ID is required.",
+          },
+        });
+      }
+      return postWithoutBody<MatterPackageResponsePayload>(
+        options,
+        `/documents/matters/${encodeURIComponent(normalizedMatterId)}/package`
+      );
     },
   };
 }

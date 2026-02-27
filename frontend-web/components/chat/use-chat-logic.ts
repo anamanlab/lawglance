@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createApiClient } from "@/lib/api-client";
-import type { LawyerCaseSupport, LawyerResearchIntakePayload } from "@/lib/api-client";
+import type {
+  DocumentForum,
+  DocumentIntakeResult,
+  LawyerCaseSupport,
+  LawyerResearchIntakePayload,
+  MatterReadinessResponsePayload,
+} from "@/lib/api-client";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
 import { ASSISTANT_BOOTSTRAP_TEXT, ERROR_COPY } from "@/components/chat/constants";
 import type {
   CaseRetrievalMode,
   ChatErrorState,
   ChatMessage,
+  DocumentReadinessState,
+  DocumentUploadItem,
   IntakeCompleteness,
   ResearchConfidence,
   ResearchObjective,
@@ -86,6 +94,48 @@ const BROAD_QUERY_INTAKE_GATE_MESSAGE =
   "Add at least two intake details (objective, target court, issue tags, or citation/docket anchor) before running broad case-law research queries.";
 const INVALID_DECISION_DATE_RANGE_MESSAGE =
   "Decision date range is invalid. 'From' date must be earlier than or equal to 'to' date.";
+const DOCUMENT_UPLOAD_DEFAULT_STATUS =
+  "Upload documents to evaluate filing readiness and package generation.";
+
+function toDocumentUploadStatus(
+  qualityStatus: string
+): DocumentUploadItem["status"] {
+  const normalizedStatus = qualityStatus.trim().toLowerCase();
+  if (normalizedStatus === "needs_review") {
+    return "needs_review";
+  }
+  if (normalizedStatus === "failed" || normalizedStatus === "error") {
+    return "failed";
+  }
+  if (normalizedStatus === "pending") {
+    return "pending";
+  }
+  return "uploaded";
+}
+
+function toDocumentReadinessState(
+  payload: MatterReadinessResponsePayload
+): DocumentReadinessState {
+  return {
+    isReady: payload.is_ready,
+    missingRequiredItems: payload.missing_required_items ?? [],
+    blockingIssues: payload.blocking_issues ?? [],
+    warnings: payload.warnings ?? [],
+  };
+}
+
+function buildDocumentUploadItem(
+  result: DocumentIntakeResult,
+  fallbackFilename: string
+): DocumentUploadItem {
+  return {
+    fileId: result.file_id || `${fallbackFilename}-${Date.now()}`,
+    filename: result.original_filename || fallbackFilename,
+    classification: result.classification ?? null,
+    status: toDocumentUploadStatus(result.quality_status),
+    issues: result.issues ?? [],
+  };
+}
 
 export interface UseChatLogicProps {
   apiBaseUrl: string;
@@ -124,6 +174,18 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [intakeAnchorReference, setIntakeAnchorReference] = useState("");
   const [intakeDateFrom, setIntakeDateFrom] = useState("");
   const [intakeDateTo, setIntakeDateTo] = useState("");
+  const [documentForum, setDocumentForum] = useState<DocumentForum>("federal_court_jr");
+  const [documentMatterId, setDocumentMatterId] = useState("");
+  const [documentStatusMessage, setDocumentStatusMessage] = useState(
+    DOCUMENT_UPLOAD_DEFAULT_STATUS
+  );
+  const [documentUploads, setDocumentUploads] = useState<DocumentUploadItem[]>([]);
+  const [documentReadiness, setDocumentReadiness] = useState<DocumentReadinessState | null>(
+    null
+  );
+  const [isDocumentIntakeSubmitting, setIsDocumentIntakeSubmitting] = useState(false);
+  const [isDocumentReadinessSubmitting, setIsDocumentReadinessSubmitting] = useState(false);
+  const [isDocumentPackageSubmitting, setIsDocumentPackageSubmitting] = useState(false);
   const [exportingCaseId, setExportingCaseId] = useState<string | null>(null);
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>("idle");
   const [chatPendingElapsedSeconds, setChatPendingElapsedSeconds] = useState(0);
@@ -569,6 +631,260 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     [apiClient, isSubmitting, showOperationalPanels]
   );
 
+  const fetchDocumentReadinessForMatter = useCallback(
+    async (
+      matterId: string,
+      options?: { suppressStatusMessage?: boolean }
+    ): Promise<boolean> => {
+      const normalizedMatterId = matterId.trim();
+      if (!normalizedMatterId) {
+        if (!options?.suppressStatusMessage) {
+          setDocumentStatusMessage("Enter a matter ID or upload documents first.");
+        }
+        return false;
+      }
+
+      setIsDocumentReadinessSubmitting(true);
+      if (!options?.suppressStatusMessage) {
+        setDocumentStatusMessage("Checking readiness...");
+      }
+      try {
+        const readinessResult = await apiClient.getMatterReadiness(normalizedMatterId);
+        if (!readinessResult.ok) {
+          const statusMessage = showOperationalPanels
+            ? `Unable to fetch readiness: ${readinessResult.error.message} (Trace ID: ${readinessResult.traceId ?? "Unavailable"})`
+            : `Readiness check failed. ${readinessResult.error.message}`;
+          setDocumentStatusMessage(statusMessage);
+          setSupportContext({
+            endpoint: "/api/documents/matters/{matter_id}/readiness",
+            status: "error",
+            traceId: readinessResult.traceId,
+            code: readinessResult.error.code,
+            policyReason: readinessResult.policyReason,
+            traceIdMismatch: readinessResult.traceIdMismatch,
+          });
+          return false;
+        }
+
+        setDocumentMatterId(readinessResult.data.matter_id || normalizedMatterId);
+        setDocumentReadiness(toDocumentReadinessState(readinessResult.data));
+        if (!options?.suppressStatusMessage) {
+          setDocumentStatusMessage(
+            readinessResult.data.is_ready
+              ? "Matter is ready for package generation."
+              : "Matter not ready. Resolve missing or blocking items."
+          );
+        }
+        setSupportContext({
+          endpoint: "/api/documents/matters/{matter_id}/readiness",
+          status: "success",
+          traceId: readinessResult.traceId,
+          traceIdMismatch: false,
+        });
+        return true;
+      } finally {
+        setIsDocumentReadinessSubmitting(false);
+      }
+    },
+    [apiClient, showOperationalPanels]
+  );
+
+  const onDocumentUpload = useCallback(
+    async (files: File[]): Promise<void> => {
+      if (isDocumentIntakeSubmitting) {
+        return;
+      }
+
+      const selectedFiles = files.filter(Boolean);
+      if (selectedFiles.length === 0) {
+        return;
+      }
+
+      setIsDocumentIntakeSubmitting(true);
+      setDocumentStatusMessage(
+        `Uploading ${selectedFiles.length} document${selectedFiles.length === 1 ? "" : "s"}...`
+      );
+      setDocumentReadiness(null);
+      setDocumentUploads(
+        selectedFiles.map((file, index) => ({
+          fileId: `pending-${Date.now()}-${index}`,
+          filename: file.name,
+          classification: null,
+          status: "pending",
+          issues: [],
+        }))
+      );
+
+      try {
+        const intakeResult = await apiClient.uploadMatterDocuments({
+          forum: documentForum,
+          matter_id: documentMatterId.trim() || undefined,
+          files: selectedFiles,
+        });
+
+        if (!intakeResult.ok) {
+          setDocumentUploads(
+            selectedFiles.map((file, index) => ({
+              fileId: `failed-${Date.now()}-${index}`,
+              filename: file.name,
+              classification: null,
+              status: "failed",
+              issues: [],
+            }))
+          );
+          setDocumentStatusMessage(`Upload failed. ${intakeResult.error.message}`);
+          setSupportContext({
+            endpoint: "/api/documents/intake",
+            status: "error",
+            traceId: intakeResult.traceId,
+            code: intakeResult.error.code,
+            policyReason: intakeResult.policyReason,
+            traceIdMismatch: intakeResult.traceIdMismatch,
+          });
+          return;
+        }
+
+        const intakeResults = intakeResult.data.results ?? [];
+        const uploadItems = selectedFiles.map((file, index) => {
+          const matchedResult = intakeResults[index];
+          if (!matchedResult) {
+            return {
+              fileId: `missing-${Date.now()}-${index}`,
+              filename: file.name,
+              classification: null,
+              status: "failed" as const,
+              issues: ["missing_result"],
+            };
+          }
+          return buildDocumentUploadItem(matchedResult, file.name);
+        });
+        setDocumentUploads(uploadItems);
+
+        const normalizedMatterId = intakeResult.data.matter_id?.trim();
+        if (normalizedMatterId) {
+          setDocumentMatterId(normalizedMatterId);
+        }
+
+        const failedCount = uploadItems.filter((item) => item.status === "failed").length;
+        const reviewCount = uploadItems.filter((item) => item.status === "needs_review").length;
+        const processedCount = uploadItems.length - failedCount;
+        let nextStatusMessage = `Upload complete. ${processedCount}/${uploadItems.length} processed.`;
+        if (reviewCount > 0) {
+          nextStatusMessage += ` ${reviewCount} need review.`;
+        }
+        setDocumentStatusMessage(nextStatusMessage);
+        setSupportContext({
+          endpoint: "/api/documents/intake",
+          status: "success",
+          traceId: intakeResult.traceId,
+          traceIdMismatch: false,
+        });
+
+        if (normalizedMatterId) {
+          await fetchDocumentReadinessForMatter(normalizedMatterId, {
+            suppressStatusMessage: true,
+          });
+        }
+      } finally {
+        setIsDocumentIntakeSubmitting(false);
+      }
+    },
+    [
+      apiClient,
+      documentForum,
+      documentMatterId,
+      fetchDocumentReadinessForMatter,
+      isDocumentIntakeSubmitting,
+    ]
+  );
+
+  const onRefreshDocumentReadiness = useCallback((): void => {
+    const matterId = documentMatterId.trim();
+    if (!matterId || isDocumentReadinessSubmitting) {
+      if (!matterId) {
+        setDocumentStatusMessage("Enter a matter ID or upload documents first.");
+      }
+      return;
+    }
+    void fetchDocumentReadinessForMatter(matterId);
+  }, [documentMatterId, fetchDocumentReadinessForMatter, isDocumentReadinessSubmitting]);
+
+  const onBuildDocumentPackage = useCallback(async (): Promise<void> => {
+    if (isDocumentPackageSubmitting || isDocumentIntakeSubmitting || isDocumentReadinessSubmitting) {
+      return;
+    }
+
+    const matterId = documentMatterId.trim();
+    if (!matterId) {
+      setDocumentStatusMessage("Enter a matter ID or upload documents first.");
+      return;
+    }
+
+    setIsDocumentPackageSubmitting(true);
+    setDocumentStatusMessage("Generating package...");
+    try {
+      const packageResult = await apiClient.buildMatterPackage(matterId);
+      if (!packageResult.ok) {
+        const policyBlockedMessage =
+          packageResult.policyReason === "document_package_not_ready"
+            ? "Package blocked. Resolve missing or blocking items first."
+            : null;
+        const statusMessage = showOperationalPanels
+          ? `Unable to generate package: ${packageResult.error.message}${
+              packageResult.policyReason ? ` (Policy: ${packageResult.policyReason})` : ""
+            } (Trace ID: ${packageResult.traceId ?? "Unavailable"})`
+          : policyBlockedMessage ?? `Package generation failed. ${packageResult.error.message}`;
+        setDocumentStatusMessage(statusMessage);
+        setSupportContext({
+          endpoint: "/api/documents/matters/{matter_id}/package",
+          status: "error",
+          traceId: packageResult.traceId,
+          code: packageResult.error.code,
+          policyReason: packageResult.policyReason,
+          traceIdMismatch: packageResult.traceIdMismatch,
+        });
+        return;
+      }
+
+      setDocumentStatusMessage(
+        `Package generated. TOC items: ${packageResult.data.table_of_contents.length}.`
+      );
+      setDocumentReadiness((currentReadiness) =>
+        currentReadiness
+          ? { ...currentReadiness, isReady: packageResult.data.is_ready }
+          : {
+              isReady: packageResult.data.is_ready,
+              missingRequiredItems: [],
+              blockingIssues: [],
+              warnings: [],
+            }
+      );
+      setSupportContext({
+        endpoint: "/api/documents/matters/{matter_id}/package",
+        status: "success",
+        traceId: packageResult.traceId,
+        traceIdMismatch: false,
+      });
+    } finally {
+      setIsDocumentPackageSubmitting(false);
+    }
+  }, [
+    apiClient,
+    documentMatterId,
+    isDocumentIntakeSubmitting,
+    isDocumentPackageSubmitting,
+    isDocumentReadinessSubmitting,
+    showOperationalPanels,
+  ]);
+
+  const onDocumentForumChange = useCallback((value: DocumentForum): void => {
+    setDocumentForum(value);
+  }, []);
+
+  const onDocumentMatterIdChange = useCallback((value: string): void => {
+    setDocumentMatterId(value);
+  }, []);
+
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>): void => {
       event.preventDefault();
@@ -671,6 +987,14 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     intakeAnchorReference,
     intakeDateFrom,
     intakeDateTo,
+    documentForum,
+    documentMatterId,
+    documentStatusMessage,
+    documentUploads,
+    documentReadiness,
+    isDocumentIntakeSubmitting,
+    isDocumentReadinessSubmitting,
+    isDocumentPackageSubmitting,
     exportingCaseId,
     submissionPhase,
     chatPendingElapsedSeconds,
@@ -690,5 +1014,10 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     onIntakeAnchorReferenceChange,
     onIntakeDateFromChange,
     onIntakeDateToChange,
+    onDocumentForumChange,
+    onDocumentMatterIdChange,
+    onDocumentUpload,
+    onRefreshDocumentReadiness,
+    onBuildDocumentPackage,
   };
 }

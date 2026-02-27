@@ -1,5 +1,21 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-27 - Prompt Capability Audit + Friendly Behavior + Eval Suite
+
+### Current Focus
+- Systematically audit prompt/runtime capability coverage (including tool orchestration), fix missed issues from prior prompt pass, and add a production-safe prompt behavior eval suite with friendly greeting support.
+
+### Plan
+- [ ] Audit current prompt/runtime capability coverage and document concrete gaps from the first prompt pass.
+- [ ] Add failing tests for friendly greeting behavior and prompt capability/tool-awareness content.
+- [ ] Implement chat + prompt changes to support friendly non-legal greetings without weakening grounding policy.
+- [ ] Add a prompt behavior eval suite (data + evaluator + tests) to track greeting/policy/grounding/injection expectations.
+- [ ] Run targeted lint/tests and record verification evidence.
+- [ ] Update lessons with this user-correction pattern.
+
+### Review
+- Pending implementation.
+
 ## Task Plan - 2026-02-27 - Gemini Prompt Review + Hardening
 
 ### Current Focus
@@ -87,6 +103,7 @@
 - Task 8 complete:
   - Documented `NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE` in `.env.example` and `frontend-web/README.md`.
   - Verification evidence:
+    - `cd frontend-web && npm run test` -> 119 passed.
     - `cd frontend-web && npm run test -- tests/runtime-config.test.ts tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/home-page.rollout.test.tsx tests/agent-activity.contract.test.ts` -> 47 passed.
     - `cd frontend-web && npm run lint` -> no warnings/errors.
     - `cd frontend-web && npm run typecheck` -> pass.

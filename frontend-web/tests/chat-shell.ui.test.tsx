@@ -227,6 +227,33 @@ describe("chat shell ui", () => {
     ).toBeTruthy();
   });
 
+  it("hides timeline UI affordances when thinking timeline feature flag is disabled", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_RESPONSE, {
+        headers: { "x-trace-id": "trace-thinking-disabled" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show agent thinking" })).toBeNull();
+    expect(screen.queryByLabelText("Agent activity")).toBeNull();
+  });
+
   it("exposes accessibility landmarks and enables case search after chat success", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(

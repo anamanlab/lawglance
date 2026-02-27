@@ -1472,10 +1472,12 @@ describe("chat shell contract behavior", () => {
     expect(await screen.findByText("Workflow Notice")).toBeTruthy();
     expect(await screen.findByText("Document support matrix unavailable")).toBeTruthy();
     expect(
-      await screen.findByText(
-        "Document support matrix is temporarily unavailable. Using default profile guidance."
-      )
-    ).toBeTruthy();
+      (
+        await screen.findAllByText(
+          "Document support matrix is temporarily unavailable. Using default profile guidance."
+        )
+      ).length
+    ).toBeGreaterThan(0);
     expect(await screen.findByText("Trace ID: trace-doc-support-matrix-fail-only")).toBeTruthy();
   });
 

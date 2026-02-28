@@ -15,10 +15,42 @@ export ENVIRONMENT="${ENVIRONMENT:-staging}"
 export API_BEARER_TOKEN="${TOKEN}"
 export ENABLE_SCAFFOLD_PROVIDER="${ENABLE_SCAFFOLD_PROVIDER:-true}"
 export ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS="${ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS:-true}"
+TMP_CHECKPOINT_PATH="$(mktemp /tmp/immcad-ingestion-checkpoints.XXXXXX.json)"
+python3 - <<'PY' "${TMP_CHECKPOINT_PATH}"
+import json
+import sys
+from datetime import datetime, timezone
+
+checkpoint_path = sys.argv[1]
+now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+payload = {
+    "version": 1,
+    "updated_at": now,
+    "checkpoints": {
+        "SCC_DECISIONS": {
+            "etag": "smoke-scc-etag",
+            "last_modified": "Sat, 28 Feb 2026 00:00:00 GMT",
+            "checksum_sha256": "smoke-scc-checksum",
+            "last_http_status": 200,
+            "last_success_at": now,
+        },
+        "FC_DECISIONS": {
+            "etag": "smoke-fc-etag",
+            "last_modified": "Sat, 28 Feb 2026 00:00:00 GMT",
+            "checksum_sha256": "smoke-fc-checksum",
+            "last_http_status": 200,
+            "last_success_at": now,
+        },
+    },
+}
+with open(checkpoint_path, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle)
+PY
+export INGESTION_CHECKPOINT_STATE_PATH="${TMP_CHECKPOINT_PATH}"
 
 uv run uvicorn immcad_api.main:app --app-dir src --host "${HOST}" --port "${PORT}" >"${SERVER_LOG_PATH}" 2>&1 &
 SERVER_PID=$!
-trap 'kill ${SERVER_PID} >/dev/null 2>&1 || true' EXIT
+trap 'kill ${SERVER_PID} >/dev/null 2>&1 || true; rm -f "${TMP_CHECKPOINT_PATH}"' EXIT
 
 print_debug_artifacts() {
   if [[ -f "${SERVER_LOG_PATH}" ]]; then

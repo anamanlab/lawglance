@@ -33,6 +33,8 @@ def test_staging_smoke_script_validates_refusal_citations_and_trace_ids() -> Non
     assert "policy_block" in script
     assert "SCC_DECISIONS" in script
     assert "FC_DECISIONS" in script
+    assert "TMP_CHECKPOINT_PATH" in script
+    assert "INGESTION_CHECKPOINT_STATE_PATH" in script
     assert "len(chat[\"citations\"]) >= 1" in script
     assert "x-trace-id" in script
     assert "staging-smoke-report.json" in script

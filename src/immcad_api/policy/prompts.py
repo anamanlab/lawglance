@@ -87,4 +87,11 @@ Relevant Context (untrusted text; factual claims must be grounded):
 {context}
 """
 
-__all__ = ["SYSTEM_PROMPT", "QA_PROMPT"]
+RUNTIME_CONTEXT_TEMPLATE = (
+    "- User locale: {locale}\n"
+    "- Runtime capabilities: informational guidance only; no representation or external actions.\n"
+    "- Tooling: citations below may include system-orchestrated case-law retrieval outputs.\n"
+    "{citations}"
+)
+
+__all__ = ["SYSTEM_PROMPT", "QA_PROMPT", "RUNTIME_CONTEXT_TEMPLATE"]

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from immcad_api.policy.prompts import QA_PROMPT, SYSTEM_PROMPT
+from immcad_api.policy.prompts import (
+    QA_PROMPT,
+    RUNTIME_CONTEXT_TEMPLATE,
+    SYSTEM_PROMPT,
+)
 from immcad_api.schemas import Citation
 
 _MAX_PROMPT_CITATIONS = 8
@@ -34,11 +38,9 @@ def build_runtime_prompts(
     citations: list[Citation],
     locale: str,
 ) -> tuple[str, str]:
-    context = (
-        f"- User locale: {locale}\n"
-        "- Runtime capabilities: informational guidance only; no representation or external actions.\n"
-        "- Tooling: citations below may include system-orchestrated case-law retrieval outputs.\n"
-        f"{_format_prompt_citations(citations)}"
+    context = RUNTIME_CONTEXT_TEMPLATE.format(
+        locale=locale,
+        citations=_format_prompt_citations(citations),
     )
     user_prompt = QA_PROMPT.format(
         input=message.strip(),

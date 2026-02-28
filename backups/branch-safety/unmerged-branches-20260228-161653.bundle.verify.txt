@@ -1,0 +1,7 @@
+The bundle contains these 4 refs:
+f45e03590973fed8ca73c03438e3c09b66fa7858 refs/remotes/origin/archive/archive-dirty-root-reconcile-v4-20260224-170035-20260224-195431
+cb43f2a6fe3d8aff2d0b26f8bd048472721e2813 refs/remotes/origin/archive/archive-ralph-canada-hardening-next-loop-20260224-20260224-195431
+4e1a506744265110e5a10c8d023a79355b66c04f refs/remotes/origin/archive/archive-reconcile-production-readiness-20260224-20260224-195431
+e4d169c96c6d409cacf3ad1539b91986727cc2a4 refs/remotes/origin/archive/wip-local-dirty-carryforward-20260224-20260224-195431
+The bundle records a complete history.
+The bundle uses this hash algorithm: sha1

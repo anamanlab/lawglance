@@ -1,135 +1,209 @@
 ---
 name: code-reviewer
-description: |
-  Thorough code review with focus on security, performance, and best practices.
-  Use when: reviewing code, performing security audits, checking for code quality, reviewing pull requests,
-  or when user mentions code review, PR review, security vulnerabilities, performance issues.
-license: MIT
-metadata:
-  author: awesome-llm-apps
-  version: "2.0.0"
+description: Comprehensive code review skill for TypeScript, JavaScript, Python, Swift, Kotlin, Go. Includes automated code analysis, best practice checking, security scanning, and review checklist generation. Use when reviewing pull requests, providing code feedback, identifying issues, or ensuring code quality standards.
 ---
 
 # Code Reviewer
 
-You are an expert code reviewer who identifies security vulnerabilities, performance issues, and code quality problems.
+Complete toolkit for code reviewer with modern tools and best practices.
 
-## When to Apply
+## Quick Start
 
-Use this skill when:
-- Reviewing pull requests
-- Performing security audits
-- Checking code quality
-- Identifying performance bottlenecks
-- Ensuring best practices
-- Pre-deployment code review
+### Main Capabilities
 
-## How to Use This Skill
+This skill provides three core capabilities through automated scripts:
 
-This skill contains **detailed rules** in the `rules/` directory, organized by category and priority.
+```bash
+# Script 1: Pr Analyzer
+python scripts/pr_analyzer.py [options]
 
-### Quick Start
+# Script 2: Code Quality Checker
+python scripts/code_quality_checker.py [options]
 
-1. **Review [AGENTS.md](AGENTS.md)** for a complete compilation of all rules with examples
-2. **Reference specific rules** from `rules/` directory for deep dives
-3. **Follow priority order**: Security → Performance → Correctness → Maintainability
+# Script 3: Review Report Generator
+python scripts/review_report_generator.py [options]
+```
 
-### Available Rules
+## Core Capabilities
 
-**Security (CRITICAL)**
-- [SQL Injection Prevention](rules/security-sql-injection.md)
-- [XSS Prevention](rules/security-xss-prevention.md)
+### 1. Pr Analyzer
 
-**Performance (HIGH)**
-- [Avoid N+1 Query Problem](rules/performance-n-plus-one.md)
+Automated tool for pr analyzer tasks.
 
-**Correctness (HIGH)**
-- [Proper Error Handling](rules/correctness-error-handling.md)
+**Features:**
+- Automated scaffolding
+- Best practices built-in
+- Configurable templates
+- Quality checks
 
-**Maintainability (MEDIUM)**
-- [Use Meaningful Variable Names](rules/maintainability-naming.md)
-- [Add Type Hints](rules/maintainability-type-hints.md)
+**Usage:**
+```bash
+python scripts/pr_analyzer.py <project-path> [options]
+```
 
-## Review Process
+### 2. Code Quality Checker
 
-### 1. **Security First** (CRITICAL)
-Look for vulnerabilities that could lead to data breaches or unauthorized access:
-- SQL injection
-- XSS (Cross-Site Scripting)
-- Authentication/authorization bypasses
-- Hardcoded secrets
-- Insecure dependencies
+Comprehensive analysis and optimization tool.
 
-### 2. **Performance** (HIGH)
-Identify code that will cause slow performance at scale:
-- N+1 database queries
-- Missing indexes
-- Inefficient algorithms
-- Memory leaks
-- Unnecessary API calls
+**Features:**
+- Deep analysis
+- Performance metrics
+- Recommendations
+- Automated fixes
 
-### 3. **Correctness** (HIGH)
-Find bugs and edge cases:
-- Error handling gaps
-- Race conditions
-- Off-by-one errors
-- Null/undefined handling
-- Input validation
+**Usage:**
+```bash
+python scripts/code_quality_checker.py <target-path> [--verbose]
+```
 
-### 4. **Maintainability** (MEDIUM)
-Improve code quality for long-term health:
-- Clear naming
-- Type safety
-- DRY principle
-- Single responsibility
-- Documentation
+### 3. Review Report Generator
 
-### 5. **Testing**
-Verify adequate coverage:
-- Unit tests for new code
-- Edge case testing
-- Error path testing
-- Integration tests where needed
+Advanced tooling for specialized tasks.
 
-## Review Output Format
+**Features:**
+- Expert-level automation
+- Custom configurations
+- Integration ready
+- Production-grade output
 
-Structure your reviews as:
+**Usage:**
+```bash
+python scripts/review_report_generator.py [arguments] [options]
+```
 
-```markdown
-This function retrieves user data but has critical security and reliability issues.
+## Reference Documentation
 
-## Critical Issues 🔴
+### Code Review Checklist
 
-1. **SQL Injection Vulnerability** (Line 2)
-   - **Problem:** User input directly interpolated into SQL query
-   - **Impact:** Attackers can execute arbitrary SQL commands
-   - **Fix:** Use parameterized queries
-   ```python
-   query = "SELECT * FROM users WHERE id = ?"
-   result = db.execute(query, (user_id,))
-   ```
+Comprehensive guide available in `references/code_review_checklist.md`:
 
-## High Priority 🟠
+- Detailed patterns and practices
+- Code examples
+- Best practices
+- Anti-patterns to avoid
+- Real-world scenarios
 
-1. **No Error Handling** (Line 3-4)
-   - **Problem:** Assumes result always has data
-   - **Impact:** IndexError if user doesn't exist
-   - **Fix:** Check result before accessing
-   ```python
-   if not result:
-       return None
-   return result[0]
-   ```
+### Coding Standards
 
-2. **Missing Type Hints** (Line 1)
-   - **Problem:** No type annotations
-   - **Impact:** Reduces code clarity and IDE support
-   - **Fix:** Add type hints
-   ```python
-   def get_user(user_id: int) -> Optional[Dict[str, Any]]:
-   ```
+Complete workflow documentation in `references/coding_standards.md`:
 
-## Recommendations
-- Add logging for debugging
-- Consider using an ORM to prevent SQL injection
-- Add input validation for user_id
+- Step-by-step processes
+- Optimization strategies
+- Tool integrations
+- Performance tuning
+- Troubleshooting guide
+
+### Common Antipatterns
+
+Technical reference guide in `references/common_antipatterns.md`:
+
+- Technology stack details
+- Configuration examples
+- Integration patterns
+- Security considerations
+- Scalability guidelines
+
+## Tech Stack
+
+**Languages:** TypeScript, JavaScript, Python, Go, Swift, Kotlin
+**Frontend:** React, Next.js, React Native, Flutter
+**Backend:** Node.js, Express, GraphQL, REST APIs
+**Database:** PostgreSQL, Prisma, NeonDB, Supabase
+**DevOps:** Docker, Kubernetes, Terraform, GitHub Actions, CircleCI
+**Cloud:** AWS, GCP, Azure
+
+## Development Workflow
+
+### 1. Setup and Configuration
+
+```bash
+# Install dependencies
+npm install
+# or
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+```
+
+### 2. Run Quality Checks
+
+```bash
+# Use the analyzer script
+python scripts/code_quality_checker.py .
+
+# Review recommendations
+# Apply fixes
+```
+
+### 3. Implement Best Practices
+
+Follow the patterns and practices documented in:
+- `references/code_review_checklist.md`
+- `references/coding_standards.md`
+- `references/common_antipatterns.md`
+
+## Best Practices Summary
+
+### Code Quality
+- Follow established patterns
+- Write comprehensive tests
+- Document decisions
+- Review regularly
+
+### Performance
+- Measure before optimizing
+- Use appropriate caching
+- Optimize critical paths
+- Monitor in production
+
+### Security
+- Validate all inputs
+- Use parameterized queries
+- Implement proper authentication
+- Keep dependencies updated
+
+### Maintainability
+- Write clear code
+- Use consistent naming
+- Add helpful comments
+- Keep it simple
+
+## Common Commands
+
+```bash
+# Development
+npm run dev
+npm run build
+npm run test
+npm run lint
+
+# Analysis
+python scripts/code_quality_checker.py .
+python scripts/review_report_generator.py --analyze
+
+# Deployment
+docker build -t app:latest .
+docker-compose up -d
+kubectl apply -f k8s/
+```
+
+## Troubleshooting
+
+### Common Issues
+
+Check the comprehensive troubleshooting section in `references/common_antipatterns.md`.
+
+### Getting Help
+
+- Review reference documentation
+- Check script output messages
+- Consult tech stack documentation
+- Review error logs
+
+## Resources
+
+- Pattern Reference: `references/code_review_checklist.md`
+- Workflow Guide: `references/coding_standards.md`
+- Technical Guide: `references/common_antipatterns.md`
+- Tool Scripts: `scripts/` directory

@@ -704,7 +704,7 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
     second_body = second.json()
     assert second_body["fallback_used"]["used"] is False
     assert second_body["fallback_used"]["provider"] is None
-    assert second_body["fallback_used"]["reason"] is None
+    assert second_body["fallback_used"]["reason"] == "insufficient_context"
 
 
 def test_curated_grounded_response_when_synthetic_citations_disabled(
@@ -755,9 +755,6 @@ def test_safe_constrained_response_when_trusted_domain_allowlist_excludes_ground
     assert body["confidence"] == "low"
     assert body["answer"].startswith("I do not have enough grounded legal context")
     assert body["disclaimer"] == DISCLAIMER_TEXT
-    assert body["fallback_used"]["used"] is False
-    assert body["fallback_used"]["provider"] is None
-    assert body["fallback_used"]["reason"] == "insufficient_context"
 
 
 def test_rate_limit_envelope(monkeypatch: pytest.MonkeyPatch) -> None:

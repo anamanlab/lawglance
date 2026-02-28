@@ -73,6 +73,7 @@ def _bootstrap_os_environ_from_worker_env(env: Any) -> None:
     for key in _WORKER_ENV_KEYS:
         value = _read_worker_env_value(env, key)
         if value is None:
+            os.environ.pop(key, None)
             continue
         if isinstance(value, bool):
             os.environ[key] = "true" if value else "false"

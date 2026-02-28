@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import time
 
 import httpx
@@ -134,7 +133,10 @@ class GeminiProvider:
         last_error: ProviderError | None = None
         for model_name in models_to_try:
             endpoint = self._GEMINI_API_ENDPOINT.format(model=model_name)
-            params = {"key": self.api_key}
+            headers = {
+                "content-type": "application/json",
+                "x-goog-api-key": self.api_key or "",
+            }
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"temperature": 0.2},
@@ -144,9 +146,8 @@ class GeminiProvider:
                     with httpx.Client(timeout=timeout_millis / 1000.0) as client:
                         response = client.post(
                             endpoint,
-                            params=params,
-                            headers={"content-type": "application/json"},
-                            content=json.dumps(payload),
+                            headers=headers,
+                            json=payload,
                         )
                     if response.status_code == 429:
                         raise ProviderError(self.name, "rate_limit", response.text)
@@ -185,6 +186,8 @@ class GeminiProvider:
                     last_error = ProviderError(self.name, "timeout", str(exc))
                 except httpx.HTTPError as exc:
                     last_error = map_provider_exception(self.name, exc)
+                except ProviderError as exc:
+                    last_error = exc
                 except Exception as exc:  # pragma: no cover
                     last_error = map_provider_exception(self.name, exc)
 

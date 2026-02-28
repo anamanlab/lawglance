@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import re
-from typing import Protocol, Callable
+from typing import Callable, Protocol, cast
 
 from immcad_api.errors import SourceUnavailableError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
@@ -39,6 +39,7 @@ _DOCKET_ANCHOR_PATTERN = re.compile(
     r"\b[a-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}\b",
     re.IGNORECASE,
 )
+_VALID_SOURCE_FRESHNESS_VALUES = frozenset({"fresh", "stale", "missing", "unknown"})
 
 
 class _CaseSearchProtocol(Protocol):
@@ -146,9 +147,26 @@ class LawyerCaseResearchService:
         if self._priority_source_status_provider is None:
             return {}
         try:
-            return self._priority_source_status_provider()
+            raw_statuses = self._priority_source_status_provider()
         except Exception:
             return {}
+        if not isinstance(raw_statuses, dict):
+            return {}
+        snapshot: dict[str, SourceFreshnessStatus] = {}
+        for source_id, status in raw_statuses.items():
+            if not isinstance(source_id, str):
+                continue
+            normalized_source_id = source_id.strip().upper()
+            if not normalized_source_id:
+                continue
+            normalized_status = str(status).strip().lower()
+            if normalized_status not in _VALID_SOURCE_FRESHNESS_VALUES:
+                normalized_status = "unknown"
+            snapshot[normalized_source_id] = cast(
+                SourceFreshnessStatus,
+                normalized_status,
+            )
+        return snapshot
 
     def _resolve_export_status(
         self,

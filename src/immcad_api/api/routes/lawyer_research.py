@@ -4,6 +4,9 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from immcad_api.api.routes._threadpool import (
+    is_threadpool_unavailable_runtime_error,
+)
 from immcad_api.api.routes.case_query_validation import assess_case_query
 from immcad_api.errors import ApiError, SourceUnavailableError
 from immcad_api.schemas import (
@@ -99,7 +102,9 @@ def build_lawyer_research_router(
                     lawyer_case_research_service.research,
                     payload,
                 )
-            except RuntimeError:
+            except RuntimeError as exc:
+                if not is_threadpool_unavailable_runtime_error(exc):
+                    raise
                 # Python Workers can run in threadless runtimes where threadpool
                 # execution is unavailable; fallback to direct invocation.
                 research_response = lawyer_case_research_service.research(payload)

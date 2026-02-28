@@ -6,16 +6,6 @@
       "sourceType": "github",
       "computedHash": "16dd0121beefcbb1dba0652f0a37fd5511380c8be7ae69270222913483b00bbc"
     },
-    "add-expert": {
-      "source": "remotion-dev/remotion",
-      "sourceType": "github",
-      "computedHash": "c81e4d1028e2e71d7431a12b5b87ab24fa66d348048d6928c37f9bdf3ec046a1"
-    },
-    "add-sfx": {
-      "source": "remotion-dev/remotion",
-      "sourceType": "github",
-      "computedHash": "d87f8578c7cfa0bf84761f1a85a3bb43e9c63d2a3507dcdcc96ec790f0b4a170"
-    },
     "brainstorming": {
       "source": "obra/superpowers",
       "sourceType": "github",

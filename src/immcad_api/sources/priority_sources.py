@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from typing import Dict
 
-from immcad_api.api.routes.source_transparency import build_source_transparency_payload
 from immcad_api.policy import SourcePolicy
 from immcad_api.schemas import SourceFreshnessStatus
+from immcad_api.services.source_transparency_service import (
+    build_source_transparency_payload,
+)
 from immcad_api.sources import SourceRegistry
 
 PRIORITY_CASELAW_SOURCE_IDS = ("SCC_DECISIONS", "FC_DECISIONS")
+LOGGER = logging.getLogger(__name__)
 
 
 def build_priority_source_status_snapshot(
@@ -27,6 +31,10 @@ def build_priority_source_status_snapshot(
             checkpoint_state_path=checkpoint_state_path,
         )
     except Exception:
+        LOGGER.exception(
+            "Failed to build priority source status snapshot",
+            extra={"checkpoint_state_path": checkpoint_state_path},
+        )
         return snapshot
 
     items = {item.source_id: item for item in transparency.case_law_sources}

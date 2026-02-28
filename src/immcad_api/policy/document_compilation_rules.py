@@ -344,20 +344,33 @@ def _load_payload(path: str | Path | None) -> dict[str, object]:
     # Cloudflare Python Workers package only Python modules by default.
     # Keep a Python-embedded fallback so runtime startup is not blocked when
     # JSON artifact paths are unavailable in the deployed bundle.
+    embedded_error: Exception | None = None
     if path is None:
         try:
             from immcad_api.policy.document_compilation_rules_embedded import (
                 CATALOG_PAYLOAD_JSON,
             )
-
-            payload = json.loads(CATALOG_PAYLOAD_JSON)
+        except ImportError as exc:
+            embedded_error = exc
+        else:
+            try:
+                payload = json.loads(CATALOG_PAYLOAD_JSON)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Embedded document compilation rules catalog is not valid JSON"
+                ) from exc
             if not isinstance(payload, dict):
-                raise ValueError("Embedded document compilation rules catalog must be an object")
+                raise ValueError(
+                    "Embedded document compilation rules catalog must be an object"
+                )
             return payload
-        except Exception:
-            pass
 
     checked = ", ".join(str(item) for item in candidates)
+    if embedded_error is not None:
+        raise FileNotFoundError(
+            "Document compilation rules catalog not found and embedded fallback "
+            f"failed. Checked: {checked}"
+        ) from embedded_error
     raise FileNotFoundError(f"Document compilation rules catalog not found. Checked: {checked}")
 
 

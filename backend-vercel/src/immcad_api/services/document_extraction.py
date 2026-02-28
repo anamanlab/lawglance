@@ -6,7 +6,10 @@ import logging
 import os
 import shutil
 
-import fitz
+try:
+    import fitz
+except Exception:  # pragma: no cover - optional PDF runtime dependency
+    fitz = None  # type: ignore[assignment]
 
 try:
     from PIL import Image
@@ -91,8 +94,8 @@ def _ocr_confidence_class(*, used_ocr: bool, ocr_char_count: int, ocr_limit_hit:
     return "low"
 
 
-def _ocr_text_from_page(page: fitz.Page) -> str:
-    if not _can_run_tesseract_ocr():
+def _ocr_text_from_page(page) -> str:
+    if fitz is None or not _can_run_tesseract_ocr():
         return ""
 
     try:
@@ -104,7 +107,9 @@ def _ocr_text_from_page(page: fitz.Page) -> str:
         return ""
 
 
-def _open_document_for_extraction(payload_bytes: bytes) -> fitz.Document:
+def _open_document_for_extraction(payload_bytes: bytes):
+    if fitz is None:
+        raise ValueError("unreadable_document_payload")
     detected_filetype = _detect_supported_filetype(payload_bytes)
     if detected_filetype is None:
         raise ValueError("unreadable_document_payload")

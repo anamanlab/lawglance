@@ -197,12 +197,17 @@ export function MessageList({
         >
           <span
             className="sr-only"
+            aria-hidden="true"
             data-testid="agent-activity-pending"
             data-thinking-enabled={enableAgentThinkingTimeline ? "true" : "false"}
           >
             {JSON.stringify(pendingActivityEvents)}
           </span>
-          <span className="sr-only" data-testid="agent-activity-latest">
+          <span
+            className="sr-only"
+            aria-hidden="true"
+            data-testid="agent-activity-latest"
+          >
             {JSON.stringify(latestActivityEvents)}
           </span>
           <div className="pointer-events-none absolute inset-0 opacity-60" aria-hidden="true">

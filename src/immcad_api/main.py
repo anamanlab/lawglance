@@ -23,7 +23,7 @@ from immcad_api.api.routes import (
     build_lawyer_research_router_disabled,
     build_source_transparency_router,
 )
-from immcad_api.api.routes.source_transparency import (
+from immcad_api.services.source_transparency_service import (
     build_source_transparency_payload,
 )
 from immcad_api.middleware.rate_limit import build_rate_limiter

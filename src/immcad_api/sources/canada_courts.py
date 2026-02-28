@@ -596,7 +596,26 @@ def validate_court_source_payload(
         if source_id == "SCC_DECISIONS":
             records = parse_scc_json_feed(payload)
         elif source_id == "FC_DECISIONS":
-            records = parse_decisia_rss_feed(payload, source_id=source_id, court_code="FC")
+            try:
+                records = parse_decisia_rss_feed(
+                    payload,
+                    source_id=source_id,
+                    court_code="FC",
+                )
+            except ET.ParseError:
+                records = parse_decisia_search_results_html(
+                    payload,
+                    source_id=source_id,
+                    court_code="FC",
+                    base_url="https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do",
+                )
+            if not records:
+                records = parse_decisia_search_results_html(
+                    payload,
+                    source_id=source_id,
+                    court_code="FC",
+                    base_url="https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do",
+                )
         elif source_id == "FCA_DECISIONS":
             try:
                 records = parse_decisia_rss_feed(

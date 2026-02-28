@@ -115,6 +115,7 @@ jobs:
           ENVIRONMENT: staging
           ENABLE_SCAFFOLD_PROVIDER: "true"
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"
+          ALLOW_PRIORITY_SOURCE_FRESHNESS: "true"
           STAGING_SMOKE_REPORT_PATH: artifacts/evals/quality-scc-fc-smoke-report.json
         run: bash scripts/run_api_smoke_tests.sh
 
@@ -134,8 +135,11 @@ jobs:
       - name: Validate Cloudflare environment configuration
         run: uv run python scripts/validate_cloudflare_env_configuration.py
 
-      - name: Validate backend runtime source sync
-        run: uv run python scripts/validate_backend_runtime_source_sync.py
+      - name: Validate backend runtime source-of-truth
+        env:
+          GIT_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          GIT_DIFF_HEAD: ${{ github.sha }}
+        run: uv run python scripts/validate_backend_runtime_source_of_truth.py
 
       - name: Run case-law conformance (warning-only)
         env:

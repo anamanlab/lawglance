@@ -68,8 +68,10 @@ def test_release_gates_runs_backend_policy_and_export_guard_tests() -> None:
         assert snippet in workflow
     assert "Validate Cloudflare environment configuration" in workflow
     assert "scripts/validate_cloudflare_env_configuration.py" in workflow
-    assert "Validate backend runtime source sync" in workflow
-    assert "scripts/validate_backend_runtime_source_sync.py" in workflow
+    assert "Validate backend runtime source-of-truth" in workflow
+    assert "scripts/validate_backend_runtime_source_of_truth.py" in workflow
+    assert "GIT_DIFF_BASE:" in workflow
+    assert "GIT_DIFF_HEAD:" in workflow
     assert "uv run mypy" in workflow
 
 

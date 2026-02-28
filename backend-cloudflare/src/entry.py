@@ -10,11 +10,28 @@ from workers import WorkerEntrypoint, import_from_javascript
 
 
 def _ensure_backend_source_on_path() -> None:
-    """Allow local/dev packaging to import the backend runtime source tree."""
-    backend_src = Path(__file__).resolve().parents[2] / "backend-vercel" / "src"
-    backend_src_str = str(backend_src)
-    if backend_src.exists() and backend_src_str not in sys.path:
-        sys.path.insert(0, backend_src_str)
+    """Prefer packaged backend source, then canonical root source, then legacy mirror."""
+    local_worker_src = Path(__file__).resolve().parent
+    local_backend_package = local_worker_src / "immcad_api"
+    if local_backend_package.exists():
+        return
+
+    canonical_src = Path(__file__).resolve().parents[2] / "src"
+    canonical_backend_package = canonical_src / "immcad_api"
+    canonical_src_str = str(canonical_src)
+    if canonical_backend_package.exists() and canonical_src_str not in sys.path:
+        sys.path.insert(0, canonical_src_str)
+        return
+
+    legacy_backend_mirror_src = (
+        Path(__file__).resolve().parents[2] / "backend-vercel" / "src"
+    )
+    legacy_backend_mirror_src_str = str(legacy_backend_mirror_src)
+    if (
+        legacy_backend_mirror_src.exists()
+        and legacy_backend_mirror_src_str not in sys.path
+    ):
+        sys.path.insert(0, legacy_backend_mirror_src_str)
 
 
 _ensure_backend_source_on_path()

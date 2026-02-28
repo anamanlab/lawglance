@@ -589,9 +589,11 @@ def test_unhandled_exception_returns_unknown_error_envelope(
     monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    call_count = {"count": 0}
 
     def crashing_openai_generate(self, *, message: str, citations, locale: str):  # noqa: ANN001
         del self, message, citations, locale
+        call_count["count"] += 1
         raise RuntimeError("boom")
 
     monkeypatch.setattr(
@@ -614,6 +616,37 @@ def test_unhandled_exception_returns_unknown_error_envelope(
     assert body["error"]["code"] == "PROVIDER_ERROR"
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
+    assert call_count["count"] == 1
+
+
+def test_case_search_runtime_error_does_not_reexecute_after_threadpool_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search_calls = {"count": 0}
+
+    def _crashing_case_search(self, request):
+        del self, request
+        search_calls["count"] += 1
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _crashing_case_search,
+    )
+    client = TestClient(create_app(), raise_server_exceptions=False)
+
+    response = client.post(
+        "/api/search/cases",
+        json={
+            "query": "federal court inadmissibility precedent",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 500
+    assert search_calls["count"] == 1
 
 
 def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(

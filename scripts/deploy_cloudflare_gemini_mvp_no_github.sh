@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WRANGLER_VERSION="${WRANGLER_VERSION:-4.69.0}"
 BACKEND_WRANGLER_CONFIG="${BACKEND_WRANGLER_CONFIG:-backend-cloudflare/wrangler.toml}"
 FRONTEND_WRANGLER_CONFIG="${FRONTEND_WRANGLER_CONFIG:-frontend-web/wrangler.jsonc}"
-BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-https://immcad-backend-native-python.optivoo-edu.workers.dev/healthz}"
+BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-}"
 ALLOW_GENERATE_BEARER_TOKEN="${ALLOW_GENERATE_BEARER_TOKEN:-false}"
 ENV_FILE_CANDIDATES=(
   ".env"
@@ -81,6 +81,12 @@ run_wrangler() {
     return 0
   fi
   npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
+}
+
+resolve_backend_health_url_from_frontend_config() {
+  local frontend_wrangler_config="$1"
+  python3 scripts/cloudflare_runtime_config.py \
+    --frontend-wrangler "${frontend_wrangler_config}"
 }
 
 generate_bearer_token() {
@@ -219,7 +225,21 @@ main() {
   run_wrangler deploy --config "${FRONTEND_WRANGLER_CONFIG}"
 
   log "Running backend health check"
-  curl -fsS "${BACKEND_HEALTH_URL}" >/dev/null || warn "Backend health check failed: ${BACKEND_HEALTH_URL}"
+  if [[ -z "${BACKEND_HEALTH_URL}" ]]; then
+    resolved_backend_health_url="$(
+      resolve_backend_health_url_from_frontend_config "${FRONTEND_WRANGLER_CONFIG}"
+    )"
+    if [[ -n "${resolved_backend_health_url}" ]]; then
+      BACKEND_HEALTH_URL="${resolved_backend_health_url%/}/healthz"
+      log "Derived BACKEND_HEALTH_URL from frontend runtime config: ${BACKEND_HEALTH_URL}"
+    fi
+  fi
+  if [[ -z "${BACKEND_HEALTH_URL}" ]]; then
+    fail "BACKEND_HEALTH_URL is required for deploy verification."
+  fi
+  if ! curl -fsS "${BACKEND_HEALTH_URL}" >/dev/null; then
+    fail "Backend health check failed: ${BACKEND_HEALTH_URL}"
+  fi
 
   if [[ "${generated_bearer_token}" == "true" ]]; then
     printf '\n[IMPORTANT] Generated IMMCAD_API_BEARER_TOKEN (save in password manager):\n%s\n\n' "${IMMCAD_API_BEARER_TOKEN}"

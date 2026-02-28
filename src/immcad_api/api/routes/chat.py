@@ -5,6 +5,9 @@ from fastapi import APIRouter, Request, Response
 
 from immcad_api.policy.compliance import SAFE_CONSTRAINED_RESPONSE
 from immcad_api.schemas import ChatRequest, ChatResponse
+from immcad_api.api.routes.threadpool_runtime import (
+    is_threadpool_unavailable_runtime_error,
+)
 from immcad_api.services import ChatService
 from immcad_api.services.chat_service import is_friendly_greeting_answer
 from immcad_api.telemetry import RequestMetrics
@@ -29,7 +32,9 @@ def build_chat_router(
                 payload,
                 trace_id=trace_id,
             )
-        except RuntimeError:
+        except RuntimeError as exc:
+            if not is_threadpool_unavailable_runtime_error(exc):
+                raise
             # Python Workers can run in threadless runtimes where threadpool execution
             # is unavailable; fallback to direct invocation for compatibility.
             chat_response = chat_service.handle_chat(

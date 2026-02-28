@@ -28,3 +28,7 @@ def test_gemini_mvp_no_github_deploy_script_syncs_and_deploys() -> None:
     assert "wrangler@" in script
     assert "frontend-web/wrangler.jsonc" in script
     assert "whoami" in script
+    assert "BACKEND_HEALTH_URL is required for deploy verification." in script
+    assert "immcad-backend-native-python.optivoo-edu.workers.dev" not in script
+    assert 'BACKEND_HEALTH_URL="${resolved_backend_health_url%/}/healthz"' in script
+    assert "python3 scripts/cloudflare_runtime_config.py" in script

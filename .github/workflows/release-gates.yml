@@ -116,8 +116,11 @@ jobs:
       - name: Validate Cloudflare environment configuration
         run: uv run python scripts/validate_cloudflare_env_configuration.py
 
-      - name: Validate backend runtime source sync
-        run: uv run python scripts/validate_backend_runtime_source_sync.py
+      - name: Validate backend runtime source-of-truth
+        env:
+          GIT_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          GIT_DIFF_HEAD: ${{ github.sha }}
+        run: uv run python scripts/validate_backend_runtime_source_of_truth.py
 
       - name: Run case-law conformance (strict)
         env:

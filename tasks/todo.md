@@ -1,5 +1,129 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-28 - Backend Runtime Source-of-Truth Validator Review Fixes
+
+### Current Focus
+- Resolve fail-open behavior in `scripts/validate_backend_runtime_source_of_truth.py` so CI and local validation reliably enforce protected runtime edits.
+
+### Plan
+- [x] Add failing tests for:
+  - explicit `base/head` ref resolution failure must fail closed.
+  - no-ref mode must validate current staged/unstaged worktree changes instead of only `HEAD~1...HEAD`.
+- [x] Update validator diff selection logic to enforce fail-closed explicit-ref handling and worktree-first local behavior.
+- [x] Run targeted tests and lint for validator script and tests.
+- [x] Update this section with review notes and verification evidence.
+
+### Review
+- Added regression tests in `tests/test_validate_backend_runtime_source_of_truth.py`:
+  - `test_read_changed_paths_fails_closed_for_unresolvable_explicit_refs`
+  - `test_read_changed_paths_prefers_current_worktree_without_refs`
+- Updated `scripts/validate_backend_runtime_source_of_truth.py`:
+  - explicit `GIT_DIFF_BASE/GIT_DIFF_HEAD` diff failures now raise and fail closed.
+  - no-ref mode now checks staged/unstaged worktree changes first, then falls back to `HEAD~1...HEAD` only when the worktree is clean.
+  - CLI now reports diff-resolution errors as gate failure without a traceback dump.
+- Verification evidence:
+  - `uv run pytest -q tests/test_validate_backend_runtime_source_of_truth.py` (red) -> `2 failed, 3 passed`.
+  - `uv run pytest -q tests/test_validate_backend_runtime_source_of_truth.py` (green) -> `5 passed`.
+  - `uv run pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> `18 passed`.
+  - `uv run ruff check scripts/validate_backend_runtime_source_of_truth.py tests/test_validate_backend_runtime_source_of_truth.py` -> pass.
+
+## Task Plan - 2026-02-28 - Long-Term Frontend/Backend Simplification Program
+
+### Current Focus
+- Eliminate structural causes of confusion by removing backend runtime duplication and replacing ad-hoc frontend workflow state with explicit, testable workflow architecture.
+
+### Plan
+- [x] Phase A (Backend Source of Truth): define one canonical runtime source for API code and make Cloudflare/Vercel wrappers thin adapters only.
+- [x] Phase A.1 (Mirror Retirement): freeze or remove `backend-vercel/src/immcad_api` as an actively edited mirror; keep recovery path as adapter-only.
+- [x] Phase A.2 (Contract Gates): enforce source/contract drift checks in CI with fail-fast workflow gates and release evidence.
+- [x] Phase B (Frontend Information Architecture): split mixed workflow UI into explicit `Research` and `Documents` modules with independent status rails.
+- [x] Phase B.1 (State Model): introduce a single typed workflow-state model (events, phases, status severity) and remove hidden state transitions.
+- [x] Phase B.2 (UX Contracts): add integration tests for workflow transitions, status rendering, and stale-result prevention.
+- [ ] Phase C (Observability + Feedback Loop): add confusion metrics (switch churn, retries, failed actions, abandonment points) and monthly review.
+
+### Exit Gates
+- [x] No dual-edited backend runtime trees in active development flow.
+- [x] Frontend workflow module size reduced (target: no single chat workflow component > 500 LOC).
+- [x] Workflow status emitted from one shared contract and rendered by one shared status presenter.
+- [x] CI blocks merges when workflow contracts or runtime source parity drift.
+- [ ] Post-release metrics show reduced confusion proxy metrics (fewer workflow toggles-per-task, fewer retry loops, lower ambiguous-error rate).
+
+### Review
+- Added source-of-truth gate script that blocks runtime edits under `backend-vercel/src/immcad_api` (except allowlisted docs path) using CI commit-range diffs:
+  - `scripts/validate_backend_runtime_source_of_truth.py`
+- Updated quality/release workflows to run the new fail-fast gate with event-aware diff refs:
+  - `.github/workflows/quality-gates.yml`
+  - `.github/workflows/release-gates.yml`
+- Updated local quality flow to enforce source-of-truth gate:
+  - `Makefile` (`backend-runtime-source-of-truth-validate`, `quality`)
+- Updated adapter loading to prefer canonical root runtime source and keep Vercel mirror as recovery fallback only:
+  - `backend-vercel/api/index.py`
+  - `backend-cloudflare/src/entry.py`
+- Added test coverage for the new gate and workflow contract updates:
+  - `tests/test_validate_backend_runtime_source_of_truth.py`
+  - `tests/test_quality_gates_workflow.py`
+  - `tests/test_release_gates_workflow.py`
+- Split mixed workflow panel into explicit modules while preserving existing UI contracts:
+  - `frontend-web/components/chat/related-case-panel.tsx` (parent shell/tabs)
+  - `frontend-web/components/chat/related-case-panel-documents.tsx`
+  - `frontend-web/components/chat/related-case-panel-research.tsx`
+  - `frontend-web/components/chat/related-case-panel-research-results.tsx`
+  - `frontend-web/components/chat/related-case-panel-utils.ts`
+- Added shared workflow status contract used by both shell banner logic and workflow-tab status rails:
+  - `frontend-web/components/chat/workflow-status-contract.ts`
+  - `frontend-web/components/chat/chat-shell-container.tsx`
+  - `frontend-web/components/chat/related-case-panel.tsx`
+- Size target evidence after refactor:
+  - `related-case-panel.tsx`: 191 lines
+  - `related-case-panel-documents.tsx`: 458 lines
+  - `related-case-panel-research.tsx`: 338 lines
+  - `related-case-panel-research-results.tsx`: 296 lines
+- Added workflow status contract tests:
+  - `frontend-web/tests/workflow-status-contract.test.ts`
+- Verification evidence:
+  - `uv run ruff check scripts/validate_backend_runtime_source_of_truth.py tests/test_validate_backend_runtime_source_of_truth.py backend-cloudflare/src/entry.py backend-vercel/api/index.py tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py` -> pass.
+  - `uv run pytest -q tests/test_quality_gates_workflow.py tests/test_release_gates_workflow.py tests/test_validate_backend_runtime_source_of_truth.py` -> `21 passed`.
+  - `uv run python scripts/validate_backend_runtime_source_of_truth.py --base-ref HEAD --head-ref HEAD` -> pass.
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/source-transparency-page.contract.test.tsx tests/workflow-status-contract.test.ts` -> `42 passed`.
+  - `cd frontend-web && npm run lint` -> pass (`No ESLint warnings or errors`).
+  - `cd frontend-web && npm run typecheck` -> pass.
+
+## Task Plan - 2026-02-28 - Frontend/Backend Confusion Reduction Execution
+
+### Current Focus
+- Execute a concrete stabilization pass that reduces user confusion in the frontend while eliminating backend runtime drift that causes inconsistent behavior.
+
+### Plan
+- [x] Phase 0: Stabilize backend runtime parity between `src/immcad_api` and deploy runtime tree (`backend-vercel/src/immcad_api`), and verify sync gate passes.
+- [x] Phase 0.1: Reduce Cloudflare runtime coupling risk by preferring local packaged backend source over repository mirror path injection.
+- [x] Phase 1: Apply frontend confusion quick wins (remove misleading onboarding step copy, keep workflow tab selection stable, rename mobile drawer affordances).
+- [x] Phase 1.1: Simplify status messaging so banner does not duplicate document workflow status already shown in the Documents panel.
+- [x] Verification: run backend/runtime sync validation and targeted frontend tests.
+
+### Review
+- Synced deploy runtime Python tree from `src/immcad_api` into `backend-vercel/src/immcad_api` (including missing files such as `source_transparency.py`, `threadpool_runtime.py`, embedded policy/registry helpers, and prompt behavior suite module).
+- Updated Cloudflare Python Worker entrypoint to prefer local packaged backend source and only fall back to repository mirror path injection when local package is absent:
+  - `backend-cloudflare/src/entry.py`
+- Fixed source transparency checkpoint path serialization to preserve configured string form:
+  - `src/immcad_api/api/routes/source_transparency.py`
+  - mirrored into `backend-vercel/src/immcad_api/api/routes/source_transparency.py`
+- Frontend confusion quick wins implemented:
+  - Removed misleading stepper copy and extraneous `Research mode` badge from composer:
+    - `frontend-web/components/chat/message-composer.tsx`
+  - Removed automatic workflow-mode switching to Documents so tab selection stays user-controlled:
+    - `frontend-web/components/chat/related-case-panel.tsx`
+  - Clarified workflow panel and mobile drawer copy:
+    - `frontend-web/components/chat/related-case-panel.tsx`
+    - `frontend-web/components/chat/chat-shell-container.tsx`
+  - Simplified top-banner workflow status logic to avoid duplicating document status already visible in the Documents panel:
+    - `frontend-web/components/chat/chat-shell-container.tsx`
+- Verification evidence:
+  - `python scripts/validate_backend_runtime_source_sync.py` -> pass.
+  - `uv run pytest -q tests/test_validate_backend_vercel_source_sync.py tests/test_validate_backend_vercel_source_sync_script.py tests/test_source_transparency_api.py tests/test_lawyer_research_api.py tests/test_api_scaffold.py` -> `62 passed`.
+  - `cd frontend-web && npm run test -- --run tests/chat-shell.ui.test.tsx tests/chat-shell.contract.test.tsx tests/source-transparency-page.contract.test.tsx` -> `37 passed`.
+  - `cd frontend-web && npm run lint` -> pass (`No ESLint warnings or errors`).
+  - `cd frontend-web && npm run typecheck` -> pass.
+
 ## Task Plan - 2026-02-27 - Frontend Eye-Comfort Contrast Hardening
 
 ### Current Focus
@@ -3809,3 +3933,84 @@
 
 ### Review
 - Pending new findings.
+
+## Task Plan - 2026-02-28 - PR Review Fixes (Smoke Determinism + Threadpool Safety + Deploy Hardening)
+
+### Current Focus
+- Fix the concrete defects identified in PR review:
+  - nondeterministic SCC/FC freshness smoke gating in CI,
+  - duplicate endpoint execution risk from broad threadpool `RuntimeError` fallback,
+  - deploy path hardening around backend token compatibility and health-check reliability.
+
+### Plan
+- [x] Add/adjust tests first for the route fallback behavior and workflow/script expectations.
+- [x] Update API route threadpool fallback handlers to only fallback for threadpool-unavailable runtime errors.
+- [x] Make smoke workflow execution deterministic by setting explicit freshness override for CI/staging smoke runs.
+- [x] Update native deploy workflow to accept canonical bearer secret or compatibility alias.
+- [x] Harden deploy script health check to avoid false-success completions and remove account-specific default URL coupling.
+- [x] Run targeted verification commands for touched backend/workflow/script tests.
+
+### Review
+- Code updates:
+  - Added `src/immcad_api/api/routes/threadpool_runtime.py` and wired guarded fallback checks in:
+    - `src/immcad_api/api/routes/chat.py`
+    - `src/immcad_api/api/routes/cases.py`
+    - `src/immcad_api/api/routes/lawyer_research.py`
+  - Made smoke workflow env deterministic for non-primed checkpoints:
+    - `.github/workflows/quality-gates.yml`
+    - `.github/workflows/staging-smoke.yml`
+  - Added bearer-token compatibility handling in:
+    - `.github/workflows/cloudflare-backend-native-deploy.yml`
+  - Hardened deploy verification behavior in:
+    - `scripts/deploy_cloudflare_gemini_mvp_no_github.sh`
+      (`BACKEND_HEALTH_URL` now explicit and health-check failure is fail-fast)
+- Test updates (TDD red/green):
+  - Added single-invocation regression assertions for chat/case/lawyer runtime errors.
+  - Added workflow/script assertions for deterministic freshness override and health-check hardening.
+- Verification evidence:
+  - `uv run pytest -q tests/test_api_scaffold.py::test_unhandled_exception_returns_unknown_error_envelope tests/test_api_scaffold.py::test_case_search_runtime_error_does_not_reexecute_after_threadpool_failure tests/test_lawyer_research_api.py::test_lawyer_research_runtime_error_does_not_reexecute_after_threadpool_failure tests/test_quality_gates_workflow.py::test_quality_gates_sets_smoke_freshness_override_for_deterministic_ci tests/test_staging_smoke_workflow.py::test_staging_smoke_workflow_runs_contract_checks_with_report_artifact tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py::test_gemini_mvp_no_github_deploy_script_syncs_and_deploys` -> `6 failed` (expected red, pre-fix)
+  - `uv run pytest -q tests/test_api_scaffold.py::test_unhandled_exception_returns_unknown_error_envelope tests/test_api_scaffold.py::test_case_search_runtime_error_does_not_reexecute_after_threadpool_failure tests/test_api_scaffold.py::test_case_search_falls_back_when_threadpool_unavailable tests/test_lawyer_research_api.py::test_lawyer_research_runtime_error_does_not_reexecute_after_threadpool_failure tests/test_lawyer_research_api.py::test_lawyer_research_endpoint_falls_back_when_threadpool_unavailable tests/test_quality_gates_workflow.py::test_quality_gates_sets_smoke_freshness_override_for_deterministic_ci tests/test_staging_smoke_workflow.py::test_staging_smoke_workflow_runs_contract_checks_with_report_artifact tests/test_cloudflare_backend_native_deploy_workflow.py::test_cloudflare_backend_native_deploy_workflow_requires_runtime_provider_secrets tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py::test_gemini_mvp_no_github_deploy_script_syncs_and_deploys` -> `9 passed`
+  - `uv run pytest -q tests/test_api_scaffold.py tests/test_lawyer_research_api.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py` -> `75 passed`
+  - `uv run ruff check src/immcad_api/api/routes/chat.py src/immcad_api/api/routes/cases.py src/immcad_api/api/routes/lawyer_research.py src/immcad_api/api/routes/threadpool_runtime.py tests/test_api_scaffold.py tests/test_lawyer_research_api.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py` -> pass
+
+## Task Plan - 2026-02-28 - Follow-up Hardening (Custom Domain Validation + Deploy Health URL Resolution)
+
+### Current Focus
+- Remove residual brittleness in Cloudflare env validation for custom domains and improve deploy health URL ergonomics without reintroducing account-specific defaults.
+
+### Plan
+- [x] Add failing tests for custom-domain `IMMCAD_API_BASE_URL` acceptance in env validation and deploy script health URL auto-resolution path.
+- [x] Implement URL parsing validation that permits secure custom domains while still blocking invalid/non-HTTPS values.
+- [x] Implement deploy-script health URL derivation from frontend Wrangler runtime vars when explicit `BACKEND_HEALTH_URL` is unset.
+- [x] Run targeted verification for updated tests and lint checks.
+
+### Review
+- Code updates:
+  - `scripts/validate_cloudflare_env_configuration.py`
+    - switched from hard `*.workers.dev` requirement to parsed HTTPS URL validation with explicit blocks for localhost/private IP and legacy `.vercel.app` hosts.
+  - `scripts/cloudflare_runtime_config.py` (new)
+    - added reusable JSON/JSONC parser with safe comment/trailing-comma handling that preserves `https://` values.
+    - exposes `resolve_backend_base_url` and CLI output for deploy automation usage.
+  - `scripts/deploy_cloudflare_gemini_mvp_no_github.sh`
+    - refactored `resolve_backend_health_url_from_frontend_config` to call `scripts/cloudflare_runtime_config.py`.
+    - derives health URL from frontend `IMMCAD_API_BASE_URL` when `BACKEND_HEALTH_URL` is unset.
+    - retains fail-fast guard if no health URL can be resolved.
+    - normalized script line endings to LF so `bash -n` passes in Unix runners.
+- Test updates:
+  - `tests/test_cloudflare_runtime_config.py` (new)
+    - covers JSON and JSONC parsing (including comments/trailing commas and URL-preservation behavior).
+  - `tests/test_validate_cloudflare_env_configuration.py`
+    - added custom-domain pass case.
+    - made legacy/unsafe assertion checks path-separator agnostic for cross-platform consistency.
+  - `tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py`
+    - added assertions for health URL derivation logic and parser utility integration.
+- Verification evidence:
+  - `uv run pytest -q tests/test_validate_cloudflare_env_configuration.py::test_validate_cloud_only_defaults_accepts_custom_https_domain tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py::test_gemini_mvp_no_github_deploy_script_syncs_and_deploys` -> `2 passed`
+  - `uv run pytest -q tests/test_validate_cloudflare_env_configuration.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py` -> `25 passed`
+  - `uv run pytest -q tests/test_cloudflare_runtime_config.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py` -> `5 passed`
+  - `uv run pytest -q tests/test_cloudflare_runtime_config.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py tests/test_validate_cloudflare_env_configuration.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py` -> `28 passed`
+  - `uv run pytest -q tests/test_api_scaffold.py tests/test_lawyer_research_api.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py tests/test_validate_cloudflare_env_configuration.py` -> `80 passed`
+  - `uv run pytest -q tests/test_api_scaffold.py tests/test_lawyer_research_api.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py tests/test_validate_cloudflare_env_configuration.py tests/test_cloudflare_runtime_config.py` -> `83 passed`
+  - `bash -n scripts/deploy_cloudflare_gemini_mvp_no_github.sh` -> pass
+  - `uv run ruff check scripts/validate_cloudflare_env_configuration.py tests/test_validate_cloudflare_env_configuration.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py` -> pass
+  - `uv run ruff check src/immcad_api/api/routes/chat.py src/immcad_api/api/routes/cases.py src/immcad_api/api/routes/lawyer_research.py src/immcad_api/api/routes/threadpool_runtime.py scripts/cloudflare_runtime_config.py scripts/validate_cloudflare_env_configuration.py tests/test_api_scaffold.py tests/test_lawyer_research_api.py tests/test_quality_gates_workflow.py tests/test_staging_smoke_workflow.py tests/test_cloudflare_backend_native_deploy_workflow.py tests/test_deploy_cloudflare_gemini_mvp_no_github_script.py tests/test_validate_cloudflare_env_configuration.py tests/test_cloudflare_runtime_config.py` -> pass

@@ -19,7 +19,7 @@ REQUIRED_SECURITY_AND_INGESTION_STEPS = [
     "Dependency review (PR)",
     "Backend typecheck",
     "Validate Cloudflare environment configuration",
-    "Validate backend runtime source sync",
+    "Validate backend runtime source-of-truth",
     "Run SCC/FC API smoke checks",
     "Run ingestion smoke checks",
     "Upload SCC/FC API smoke artifact",
@@ -53,6 +53,9 @@ def test_quality_gates_includes_dependency_review_and_ingestion_smoke() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "Validate Cloudflare edge-proxy contract" in workflow
     assert "scripts/check_cloudflare_edge_proxy_contract.sh" in workflow
+    assert "scripts/validate_backend_runtime_source_of_truth.py" in workflow
+    assert "GIT_DIFF_BASE:" in workflow
+    assert "GIT_DIFF_HEAD:" in workflow
     for step_name in REQUIRED_SECURITY_AND_INGESTION_STEPS:
         assert step_name in workflow
     pattern = r"actions/dependency-review-action@[0-9a-f]{40}\b"
@@ -75,6 +78,11 @@ def test_quality_gates_runs_backend_typecheck_before_unit_tests() -> None:
     unit_tests_idx = workflow.index("Run unit tests")
     assert typecheck_idx < unit_tests_idx
     assert "uv run mypy" in workflow
+
+
+def test_quality_gates_sets_smoke_freshness_override_for_deterministic_ci() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert 'ALLOW_PRIORITY_SOURCE_FRESHNESS: "true"' in workflow
 
 
 def test_quality_gates_pins_core_actions_to_commit_shas() -> None:

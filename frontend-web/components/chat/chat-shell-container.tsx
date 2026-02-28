@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ChatHeader } from "@/components/chat/chat-header";
-import {
-  DOCUMENT_UPLOAD_DEFAULT_STATUS,
-  MAX_MESSAGE_LENGTH,
-} from "@/components/chat/constants";
+import { MAX_MESSAGE_LENGTH } from "@/components/chat/constants";
 import { MessageComposer } from "@/components/chat/message-composer";
 import { MessageList } from "@/components/chat/message-list";
 import { RelatedCasePanel } from "@/components/chat/related-case-panel";
@@ -14,6 +11,7 @@ import { StatusBanner } from "@/components/chat/status-banner";
 import { SupportContextPanel } from "@/components/chat/support-context-panel";
 import type { ChatShellProps } from "@/components/chat/types";
 import { buildStatusTone } from "@/components/chat/utils";
+import { buildWorkflowStatusContract } from "@/components/chat/workflow-status-contract";
 import { useChatLogic } from "@/components/chat/use-chat-logic";
 
 export function ChatShell({
@@ -192,53 +190,27 @@ export function ChatShell({
     () => buildStatusTone(supportContext?.status ?? null),
     [supportContext]
   );
-  const workflowStatus = useMemo(() => {
-    const caseStatusMessage = relatedCasesStatus.trim();
-    const documentStatus = documentStatusMessage.trim();
-    const isDefaultDocumentStatus =
-      documentStatus === DOCUMENT_UPLOAD_DEFAULT_STATUS;
-
-    if (caseStatusMessage) {
-      const normalizedMessage = caseStatusMessage.toLowerCase();
-      const caseTone =
-        normalizedMessage.includes("unavailable") ||
-        normalizedMessage.includes("failed") ||
-        normalizedMessage.includes("blocked") ||
-        normalizedMessage.includes("invalid") ||
-        normalizedMessage.includes("too broad")
-          ? "warning"
-          : normalizedMessage.includes("download started") ||
-            normalizedMessage.includes("ready")
-            ? "success"
-            : "info";
-      return {
-        title: "Case-law workflow",
-        message: caseStatusMessage,
-        tone: caseTone as "info" | "success" | "warning",
-      };
-    }
-
-    if (!isDefaultDocumentStatus && documentStatus) {
-      const normalizedMessage = documentStatus.toLowerCase();
-      const documentTone =
-        normalizedMessage.includes("failed") ||
-        normalizedMessage.includes("not ready") ||
-        normalizedMessage.includes("blocked")
-          ? "warning"
-          : normalizedMessage.includes("complete") ||
-            normalizedMessage.includes("ready") ||
-            normalizedMessage.includes("generated")
-            ? "success"
-            : "info";
-      return {
-        title: "Document workflow",
-        message: documentStatus,
-        tone: documentTone as "info" | "success" | "warning",
-      };
-    }
-
-    return null;
-  }, [documentStatusMessage, relatedCasesStatus]);
+  const workflowStatus = useMemo(
+    () =>
+      buildWorkflowStatusContract({
+        relatedCasesStatus,
+        documentStatusMessage,
+        isCaseSearchSubmitting,
+        isDocumentIntakeSubmitting,
+        isDocumentReadinessSubmitting,
+        isDocumentPackageSubmitting,
+        isDocumentDownloadSubmitting,
+      }).overall,
+    [
+      documentStatusMessage,
+      isCaseSearchSubmitting,
+      isDocumentDownloadSubmitting,
+      isDocumentIntakeSubmitting,
+      isDocumentPackageSubmitting,
+      isDocumentReadinessSubmitting,
+      relatedCasesStatus,
+    ]
+  );
   const endpointLabel = apiBaseUrl.trim().replace(/\/+$/, "") || "same-origin /api";
 
   return (
@@ -326,13 +298,13 @@ export function ChatShell({
                 {isMobileDrawerOpen ? (
                   <div className="mb-4 flex items-center justify-between lg:hidden">
                     <h3 className="font-heading text-lg font-semibold text-ink" id="mobile-case-law-drawer-title">
-                      Case Law Tools
+                      Research & Document Tools
                     </h3>
                     <button
                       type="button"
                       className="imm-btn-secondary rounded-full border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] px-0"
                       onClick={closeMobileDrawer}
-                      aria-label="Close Case Law Tools drawer"
+                      aria-label="Close Research & Document Tools drawer"
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
@@ -431,7 +403,7 @@ export function ChatShell({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
           </svg>
-          Case Law Tools
+          Research & Documents
           {relatedCases.length > 0 ? (
             <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--imm-surface)] text-[11px] text-[var(--imm-brand-orange)]">
               {relatedCases.length}

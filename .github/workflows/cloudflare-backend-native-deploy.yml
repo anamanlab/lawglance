@@ -38,12 +38,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           IMMCAD_API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+          API_BEARER_TOKEN: ${{ secrets.API_BEARER_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           required_vars=(
             CLOUDFLARE_API_TOKEN
             CLOUDFLARE_ACCOUNT_ID
-            IMMCAD_API_BEARER_TOKEN
             GEMINI_API_KEY
           )
           for required_var in "${required_vars[@]}"; do
@@ -52,6 +52,14 @@ jobs:
               exit 1
             fi
           done
+          if [ -z "${IMMCAD_API_BEARER_TOKEN}" ] && [ -z "${API_BEARER_TOKEN}" ]; then
+            echo "Either IMMCAD_API_BEARER_TOKEN or API_BEARER_TOKEN secret is required."
+            exit 1
+          fi
+          if [ -n "${IMMCAD_API_BEARER_TOKEN}" ] && [ -n "${API_BEARER_TOKEN}" ] && [ "${IMMCAD_API_BEARER_TOKEN}" != "${API_BEARER_TOKEN}" ]; then
+            echo "IMMCAD_API_BEARER_TOKEN and API_BEARER_TOKEN must match when both are set."
+            exit 1
+          fi
 
       - name: Sync backend runtime source for native worker
         run: bash scripts/sync_backend_cloudflare_native_source.sh
@@ -68,11 +76,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           IMMCAD_API_BEARER_TOKEN: ${{ secrets.IMMCAD_API_BEARER_TOKEN }}
+          API_BEARER_TOKEN: ${{ secrets.API_BEARER_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CANLII_API_KEY: ${{ secrets.CANLII_API_KEY }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
         run: |
-          export API_BEARER_TOKEN="${IMMCAD_API_BEARER_TOKEN}"
+          resolved_bearer_token="${IMMCAD_API_BEARER_TOKEN:-${API_BEARER_TOKEN:-}}"
+          if [ -z "${resolved_bearer_token}" ]; then
+            echo "Either IMMCAD_API_BEARER_TOKEN or API_BEARER_TOKEN secret is required."
+            exit 1
+          fi
+          export IMMCAD_API_BEARER_TOKEN="${resolved_bearer_token}"
+          export API_BEARER_TOKEN="${resolved_bearer_token}"
           bash scripts/sync_cloudflare_backend_native_secrets.sh \
             IMMCAD_API_BEARER_TOKEN \
             API_BEARER_TOKEN \

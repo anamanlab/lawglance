@@ -1,4 +1,4 @@
-.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-native-secrets-sync backend-cf-gemini-mvp-deploy backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health backend-cf-codespace-runtime-start backend-cf-codespace-runtime-stop backend-cf-codespace-runtime-health backend-origin-env-prepare backend-origin-env-recover-from-vercel cloudflare-env-sync cloudflare-env-validate cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test test-document-compilation arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-runtime-sync-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke chat-case-law-smoke free-tier-runtime-validate hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
+.PHONY: setup verify dev api-dev frontend-install frontend-dev frontend-build frontend-typecheck frontend-cf-build frontend-cf-preview frontend-cf-deploy backend-cf-spike-build backend-cf-proxy-deploy backend-cf-native-sync backend-cf-native-dev backend-cf-native-deploy backend-cf-native-secrets-sync backend-cf-gemini-mvp-deploy backend-cf-perf-smoke backend-cf-quick-bridge-start backend-cf-quick-bridge-stop backend-cf-named-tunnel-doctor backend-cf-named-tunnel-cutover backend-cf-origin-stack-systemd-install backend-cf-origin-stack-health backend-cf-codespace-runtime-start backend-cf-codespace-runtime-stop backend-cf-codespace-runtime-health backend-origin-env-prepare backend-origin-env-recover-from-vercel cloudflare-env-sync cloudflare-env-validate cloudflare-free-preflight cloudflare-edge-contract-preflight frontend-e2e-install frontend-e2e-install-webkit frontend-e2e-install-mobile-safari frontend-e2e frontend-e2e-cross-browser frontend-e2e-webkit frontend-e2e-mobile frontend-e2e-mobile-safari typecheck lint lint-api format test test-document-compilation arch-generate arch-validate docs-audit docs-fix source-registry-validate backend-runtime-source-of-truth-validate backend-runtime-sync-validate backend-vercel-sync-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite ingestion-run ingestion-smoke ops-alert-eval staging-smoke canlii-key-verify canlii-live-smoke chat-case-law-smoke free-tier-runtime-validate hygiene release-preflight git-secret-check git-secret-reveal git-secret-hide git-secret-list git-secret-changes quality integration-quality ralph-run ralph-run-codex ralph-run-amp ralph-run-claude ralph-check ralph-status vercel-env-analyze vercel-env-pull vercel-env-diff vercel-env-validate vercel-env-push-dry-run vercel-env-backup vercel-env-restore
 
 PROJECT_DIR ?= frontend-web
 ENV ?= development
@@ -182,8 +182,10 @@ docs-fix:
 source-registry-validate:
 	./scripts/venv_exec.sh python scripts/validate_source_registry.py
 
-backend-runtime-sync-validate:
-	./scripts/venv_exec.sh python scripts/validate_backend_runtime_source_sync.py
+backend-runtime-source-of-truth-validate:
+	./scripts/venv_exec.sh python scripts/validate_backend_runtime_source_of_truth.py
+
+backend-runtime-sync-validate: backend-runtime-source-of-truth-validate
 
 backend-vercel-sync-validate: backend-runtime-sync-validate
 
@@ -245,7 +247,7 @@ git-secret-list:
 git-secret-changes:
 	bash scripts/git_secret_env.sh changes $(GIT_SECRET_ARGS)
 
-quality: lint-api typecheck test arch-validate docs-audit source-registry-validate backend-runtime-sync-validate cloudflare-env-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
+quality: lint-api typecheck test arch-validate docs-audit source-registry-validate backend-runtime-source-of-truth-validate cloudflare-env-validate legal-review-validate domain-leak-scan jurisdiction-eval jurisdiction-suite hygiene
 
 integration-quality: quality ingestion-smoke
 

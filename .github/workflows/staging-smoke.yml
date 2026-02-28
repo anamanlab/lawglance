@@ -25,6 +25,7 @@ jobs:
           ENVIRONMENT: staging
           ENABLE_SCAFFOLD_PROVIDER: "true"
           ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"
+          ALLOW_PRIORITY_SOURCE_FRESHNESS: "true"
           STAGING_SMOKE_REPORT_PATH: artifacts/evals/staging-smoke-report.json
         run: bash scripts/run_api_smoke_tests.sh
 

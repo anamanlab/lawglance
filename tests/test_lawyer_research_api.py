@@ -119,6 +119,37 @@ def test_lawyer_research_endpoint_falls_back_when_threadpool_unavailable(
     assert search_calls["count"] >= 1
 
 
+def test_lawyer_research_runtime_error_does_not_reexecute_after_threadpool_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    search_calls = {"count": 0}
+
+    def _crashing_case_search(self, request):
+        del self, request
+        search_calls["count"] += 1
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _crashing_case_search,
+    )
+    client = TestClient(create_app(), raise_server_exceptions=False)
+
+    response = client.post(
+        "/api/research/lawyer-cases",
+        json={
+            "session_id": "session-123456",
+            "matter_summary": "Federal Court appeal about inadmissibility",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 3,
+        },
+    )
+
+    assert response.status_code == 500
+    assert search_calls["count"] == 1
+
+
 def test_lawyer_research_endpoint_returns_disabled_envelope_when_case_search_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

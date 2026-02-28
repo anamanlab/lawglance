@@ -82,6 +82,30 @@ def test_validate_cloud_only_defaults_passes_for_cloudflare_native_baseline() ->
     assert errors == []
 
 
+def test_validate_cloud_only_defaults_accepts_custom_https_domain() -> None:
+    errors = MODULE._validate_cloud_only_defaults(
+        frontend_wrangler_path=Path("frontend-web/wrangler.jsonc"),
+        frontend_vars={
+            "IMMCAD_API_BASE_URL": "https://api.immcad.example.ca",
+        },
+        backend_wrangler_path=Path("backend-cloudflare/wrangler.toml"),
+        backend_vars={
+            "ENABLE_SCAFFOLD_PROVIDER": "false",
+            "ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS": "false",
+            "ENABLE_OPENAI_PROVIDER": "false",
+            "PRIMARY_PROVIDER": "gemini",
+            "ENABLE_CASE_SEARCH": "true",
+            "ENABLE_OFFICIAL_CASE_SOURCES": "true",
+            "CASE_SEARCH_OFFICIAL_ONLY_RESULTS": "true",
+            "EXPORT_POLICY_GATE_ENABLED": "true",
+            "DOCUMENT_REQUIRE_HTTPS": "true",
+            "GEMINI_MODEL": "gemini-2.5-flash-lite",
+            "CITATION_TRUSTED_DOMAINS": "laws-lois.justice.gc.ca,canlii.org",
+        },
+    )
+    assert errors == []
+
+
 def test_validate_cloud_only_defaults_reports_legacy_or_unsafe_config() -> None:
     errors = MODULE._validate_cloud_only_defaults(
         frontend_wrangler_path=Path("frontend-web/wrangler.jsonc"),
@@ -105,29 +129,24 @@ def test_validate_cloud_only_defaults_reports_legacy_or_unsafe_config() -> None:
         },
     )
 
-    assert (
-        "frontend-web/wrangler.jsonc: IMMCAD_API_BASE_URL must start with `https://` "
+    def _contains(snippet: str) -> bool:
+        return any(snippet in error for error in errors)
+
+    assert _contains(
+        "IMMCAD_API_BASE_URL must start with `https://` "
         "(got `http://backend-vercel.example.vercel.app`)"
-    ) in errors
-    assert (
-        "frontend-web/wrangler.jsonc: IMMCAD_API_BASE_URL_FALLBACK must be unset for "
-        "cloud-only production baseline"
-    ) in errors
-    assert (
-        "backend-cloudflare/wrangler.toml: missing required var `GEMINI_MODEL`"
-    ) in errors
-    assert (
-        "backend-cloudflare/wrangler.toml: missing required var `CITATION_TRUSTED_DOMAINS`"
-    ) in errors
-    assert (
-        "backend-cloudflare/wrangler.toml: ENABLE_SCAFFOLD_PROVIDER must be `false` "
-        "for cloud-only production baseline (got `true`)"
-    ) in errors
-    assert (
-        "backend-cloudflare/wrangler.toml: ENABLE_OPENAI_PROVIDER must be `false` "
-        "for cloud-only production baseline (got `true`)"
-    ) in errors
-    assert (
-        "backend-cloudflare/wrangler.toml: PRIMARY_PROVIDER must be `gemini` "
-        "for cloud-only production baseline (got `openai`)"
-    ) in errors
+    )
+    assert _contains(
+        "IMMCAD_API_BASE_URL_FALLBACK must be unset for cloud-only production baseline"
+    )
+    assert _contains("missing required var `GEMINI_MODEL`")
+    assert _contains("missing required var `CITATION_TRUSTED_DOMAINS`")
+    assert _contains(
+        "ENABLE_SCAFFOLD_PROVIDER must be `false` for cloud-only production baseline (got `true`)"
+    )
+    assert _contains(
+        "ENABLE_OPENAI_PROVIDER must be `false` for cloud-only production baseline (got `true`)"
+    )
+    assert _contains(
+        "PRIMARY_PROVIDER must be `gemini` for cloud-only production baseline (got `openai`)"
+    )

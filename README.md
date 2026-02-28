@@ -14,29 +14,31 @@ The goal is to help users quickly understand:
 - Required documents and timelines
 - Common policy constraints and risks
 
-## Current runtime status
+## Current baseline analysis
 
-The current implementation is converging on a single production runtime:
-- Next.js chat UI in `frontend-web` (production path)
-- Python API backend in `src/immcad_api` (production path)
-- Document intake/readiness/package endpoints are available via frontend `/api/documents/*` proxy routes backed by backend `src/immcad_api/api/routes/documents.py`
-- Streamlit UI in `app.py` is now a legacy dev-only **thin API client** to `/api/chat`
-- Legacy local-RAG modules are archived under `legacy/local_rag/` for compatibility and historical evaluation workflows
-- CI quality gates include ingestion smoke, dependency review, jurisdiction suite, and repository hygiene
+The current codebase already provides a strong foundation:
+- Streamlit chat UI in `app.py`
+- Archived legacy local-RAG stack in `legacy/local_rag/` (for compatibility/evaluation only)
 
-### Remaining Canada-readiness gaps
+### Gaps to adapt for Canada
 
-1. Legal corpus completeness
-- Complete IRPA/IRPR/IRCC source coverage and enforce freshness cadence.
+The repository is still jurisdiction-specific to Indian legal context and needs Canadian adaptation in 4 main areas:
 
-2. Grounding enforcement
-- Add runtime citation-grounding verification beyond template-level constraints.
+1. Legal corpus
+- Current vectors/prompt references are not Canada-focused.
+- Need a curated Canadian immigration corpus.
 
-3. Product localization
-- Deliver bilingual-ready user journeys (English now, French next).
+2. Prompting and safety policy
+- System prompt must be rewritten for Canadian immigration law.
+- Must enforce legal disclaimers, scope boundaries, and escalation guidance.
 
-4. Legacy retirement
-- Fully decommission legacy local-RAG modules once all evaluation dependencies are migrated.
+3. Retrieval quality and citations
+- Must add source metadata and citation quality controls.
+- Need grounding checks to reduce hallucinations.
+
+4. Product localization
+- Canada requires clear English-first support and planned French support.
+- UX should reflect IRCC terminology and user journeys.
 
 ## Canadian legal scope (V1)
 
@@ -92,11 +94,11 @@ The current implementation is converging on a single production runtime:
 
 ## Immediate next steps (recommended order)
 
-1. Keep `src/immcad_api/policy/prompts.py` as the single canonical prompt source.
-2. Finalize Canadian source coverage and run ingestion refresh + smoke validation in CI on schedule.
-3. Implement grounding-verification checks in response assembly before delivery.
-4. Add bilingual-ready locale handling to production UI/API contracts (`en-CA`, `fr-CA`) with coverage tests.
-5. Remove archive references once `legacy/local_rag/` is fully retired.
+1. Keep canonical prompt ownership in `src/immcad_api/policy/prompts.py`.
+2. Create `data/sources/canada-immigration/` and ingest official IRPA/IRPR + IRCC sources.
+3. Rebuild vector store and validate retrieval quality on 30-50 benchmark questions.
+4. Add citation-required response template and fail-safe refusal when context is missing.
+5. Build a small evaluation harness for repeatable quality checks before UI launch.
 
 ## Suggested task breakdown
 
@@ -120,7 +122,6 @@ The current implementation is converging on a single production runtime:
 ### Prerequisites
 - Python 3.11+
 - `uv`
-- Node.js 20+
 - OpenAI API key
 - Redis (recommended)
 
@@ -140,179 +141,17 @@ Create `.env`:
 OPENAI_API_KEY=your-api-key-here
 ```
 
-Run the production path locally:
-
-Terminal 1 (API):
-
-```bash
-make api-dev
-```
-
-Terminal 2 (frontend):
-
-```bash
-make frontend-install
-make frontend-dev
-```
-
-App URLs:
-
-```bash
-Frontend: http://127.0.0.1:3000
-API:      http://127.0.0.1:8000
-```
-
-### Backend API (production runtime)
-
-Run API service scaffold:
-
-```bash
-uv run uvicorn immcad_api.main:app --app-dir src --reload --port 8000
-```
-
-Health check:
-
-```bash
-http://127.0.0.1:8000/healthz
-```
-
-### Next.js frontend (`frontend-web`, production runtime)
-
-Install frontend dependencies:
-
-```bash
-make frontend-install
-```
-
-Run frontend:
-
-```bash
-make frontend-dev
-```
-
-Frontend URL:
-
-```bash
-http://127.0.0.1:3000
-```
-
-Create `frontend-web/.env.local` with:
-
-```bash
-NEXT_PUBLIC_IMMCAD_API_BASE_URL=/api
-IMMCAD_API_BASE_URL=http://127.0.0.1:8000
-IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
-```
-
-Production safety notes:
-- `NEXT_PUBLIC_IMMCAD_API_BASE_URL` should remain `/api` so browser calls stay on the same origin.
-- `IMMCAD_API_BASE_URL` must use `https://` in `NODE_ENV=production`.
-- Keep `IMMCAD_API_BEARER_TOKEN` server-only; do not publish it via `NEXT_PUBLIC_*`.
-- If using `git-secret` for encrypted repo-stored env bundles, follow `docs/release/git-secret-runbook.md` and keep production runtime secrets in GitHub/Cloudflare secret managers.
-
-### Legacy Streamlit UI (`app.py`) - dev-only
-
-Use this only for local prototyping or migration troubleshooting. It is not the production runtime path.
+Run:
 
 ```bash
 uv run streamlit run app.py
 ```
 
-Legacy UI URL:
+App URL:
 
 ```bash
 http://127.0.0.1:8501
 ```
-
-### Ingestion + jurisdiction evaluation workflows
-
-Generate ingestion execution report from the Canada source registry:
-
-```bash
-make ingestion-run
-```
-
-This runner now keeps a checkpoint file (`artifacts/ingestion/checkpoints.json`) and uses
-`ETag` / `Last-Modified` conditional requests to mark unchanged sources as `not_modified`.
-
-Generate jurisdictional readiness scoring report (JSON + Markdown):
-
-```bash
-make jurisdiction-eval
-```
-
-Run behavior-focused jurisdictional suite (policy refusal + citation behavior):
-
-```bash
-make jurisdiction-suite
-```
-
-Outputs are written under `artifacts/` (gitignored) and uploaded by CI in `quality-gates` as `jurisdiction-eval-report`.
-
-### Documentation maintenance
-
-Run documentation quality audit (link/style/content/freshness checks):
-
-```bash
-make docs-audit
-```
-
-Apply safe documentation auto-fixes (TOC refresh):
-
-```bash
-make docs-fix
-```
-
-Reports are generated to:
-
-```bash
-artifacts/docs/doc-maintenance-report.md
-artifacts/docs/doc-maintenance-report.json
-```
-
-### Ralph autonomous loop
-
-Ralph is now wired in this repo under `scripts/ralph/`.
-
-Run with Codex (default):
-
-```bash
-make ralph-run
-```
-
-Run with Codex (explicit target):
-
-```bash
-make ralph-run-codex
-```
-
-Run with Amp:
-
-```bash
-make ralph-run-amp
-```
-
-Run with Claude Code (optional):
-
-```bash
-make ralph-run-claude
-```
-
-Preflight validation (no iterations):
-
-```bash
-bash scripts/ralph/ralph.sh --tool codex --check
-```
-
-Check story progress:
-
-```bash
-make ralph-status
-```
-
-Ralph execution state is in:
-- `scripts/ralph/prd.json`
-- `scripts/ralph/progress.txt`
 
 ## Definition of done for “Canadian adaptation”
 

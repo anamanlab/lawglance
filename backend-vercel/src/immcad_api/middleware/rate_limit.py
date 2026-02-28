@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+import importlib
 import logging
 from threading import Lock
 import time
@@ -36,7 +37,9 @@ class InMemoryRateLimiter:
 class RedisRateLimiter:
     """Fixed-window rate limiter backed by Redis."""
 
-    def __init__(self, redis_client, *, limit_per_minute: int, prefix: str = "immcad:ratelimit") -> None:
+    def __init__(
+        self, redis_client, *, limit_per_minute: int, prefix: str = "immcad:ratelimit"
+    ) -> None:
         self.redis_client = redis_client
         self.limit_per_minute = max(limit_per_minute, 1)
         self.prefix = prefix
@@ -56,7 +59,7 @@ def build_rate_limiter(*, limit_per_minute: int, redis_url: str | None):
         return InMemoryRateLimiter(limit_per_minute)
 
     try:
-        import redis
+        redis = importlib.import_module("redis")
 
         redis_client = redis.Redis.from_url(
             redis_url,

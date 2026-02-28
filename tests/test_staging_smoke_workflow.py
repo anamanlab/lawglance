@@ -11,6 +11,7 @@ def test_staging_smoke_workflow_runs_contract_checks_with_report_artifact() -> N
     assert "Run staging smoke tests" in workflow
     assert 'ENVIRONMENT: staging' in workflow
     assert 'ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"' in workflow
+    assert 'ALLOW_PRIORITY_SOURCE_FRESHNESS: "true"' in workflow
     assert "STAGING_SMOKE_REPORT_PATH: artifacts/evals/staging-smoke-report.json" in workflow
     assert "Upload staging smoke artifacts" in workflow
     assert "artifacts/evals/staging-smoke-report.json" in workflow

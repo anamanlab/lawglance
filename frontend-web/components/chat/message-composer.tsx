@@ -43,10 +43,10 @@ export function MessageComposer({
         {isFirstRun ? (
           <div className="rounded-xl border border-[rgba(95,132,171,0.35)] bg-[rgba(231,237,245,0.8)] p-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--imm-accent-ink)]">
-              Guided Start - Step 1 of 3
+              Start Here
             </p>
             <p className="mt-1 text-xs leading-6 text-muted">
-              Recommended next action: load a starter question, then send and review grounded sources.
+              Load a starter question or type your own, then send to review grounded sources.
             </p>
             <button
               className="imm-btn-secondary mt-2 px-2.5 py-1 text-[11px]"
@@ -124,9 +124,6 @@ export function MessageComposer({
           </div>
 
           <div className="flex w-full items-center gap-2 self-start sm:w-auto sm:self-auto">
-            <span className="imm-pill imm-pill-neutral hidden md:inline-flex">
-              Research mode
-            </span>
             <button
               className="imm-btn-primary w-full min-w-[132px] px-4 py-2 text-sm sm:w-auto"
               disabled={sendDisabled}

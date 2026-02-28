@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 from pathlib import Path
 import tomllib
+from urllib.parse import urlparse
 
 
 REQUIRED_RUNTIME_ENV_KEYS: tuple[str, ...] = ("ENVIRONMENT", "IMMCAD_ENVIRONMENT")
@@ -97,11 +99,36 @@ def _validate_cloud_only_defaults(
             f"{frontend_label}: IMMCAD_API_BASE_URL must start with `https://` "
             f"(got `{frontend_backend_url}`)"
         )
-    elif ".workers.dev" not in frontend_backend_url:
-        errors.append(
-            f"{frontend_label}: IMMCAD_API_BASE_URL should target Cloudflare Worker "
-            f"domain (`*.workers.dev`) (got `{frontend_backend_url}`)"
-        )
+    else:
+        parsed_backend_url = urlparse(frontend_backend_url)
+        backend_hostname = (parsed_backend_url.hostname or "").strip().lower()
+        if not backend_hostname:
+            errors.append(
+                f"{frontend_label}: IMMCAD_API_BASE_URL must include a valid hostname "
+                f"(got `{frontend_backend_url}`)"
+            )
+        elif backend_hostname in {"localhost", "127.0.0.1", "::1"}:
+            errors.append(
+                f"{frontend_label}: IMMCAD_API_BASE_URL must not target localhost "
+                f"(got `{frontend_backend_url}`)"
+            )
+        elif backend_hostname.endswith(".vercel.app"):
+            errors.append(
+                f"{frontend_label}: IMMCAD_API_BASE_URL must target Cloudflare backend "
+                f"(workers.dev or custom domain), not Vercel (`{frontend_backend_url}`)"
+            )
+        else:
+            try:
+                parsed_ip = ipaddress.ip_address(backend_hostname)
+            except ValueError:
+                parsed_ip = None
+            if parsed_ip and (
+                parsed_ip.is_private or parsed_ip.is_loopback or parsed_ip.is_link_local
+            ):
+                errors.append(
+                    f"{frontend_label}: IMMCAD_API_BASE_URL must not target private/link-local IP "
+                    f"(got `{frontend_backend_url}`)"
+                )
 
     fallback_backend_url = (frontend_vars.get("IMMCAD_API_BASE_URL_FALLBACK") or "").strip()
     if fallback_backend_url:

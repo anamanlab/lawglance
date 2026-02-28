@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import re
-from typing import Protocol
+from typing import Protocol, Callable
 
 from immcad_api.errors import SourceUnavailableError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
@@ -13,6 +13,7 @@ from immcad_api.schemas import (
     LawyerCaseResearchRequest,
     LawyerCaseResearchResponse,
     LawyerCaseSupport,
+    SourceFreshnessStatus,
 )
 from immcad_api.services.case_document_resolver import (
     allowed_hosts_for_source,
@@ -107,6 +108,9 @@ def _extract_reference_anchors(text: str) -> set[str]:
     return anchors
 
 
+PrioritySourceStatusProvider = Callable[[], dict[str, SourceFreshnessStatus]]
+
+
 class LawyerCaseResearchService:
     def __init__(
         self,
@@ -114,10 +118,12 @@ class LawyerCaseResearchService:
         case_search_service: _CaseSearchProtocol,
         source_policy: SourcePolicy | None = None,
         source_registry: SourceRegistry | None = None,
+        priority_source_status_provider: PrioritySourceStatusProvider | None = None,
     ) -> None:
         self.case_search_service = case_search_service
         self.source_policy = source_policy
         self.source_registry = source_registry
+        self._priority_source_status_provider = priority_source_status_provider
 
     def _resolve_court_label(self, case_result: CaseSearchResult) -> str | None:
         source_id = (case_result.source_id or "").strip().upper()
@@ -135,6 +141,14 @@ class LawyerCaseResearchService:
         if " SCC " in f" {citation} ":
             return "SCC"
         return None
+
+    def _fetch_priority_source_status(self) -> dict[str, SourceFreshnessStatus]:
+        if self._priority_source_status_provider is None:
+            return {}
+        try:
+            return self._priority_source_status_provider()
+        except Exception:
+            return {}
 
     def _resolve_export_status(
         self,
@@ -582,6 +596,7 @@ class LawyerCaseResearchService:
             decision_date_to=decision_date_to,
         )
 
+        priority_source_status = self._fetch_priority_source_status()
         if not aggregated_results:
             if source_unavailable_errors == len(queries):
                 source_status = {
@@ -604,6 +619,7 @@ class LawyerCaseResearchService:
                 matter_profile=matter_profile,
                 cases=[],
                 source_status=source_status,
+                priority_source_status=priority_source_status,
                 research_confidence=research_confidence,
                 confidence_reasons=confidence_reasons,
                 intake_completeness=intake_completeness,
@@ -656,6 +672,7 @@ class LawyerCaseResearchService:
             matter_profile=matter_profile,
             cases=cases,
             source_status=source_status,
+            priority_source_status=priority_source_status,
             research_confidence=research_confidence,
             confidence_reasons=confidence_reasons,
             intake_completeness=intake_completeness,

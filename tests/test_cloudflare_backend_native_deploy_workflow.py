@@ -43,6 +43,7 @@ def test_cloudflare_backend_native_deploy_workflow_triggers_on_policy_rule_updat
 def test_cloudflare_backend_native_deploy_workflow_requires_runtime_provider_secrets() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "IMMCAD_API_BEARER_TOKEN" in workflow
+    assert "API_BEARER_TOKEN" in workflow
     assert "GEMINI_API_KEY" in workflow
     assert "OPENAI_API_KEY secret is required." not in workflow
     assert "sync_cloudflare_backend_native_secrets.sh" in workflow

@@ -18,6 +18,7 @@
 - User correction (2026-02-27): prompt-improvement iterations must include user-facing friendliness for social greetings, explicit capability/tool-orchestration disclosure, and measurable behavior-eval coverage (not prompt text changes only).
 - User correction (2026-02-27): when production hardening is requested, pair prompt updates with runtime observability fields so greeting/constrained behavior can be monitored after deploy.
 - User correction (2026-02-27): when users report frontend workflow errors, validate proxy-forwarded protocol/client headers against backend middleware gates before treating it as a source outage.
+- User correction (2026-02-28): when asked for frontend/backend confusion analysis, move beyond high-level size-based findings and provide quantified contract/runtime drift evidence plus concrete UX state-transition root causes before proposing a plan.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -63,6 +64,7 @@
 - Installer/preflight scripts for live tunnel rollouts should retry public health checks (short backoff) to tolerate brief tunnel reconnect windows during service restarts.
 - When wrapping synchronous service calls with `run_in_threadpool`, keep explicit `ApiError` handling in the route; otherwise `RateLimitError`/`SourceUnavailableError` can leak as raw 500s.
 - During edge-proxy migrations, keep error envelope and trace-header contracts aligned with frontend parsing (`error.code` + `trace_id` + `x-trace-id`) and maintain temporary client-side fallback for legacy proxy shapes.
+- For architecture confusion audits, include at least one measurable parity check (for example deploy/runtime source sync) and one behavior-level UX check (state transitions, auto-switching, or hidden mode changes) before final recommendations.
 - For lawyer-research `source_status`, avoid hardcoded official source-id lists; prefer registry-driven classification so new official case-law sources are not misreported as unknown.
 - Treat edge proxy contract checks as a preflight gate (script + CI workflow step), not just a unit test, so release/deploy paths fail fast when worker headers/envelope drift from frontend expectations.
 - When a user explicitly requests interactive CLI setup/auth in a remote Codespace, execute the interactive flow first (and show live status) before proposing token-based automation; only pivot after proving callback constraints or completing the interactive step.

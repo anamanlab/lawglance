@@ -166,5 +166,4 @@ Observed in current runtime:
 ## Linked Execution Plan
 
 Execution plan:
-- [Rule-Aware Court/Tribunal Document Compilation Implementation Plan](/workspaces/lawglance/docs/plans/2026-02-27-rule-aware-document-compilation-implementation-plan.md)
-
+- [Rule-Aware Court/Tribunal Document Compilation Implementation Plan](../plans/2026-02-27-rule-aware-document-compilation-implementation-plan.md)

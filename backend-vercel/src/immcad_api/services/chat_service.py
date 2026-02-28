@@ -62,6 +62,7 @@ _FRIENDLY_GREETING_RESPONSES = {
         "un apercu clair et fonde."
     ),
 }
+_INSUFFICIENT_CONTEXT_FALLBACK_REASON = "insufficient_context"
 
 
 def is_friendly_greeting_answer(answer: str) -> bool:
@@ -518,6 +519,13 @@ class ChatService:
 
         fallback_provider = routed.result.provider if routed.fallback_used else None
         fallback_reason = routed.fallback_reason if routed.fallback_used else None
+        if (
+            fallback_reason is None
+            and not routed.fallback_used
+            and answer == SAFE_CONSTRAINED_RESPONSE
+            and not validated_citations
+        ):
+            fallback_reason = _INSUFFICIENT_CONTEXT_FALLBACK_REASON
 
         return ChatResponse(
             answer=answer,

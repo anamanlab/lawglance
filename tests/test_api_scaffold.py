@@ -704,7 +704,7 @@ def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
     second_body = second.json()
     assert second_body["fallback_used"]["used"] is False
     assert second_body["fallback_used"]["provider"] is None
-    assert second_body["fallback_used"]["reason"] is None
+    assert second_body["fallback_used"]["reason"] == "insufficient_context"
 
 
 def test_curated_grounded_response_when_synthetic_citations_disabled(

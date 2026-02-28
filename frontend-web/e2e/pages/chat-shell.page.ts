@@ -26,7 +26,7 @@ export class ChatShellPage {
   async goto(): Promise<void> {
     await this.page.goto("/");
     await expect(
-      this.page.getByText("Canada immigration scope notice")
+      this.page.getByRole("heading", { name: "IMMCAD Assistant" })
     ).toBeVisible();
     await expect(this.promptInput).toBeVisible();
   }

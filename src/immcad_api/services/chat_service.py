@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import logging
 import re
-from typing import Protocol
+from typing import Protocol, cast
 
 from immcad_api.errors import ApiError, ProviderApiError
 from immcad_api.policy.source_policy import SourcePolicy
@@ -479,8 +479,10 @@ class ChatService:
                 )
             raise ProviderApiError(exc.message) from exc
 
-        provider_citations = routed.result.citations
-        citations_to_validate = provider_citations or citations
+        provider_citations = cast(list[Citation], routed.result.citations)
+        citations_to_validate: list[Citation | dict[str, object] | object] = (
+            provider_citations if provider_citations else citations
+        )
         answer, validated_citations, confidence = enforce_citation_requirement(
             routed.result.answer,
             citations_to_validate,

@@ -1,5 +1,39 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-28 - Unmerged Archive Branch Governance + Recovery
+
+### Current Focus
+- Resolve all remaining unmerged `origin/archive/*` branches with zero-loss safeguards and senior-level branch disposition decisions.
+
+### Plan
+- [x] Enumerate unmerged remote branches and verify PR linkage.
+- [x] Run branch-by-branch commit/file triage with risk classification.
+- [x] Preserve every unique archive commit as immutable patch-series backups.
+- [x] Document branch dispositions and backlog in release/planning docs.
+- [x] Recover the only approved low-risk delta (`insufficient_context` fallback reason) in current architecture.
+- [ ] Execute targeted test verification in a fully provisioned Python environment.
+
+### Review
+- Unmerged branches revalidated: 4 remaining, all under `origin/archive/*`, none with PRs.
+- Branch dispositions:
+  - `archive-dirty-root-reconcile-v4`: archive-only (stale/regressive snapshot).
+  - `archive-ralph-canada-hardening-next-loop`: archive-only plus one surgical recovery.
+  - `archive-reconcile-production-readiness`: archive-only (high conflict/regression risk).
+  - `wip-local-dirty-carryforward`: archive-only (mixed WIP snapshot).
+- Recovery applied:
+  - Added explicit fallback reason `insufficient_context` for constrained no-grounding responses.
+  - Updated targeted tests to assert this contract.
+- Artifacts:
+  - `backups/branch-safety/20260228-branch-archive-audit/`
+  - `backups/branch-safety/20260228-branch-archive-audit/manifest.tsv`
+- Governance docs added:
+  - `docs/plans/2026-02-28-unmerged-branches-pr-triage.md`
+  - `docs/release/2026-02-28-unmerged-branch-governance-audit.md`
+  - `docs/release/2026-02-28-branch-recovery-backlog.md`
+- Verification blocker in this shell:
+  - `uv` missing (`command not found`)
+  - `pytest` missing (`No module named pytest`)
+
 ## Task Plan - 2026-02-27 - Frontend Eye-Comfort Contrast Hardening
 
 ### Current Focus

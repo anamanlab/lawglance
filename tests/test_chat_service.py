@@ -431,7 +431,7 @@ def test_chat_service_returns_safe_constrained_response_when_adapter_has_no_grou
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
     assert response.fallback_used.provider is None
-    assert response.fallback_used.reason is None
+    assert response.fallback_used.reason == "insufficient_context"
     assert payload.message not in response.model_dump_json()
 
 
@@ -597,7 +597,7 @@ def test_chat_service_rejects_citations_from_untrusted_domains(
     assert response.disclaimer == DISCLAIMER_TEXT
     assert response.fallback_used.used is False
     assert response.fallback_used.provider is None
-    assert response.fallback_used.reason is None
+    assert response.fallback_used.reason == "insufficient_context"
     assert payload.message not in response.model_dump_json()
     events = _audit_events(caplog)
     assert events
@@ -698,6 +698,7 @@ def test_chat_service_blocks_citations_when_source_policy_disallows_answer_citat
     assert response.answer.startswith("I do not have enough grounded legal context")
     assert response.citations == []
     assert response.confidence == "low"
+    assert response.fallback_used.reason == "insufficient_context"
 
 
 def test_chat_service_allows_unknown_source_ids_with_source_policy_when_domain_is_trusted() -> (

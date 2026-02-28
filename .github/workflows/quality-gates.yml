@@ -109,6 +109,15 @@ jobs:
           PYTHONPATH: src
         run: uv run pytest -q
 
+      - name: Run SCC/FC API smoke checks
+        env:
+          API_BEARER_TOKEN: quality-smoke-token
+          ENVIRONMENT: staging
+          ENABLE_SCAFFOLD_PROVIDER: "true"
+          ALLOW_SCAFFOLD_SYNTHETIC_CITATIONS: "true"
+          STAGING_SMOKE_REPORT_PATH: artifacts/evals/quality-scc-fc-smoke-report.json
+        run: bash scripts/run_api_smoke_tests.sh
+
       - name: Validate architecture docs
         run: bash scripts/validate_architecture_docs.sh
 
@@ -183,6 +192,13 @@ jobs:
         with:
           name: ingestion-smoke-report
           path: artifacts/ingestion/ingestion-smoke-report.json
+
+      - name: Upload SCC/FC API smoke artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quality-scc-fc-smoke-report
+          path: artifacts/evals/quality-scc-fc-smoke-report.json
 
       - name: Upload docs maintenance artifact
         if: always()

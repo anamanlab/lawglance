@@ -20,6 +20,9 @@ CompilationForum = Literal[
 RuleSeverity = Literal["warning", "blocking"]
 
 DEFAULT_COMPILATION_RULES_RELATIVE_PATH = Path("data/policy/document_compilation_rules.ca.json")
+DEFAULT_COMPILATION_RULES_PACKAGE_PATH = (
+    Path(__file__).resolve().with_name("document_compilation_rules.ca.json")
+)
 DEFAULT_COMPILATION_RULES_REPO_PATH = (
     Path(__file__).resolve().parents[3] / DEFAULT_COMPILATION_RULES_RELATIVE_PATH
 )
@@ -321,7 +324,11 @@ def _validate_uniqueness(profiles: tuple[DocumentCompilationProfile, ...]) -> No
 def _candidate_paths(path: str | Path | None) -> tuple[Path, ...]:
     if path is not None:
         return (Path(path),)
-    return (DEFAULT_COMPILATION_RULES_RELATIVE_PATH, DEFAULT_COMPILATION_RULES_REPO_PATH)
+    return (
+        DEFAULT_COMPILATION_RULES_PACKAGE_PATH,
+        DEFAULT_COMPILATION_RULES_RELATIVE_PATH,
+        DEFAULT_COMPILATION_RULES_REPO_PATH,
+    )
 
 
 def _load_payload(path: str | Path | None) -> dict[str, object]:
@@ -334,7 +341,36 @@ def _load_payload(path: str | Path | None) -> dict[str, object]:
                 raise ValueError("Document compilation rules catalog must be an object")
             return payload
 
+    # Cloudflare Python Workers package only Python modules by default.
+    # Keep a Python-embedded fallback so runtime startup is not blocked when
+    # JSON artifact paths are unavailable in the deployed bundle.
+    embedded_error: Exception | None = None
+    if path is None:
+        try:
+            from immcad_api.policy.document_compilation_rules_embedded import (
+                CATALOG_PAYLOAD_JSON,
+            )
+        except ImportError as exc:
+            embedded_error = exc
+        else:
+            try:
+                payload = json.loads(CATALOG_PAYLOAD_JSON)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "Embedded document compilation rules catalog is not valid JSON"
+                ) from exc
+            if not isinstance(payload, dict):
+                raise ValueError(
+                    "Embedded document compilation rules catalog must be an object"
+                )
+            return payload
+
     checked = ", ".join(str(item) for item in candidates)
+    if embedded_error is not None:
+        raise FileNotFoundError(
+            "Document compilation rules catalog not found and embedded fallback "
+            f"failed. Checked: {checked}"
+        ) from embedded_error
     raise FileNotFoundError(f"Document compilation rules catalog not found. Checked: {checked}")
 
 
@@ -361,6 +397,7 @@ def load_document_compilation_rules(path: str | Path | None = None) -> DocumentC
 __all__ = [
     "CompilationForum",
     "ConditionalDocumentRule",
+    "DEFAULT_COMPILATION_RULES_PACKAGE_PATH",
     "DEFAULT_COMPILATION_RULES_RELATIVE_PATH",
     "DocumentCompilationCatalog",
     "DocumentCompilationProfile",

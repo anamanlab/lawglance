@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import importlib
 from threading import Lock
 import time
 from typing import Protocol
@@ -322,7 +323,7 @@ def build_canlii_usage_limiter(
         return InMemoryCanLIIUsageLimiter(resolved_limits)
 
     try:
-        import redis
+        redis = importlib.import_module("redis")
 
         redis_client = redis.Redis.from_url(
             redis_url,

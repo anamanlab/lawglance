@@ -14,6 +14,9 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from immcad_api.api.routes._threadpool import (
+    is_threadpool_unavailable_runtime_error,
+)
 from immcad_api.api.routes.case_query_validation import assess_case_query
 from immcad_api.errors import ApiError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
@@ -416,7 +419,17 @@ def build_case_router(
                 policy_reason="case_search_query_too_broad",
             )
         try:
-            case_search_response = await run_in_threadpool(case_search_service.search, payload)
+            try:
+                case_search_response = await run_in_threadpool(
+                    case_search_service.search,
+                    payload,
+                )
+            except RuntimeError as exc:
+                if not is_threadpool_unavailable_runtime_error(exc):
+                    raise
+                # Python Workers can run in threadless runtimes where threadpool
+                # execution is unavailable; fallback to direct invocation.
+                case_search_response = case_search_service.search(payload)
         except ApiError as exc:
             return _error_response(
                 status_code=exc.status_code,
@@ -588,12 +601,23 @@ def build_case_router(
             source_url=str(source_entry.url),
         )
         try:
-            payload_bytes, media_type, final_url = await run_in_threadpool(
-                _download_export_payload,
-                request_url=request_url,
-                max_download_bytes=export_max_download_bytes,
-                allowed_hosts=allowed_hosts,
-            )
+            try:
+                payload_bytes, media_type, final_url = await run_in_threadpool(
+                    _download_export_payload,
+                    request_url=request_url,
+                    max_download_bytes=export_max_download_bytes,
+                    allowed_hosts=allowed_hosts,
+                )
+            except RuntimeError as exc:
+                if not is_threadpool_unavailable_runtime_error(exc):
+                    raise
+                # Python Workers can run in threadless runtimes where threadpool
+                # execution is unavailable; fallback to direct invocation.
+                payload_bytes, media_type, final_url = _download_export_payload(
+                    request_url=request_url,
+                    max_download_bytes=export_max_download_bytes,
+                    allowed_hosts=allowed_hosts,
+                )
         except ExportTooLargeError as exc:
             _record_export_event(
                 request=request,

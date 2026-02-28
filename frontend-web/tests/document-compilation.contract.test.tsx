@@ -171,6 +171,7 @@ describe("document compilation contract", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -293,6 +294,7 @@ describe("document compilation contract", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -401,6 +403,7 @@ describe("document compilation contract", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -491,6 +494,7 @@ describe("document compilation contract", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 

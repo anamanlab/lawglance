@@ -160,6 +160,17 @@ make backend-cf-codespace-runtime-health
 
 If tunnel recovery is blocked and legal/ops approves temporary fallback, point backend proxy origin to a known healthy backend and redeploy proxy Worker.
 
+Current fallback retry coverage in frontend proxy:
+
+- `/api/chat`
+- `/api/search/cases`
+- `/api/export/cases`
+
+Routes not retried to fallback (must recover primary origin tunnel):
+
+- `/api/research/lawyer-cases`
+- `/api/export/cases/approval`
+
 Required:
 
 - update `IMMCAD_BACKEND_ORIGIN` GitHub Actions secret

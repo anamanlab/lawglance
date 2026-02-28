@@ -5,8 +5,10 @@ set -euo pipefail
 # Only secrets present in the current shell environment are updated.
 # Unset variables are skipped so existing Cloudflare secrets remain unchanged.
 
-WRANGLER_VERSION="${WRANGLER_VERSION:-4.68.1}"
+WRANGLER_VERSION="${WRANGLER_VERSION:-4.69.0}"
 WRANGLER_CONFIG="${WRANGLER_CONFIG:-backend-cloudflare/wrangler.toml}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
   cat <<'EOF'
@@ -28,7 +30,7 @@ Default secret set (when no args are passed):
 
 Options via environment:
   WRANGLER_CONFIG   Wrangler config path (default: backend-cloudflare/wrangler.toml)
-  WRANGLER_VERSION  Wrangler version pin (default: 4.68.1)
+  WRANGLER_VERSION  Wrangler version pin (default: 4.69.0)
 
 Examples:
   export CANLII_API_KEY='...'
@@ -50,6 +52,18 @@ DEFAULT_SECRETS=(
   "REDIS_URL"
 )
 
+run_wrangler() {
+  if command -v wrangler >/dev/null 2>&1; then
+    wrangler "$@"
+    return 0
+  fi
+  if [[ -x "${REPO_ROOT}/frontend-web/node_modules/.bin/wrangler" ]]; then
+    "${REPO_ROOT}/frontend-web/node_modules/.bin/wrangler" "$@"
+    return 0
+  fi
+  npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
@@ -59,6 +73,10 @@ if [[ ! -f "${WRANGLER_CONFIG}" ]]; then
   echo "[ERROR] Wrangler config not found: ${WRANGLER_CONFIG}" >&2
   exit 1
 fi
+
+mkdir -p "${REPO_ROOT}/.cache/wrangler-logs" "${NPM_CONFIG_CACHE:-/tmp/npmcache}"
+export WRANGLER_LOG_PATH="${WRANGLER_LOG_PATH:-${REPO_ROOT}/.cache/wrangler-logs}"
+export NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-/tmp/npmcache}"
 
 if [[ $# -gt 0 ]]; then
   SECRETS=("$@")
@@ -106,7 +124,7 @@ for secret_name in "${SECRETS[@]}"; do
 
   echo "[PUT ] ${secret_name} -> ${WRANGLER_CONFIG}"
   printf '%s' "${secret_value}" \
-    | npx --yes "wrangler@${WRANGLER_VERSION}" secret put "${secret_name}" --config "${WRANGLER_CONFIG}"
+    | run_wrangler secret put "${secret_name}" --config "${WRANGLER_CONFIG}"
   updated=$((updated + 1))
 done
 

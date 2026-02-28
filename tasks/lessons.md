@@ -14,6 +14,10 @@
 - User correction (2026-02-27): Cloudflare is the active platform; avoid framing Vercel as primary deployment/runtime and migrate operational env defaults to Cloudflare-first paths.
 - Incident pattern (2026-02-27): Cloudflare Tunnel outages surfaced as raw `530` HTML in chat flows; proxy layer must normalize tunnel `1033` failures into structured JSON errors with trace ids.
 - Incident recovery pattern (2026-02-27): keep an explicit emergency fallback origin variable (`IMMCAD_API_BASE_URL_FALLBACK`) for chat path retries so primary tunnel outages do not become total frontend chat outages.
+- Incident recovery pattern (2026-02-27): fallback-origin retries for POST routes require replay-safe body buffering; do not rely on one-shot request streams when implementing retry/failover.
+- User correction (2026-02-27): prompt-improvement iterations must include user-facing friendliness for social greetings, explicit capability/tool-orchestration disclosure, and measurable behavior-eval coverage (not prompt text changes only).
+- User correction (2026-02-27): when production hardening is requested, pair prompt updates with runtime observability fields so greeting/constrained behavior can be monitored after deploy.
+- User correction (2026-02-27): when users report frontend workflow errors, validate proxy-forwarded protocol/client headers against backend middleware gates before treating it as a source outage.
 
 ## Reusable Rules
 - Verify every legal-source claim with a directly tested endpoint or official policy page.
@@ -40,6 +44,8 @@
 - Do not return synthetic scaffold case-search results when backend case services are unreachable; surface structured `SOURCE_UNAVAILABLE` errors so users are not misled by non-exportable fake cases.
 - Do not enable frontend chat scaffold fallback implicitly; require explicit env opt-in so backend misconfiguration is visible instead of silently masked.
 - For user-facing case-search failures, map structured validation/policy errors to actionable UI guidance instead of generic "temporarily unavailable" copy.
+- For mixed case-law + document workflows, never reuse case-law status copy in document error banners; route workflow banner text by failing endpoint.
+- For greeting/friendliness improvements, include locale-aware handling (`en-CA`/`fr-CA`) and tests that verify mixed greeting+legal prompts still follow legal grounding paths.
 - In dual-service chat + case-search UIs, always show whether displayed results correspond to the current query or a previous query to prevent stale-context confusion.
 - If subagent spawn fails due thread-cap limits, do not stall implementation; report the limit once, continue sequential execution, and close any known agent IDs as soon as they are no longer needed.
 - For user-requested acceleration, default to parallel subagents for independent test/review/planning tasks instead of serial execution.
@@ -64,4 +70,5 @@
 - For Cloudflare-only operations, enforce explicit `ENVIRONMENT`/`IMMCAD_ENVIRONMENT` values in Wrangler/runtime config and validate them in CI.
 - Treat Cloudflare Tunnel `1033`/`530` responses as provider-source outages at the proxy boundary and convert them into stable API error envelopes (`503`) instead of forwarding raw HTML.
 - For critical chat availability, support a bounded fallback-origin retry path in frontend proxy routing and expose a response marker header when fallback is used.
+- When expanding failover across API routes, scope fallback paths explicitly and validate each route live after deploy; fallback availability can differ by endpoint even on the same backend.
 - Never invoke `apply_patch` via shell execution; use the direct patch tool so edits remain deterministic and policy-compliant.

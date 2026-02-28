@@ -10,8 +10,10 @@ type JsonBody = Record<string, unknown>;
 type StubOptions = {
   chatResponse?: JsonBody;
   caseSearchResponse?: JsonBody;
+  lawyerResearchResponse?: JsonBody;
   chatStatus?: number;
   caseSearchStatus?: number;
+  lawyerResearchStatus?: number;
 };
 
 export type ChatApiRecorder = {
@@ -43,6 +45,40 @@ export async function installChatApiStubs(
 
   const chatResponse = options.chatResponse ?? CHAT_SUCCESS_RESPONSE;
   const caseSearchResponse = options.caseSearchResponse ?? CASE_SEARCH_RESPONSE;
+  const lawyerResearchResponse =
+    options.lawyerResearchResponse ??
+    {
+      matter_profile: {
+        objective: "support_precedent",
+        target_court: "fct",
+      },
+      cases: CASE_SEARCH_RESPONSE.results.map((result) => ({
+        case_id: result.case_id,
+        title: result.title,
+        citation: result.citation,
+        source_id: result.source_id,
+        court: "FC",
+        decision_date: result.decision_date,
+        url: result.url,
+        document_url: result.document_url,
+        pdf_status: "available",
+        export_allowed: result.export_allowed ?? true,
+        export_policy_reason: result.export_policy_reason ?? "source_export_allowed",
+        relevance_reason: "Sample relevance rationale for e2e validation.",
+      })),
+      source_status: {
+        official: "available",
+        canlii: "available",
+      },
+      priority_source_status: {
+        SCC_DECISIONS: "fresh",
+        FC_DECISIONS: "fresh",
+      },
+      research_confidence: "high",
+      confidence_reasons: ["source alignment"],
+      intake_completeness: "medium",
+      intake_hints: [],
+    };
 
   await page.route("**/api/chat", async (route) => {
     chatCalls += 1;
@@ -71,6 +107,23 @@ export async function installChatApiStubs(
         "x-trace-id": "trace-cases-e2e",
       },
       body: JSON.stringify(caseSearchResponse),
+    });
+  });
+
+  await page.route("**/api/research/lawyer-cases", async (route) => {
+    caseSearchCalls += 1;
+    const requestBody = toJsonBody(route.request().postDataJSON());
+    lastCaseSearchQuery =
+      readStringField(requestBody, "matter_summary") ??
+      readStringField(requestBody, "query");
+
+    await route.fulfill({
+      status: options.lawyerResearchStatus ?? 200,
+      headers: {
+        "content-type": "application/json",
+        "x-trace-id": "trace-lawyer-cases-e2e",
+      },
+      body: JSON.stringify(lawyerResearchResponse),
     });
   });
 

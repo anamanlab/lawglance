@@ -5,12 +5,16 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
+from immcad_api.sources.source_registry_embedded import REGISTRY_PAYLOAD_JSON
 
 
 SourceType = Literal["statute", "regulation", "policy", "case_law"]
 UpdateCadence = Literal["daily", "weekly", "scheduled_incremental"]
 
 DEFAULT_REGISTRY_RELATIVE_PATH = Path("data/sources/canada-immigration/registry.json")
+DEFAULT_REGISTRY_PACKAGE_PATH = (
+    Path(__file__).resolve().parents[2] / DEFAULT_REGISTRY_RELATIVE_PATH
+)
 DEFAULT_REGISTRY_REPO_PATH = Path(__file__).resolve().parents[3] / DEFAULT_REGISTRY_RELATIVE_PATH
 
 
@@ -46,7 +50,11 @@ class SourceRegistry(BaseModel):
 def _candidate_paths(path: str | Path | None) -> list[Path]:
     if path is not None:
         return [Path(path)]
-    return [DEFAULT_REGISTRY_RELATIVE_PATH, DEFAULT_REGISTRY_REPO_PATH]
+    return [
+        DEFAULT_REGISTRY_RELATIVE_PATH,
+        DEFAULT_REGISTRY_PACKAGE_PATH,
+        DEFAULT_REGISTRY_REPO_PATH,
+    ]
 
 
 def load_source_registry(path: str | Path | None = None) -> SourceRegistry:
@@ -56,6 +64,9 @@ def load_source_registry(path: str | Path | None = None) -> SourceRegistry:
             with candidate.open("r", encoding="utf-8") as handle:
                 payload = json.load(handle)
             return SourceRegistry.model_validate(payload)
+    if path is None:
+        payload = json.loads(REGISTRY_PAYLOAD_JSON)
+        return SourceRegistry.model_validate(payload)
 
     candidate_paths = ", ".join(str(item) for item in candidates)
     raise FileNotFoundError(f"Source registry not found. Checked: {candidate_paths}")

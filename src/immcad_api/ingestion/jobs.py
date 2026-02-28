@@ -335,15 +335,23 @@ def _execute_jobs(
                 continue
 
             court_validation = validate_court_source_payload(source.source_id, fetch_result.payload)
+            validation_warning: str | None = None
             if court_validation is not None:
                 if court_validation.records_total == 0:
                     raise ValueError(
                         f"{source.source_id} payload did not include any decision records"
                     )
                 if court_validation.records_invalid > 0:
+                    if court_validation.records_valid == 0:
+                        first_errors = "; ".join(court_validation.errors[:3])
+                        raise ValueError(
+                            f"{source.source_id} validation failed: "
+                            f"{court_validation.records_invalid}/{court_validation.records_total} "
+                            f"invalid records ({first_errors})"
+                        )
                     first_errors = "; ".join(court_validation.errors[:3])
-                    raise ValueError(
-                        f"{source.source_id} validation failed: "
+                    validation_warning = (
+                        f"{source.source_id} validation warning: "
                         f"{court_validation.records_invalid}/{court_validation.records_total} "
                         f"invalid records ({first_errors})"
                     )
@@ -358,7 +366,7 @@ def _execute_jobs(
                     http_status=fetch_result.http_status,
                     checksum_sha256=checksum,
                     bytes_fetched=len(fetch_result.payload),
-                    error=None,
+                    error=validation_warning,
                     policy_reason=policy_reason,
                     records_total=court_validation.records_total if court_validation else None,
                     records_valid=court_validation.records_valid if court_validation else None,

@@ -193,6 +193,32 @@ def test_canlii_uses_api_key_query_parameter(monkeypatch) -> None:
     assert "Authorization" not in (used_client.init_kwargs.get("headers") or {})
 
 
+@pytest.mark.parametrize(
+    ("court_alias", "expected_database"),
+    [
+        ("fc", "fct"),
+        ("fca-caf", "fca"),
+        ("supreme court of canada", "scc"),
+    ],
+)
+def test_canlii_maps_official_court_aliases_to_database_ids(
+    monkeypatch, court_alias: str, expected_database: str
+) -> None:
+    _FakeClient.reset()
+    monkeypatch.setattr(
+        "immcad_api.sources.canlii_client.httpx.Client",
+        lambda *args, **kwargs: _FakeClient(payload={"cases": []}),
+    )
+
+    client = CanLIIClient(api_key="test-key")
+    request = CaseSearchRequest(query="immigration", jurisdiction="ca", court=court_alias, limit=1)
+    _ = client.search_cases(request)
+
+    used_client = _FakeClient.created_clients[-1]
+    endpoint = used_client.last_get_args[0]
+    assert endpoint.endswith(f"/caseBrowse/en/{expected_database}/")
+
+
 def test_canlii_returns_empty_results_when_query_tokens_do_not_match(monkeypatch) -> None:
     _FakeClient.reset()
     payload = {

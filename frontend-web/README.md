@@ -13,6 +13,7 @@ Create `frontend-web/.env.local`:
 
 ```bash
 NEXT_PUBLIC_IMMCAD_API_BASE_URL=/api
+NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE=true
 IMMCAD_API_BASE_URL=http://127.0.0.1:8000
 IMMCAD_API_BEARER_TOKEN=your-api-bearer-token
 IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK=false
@@ -26,6 +27,7 @@ Do not expose bearer tokens through `NEXT_PUBLIC_*` variables.
 For production, `IMMCAD_API_BASE_URL` must use `https://`.
 `IMMCAD_ALLOW_PROXY_SCAFFOLD_FALLBACK` defaults to `false`; set it to `true` only for non-hardened debug/demo environments where chat scaffold fallback is explicitly desired.
 Use `NEXT_PUBLIC_IMMCAD_FRONTEND_REDESIGN_ENABLED=true|false` to stage rollout of the redesigned shell.
+Use `NEXT_PUBLIC_IMMCAD_ENABLE_AGENT_THINKING_TIMELINE=true|false` to control visibility of inline activity + thinking-drawer transparency UI (recommended: `true` in development, `false` for initial production dark launch).
 
 For Cloudflare local preview, copy `.dev.vars.example` to `.dev.vars` and set real values.
 

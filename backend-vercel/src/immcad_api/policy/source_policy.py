@@ -7,12 +7,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 import yaml
+from immcad_api.policy.source_policy_embedded import SOURCE_POLICY_PAYLOAD_JSON
 
 
 SourceClass = Literal["official", "unofficial", "commercial"]
 RuntimeEnvironment = Literal["internal", "production"]
 
 DEFAULT_SOURCE_POLICY_RELATIVE_PATH = Path("config/source_policy.yaml")
+DEFAULT_SOURCE_POLICY_PACKAGE_PATH = (
+    Path(__file__).resolve().parents[2] / DEFAULT_SOURCE_POLICY_RELATIVE_PATH
+)
 DEFAULT_SOURCE_POLICY_REPO_PATH = (
     Path(__file__).resolve().parents[3] / DEFAULT_SOURCE_POLICY_RELATIVE_PATH
 )
@@ -55,7 +59,11 @@ class SourcePolicy(BaseModel):
 def _candidate_paths(path: str | Path | None) -> list[Path]:
     if path is not None:
         return [Path(path)]
-    return [DEFAULT_SOURCE_POLICY_RELATIVE_PATH, DEFAULT_SOURCE_POLICY_REPO_PATH]
+    return [
+        DEFAULT_SOURCE_POLICY_RELATIVE_PATH,
+        DEFAULT_SOURCE_POLICY_PACKAGE_PATH,
+        DEFAULT_SOURCE_POLICY_REPO_PATH,
+    ]
 
 
 def _load_policy_payload(path: Path) -> dict[str, object]:
@@ -81,6 +89,9 @@ def load_source_policy(path: str | Path | None = None) -> SourcePolicy:
         if candidate.exists():
             payload = _load_policy_payload(candidate)
             return SourcePolicy.model_validate(payload)
+    if path is None:
+        payload = json.loads(SOURCE_POLICY_PAYLOAD_JSON)
+        return SourcePolicy.model_validate(payload)
 
     candidate_paths = ", ".join(str(item) for item in candidates)
     raise FileNotFoundError(f"Source policy not found. Checked: {candidate_paths}")

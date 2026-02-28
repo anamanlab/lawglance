@@ -8,6 +8,10 @@ import type {
   MatterPackageResponsePayload,
   MatterReadinessResponsePayload,
 } from "@/lib/api-client";
+import {
+  buildInitialTurnEvents,
+  upsertTurnStageEvent,
+} from "@/components/chat/agent-activity";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
 import {
   ASSISTANT_BOOTSTRAP_TEXT,
@@ -15,6 +19,10 @@ import {
   ERROR_COPY,
 } from "@/components/chat/constants";
 import type {
+  AgentActivityByTurn,
+  AgentActivityMeta,
+  AgentActivityStage,
+  AgentActivityStatus,
   CaseRetrievalMode,
   ChatErrorState,
   DocumentCompilationState,
@@ -27,6 +35,7 @@ import type {
   ResearchObjective,
   ResearchPosture,
   ResearchSourceStatus,
+  PrioritySourceStatusMap,
   SubmissionPhase,
   SupportContext,
 } from "@/components/chat/types";
@@ -69,6 +78,25 @@ function buildCaseSearchErrorStatusMessage(params: {
     return "Case-law search is temporarily rate limited. Please wait a moment and try again.";
   }
   return "Case-law search is temporarily unavailable. Please try again shortly.";
+}
+
+function buildDocumentSupportMatrixErrorStatusMessage(params: {
+  code: string;
+  message: string;
+  traceId: string | null;
+  showOperationalPanels: boolean;
+}): string {
+  const { code, message, traceId, showOperationalPanels } = params;
+  if (showOperationalPanels) {
+    return `Document support matrix unavailable: ${message} (Trace ID: ${traceId ?? "Unavailable"})`;
+  }
+  if (code === "SOURCE_UNAVAILABLE") {
+    return "Document support matrix is temporarily unavailable. Using default profile guidance.";
+  }
+  if (code === "RATE_LIMITED") {
+    return "Document support matrix is temporarily rate limited. Using default profile guidance.";
+  }
+  return "Document support matrix is temporarily unavailable. Using default profile guidance.";
 }
 
 function parseCommaSeparatedValues(value: string, maxItems = 8): string[] {
@@ -316,6 +344,7 @@ export interface UseChatLogicProps {
 export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanels }: UseChatLogicProps) {
   const sessionIdRef = useRef(buildSessionId());
   const messageCounterRef = useRef(0);
+  const activityTurnCounterRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const endOfThreadRef = useRef<HTMLDivElement | null>(null);
   const localeStorageKey = "immcad.locale";
@@ -335,6 +364,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [lastCaseSearchQuery, setLastCaseSearchQuery] = useState<string | null>(null);
   const [relatedCasesRetrievalMode, setRelatedCasesRetrievalMode] = useState<CaseRetrievalMode>(null);
   const [sourceStatus, setSourceStatus] = useState<ResearchSourceStatus>(null);
+  const [prioritySourceStatus, setPrioritySourceStatus] =
+    useState<PrioritySourceStatusMap | null>(null);
   const [researchConfidence, setResearchConfidence] = useState<ResearchConfidence>(null);
   const [confidenceReasons, setConfidenceReasons] = useState<string[]>([]);
   const [intakeCompleteness, setIntakeCompleteness] = useState<IntakeCompleteness>(null);
@@ -370,24 +401,115 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
   const [supportMatrix, setSupportMatrix] = useState<SupportMatrixResponsePayload | null>(
     null
   );
-  const supportMatrixLoadedRef = useRef(false);
+  const supportMatrixRequestInFlightRef = useRef(false);
 
   const loadDocumentSupportMatrix = useCallback(async (): Promise<void> => {
-    if (supportMatrixLoadedRef.current || supportMatrix !== null) {
+    if (supportMatrixRequestInFlightRef.current || supportMatrix !== null) {
       return;
     }
-    supportMatrixLoadedRef.current = true;
-    const result = await apiClient.getDocumentSupportMatrix();
-    if (result.ok) {
-      setSupportMatrix(result.data);
+    supportMatrixRequestInFlightRef.current = true;
+    try {
+      const result = await apiClient.getDocumentSupportMatrix();
+      if (result.ok) {
+        setSupportMatrix(result.data);
+        setSupportContext((currentSupportContext) => {
+          if (currentSupportContext?.endpoint !== "/api/documents/support-matrix") {
+            return currentSupportContext;
+          }
+          return {
+            endpoint: "/api/documents/support-matrix",
+            status: "success",
+            traceId: result.traceId,
+            traceIdMismatch: false,
+          };
+        });
+      } else {
+        setSupportContext((currentSupportContext) => {
+          if (
+            currentSupportContext?.status === "error" &&
+            currentSupportContext.endpoint !== "/api/documents/support-matrix"
+          ) {
+            return currentSupportContext;
+          }
+          return {
+            endpoint: "/api/documents/support-matrix",
+            status: "error",
+            traceId: result.traceId,
+            code: result.error.code,
+            policyReason: result.policyReason,
+            traceIdMismatch: result.traceIdMismatch,
+          };
+        });
+        const supportMatrixErrorStatusMessage =
+          buildDocumentSupportMatrixErrorStatusMessage({
+            code: result.error.code,
+            message: result.error.message,
+            traceId: result.traceId,
+            showOperationalPanels,
+          });
+        setDocumentStatusMessage((currentStatusMessage) => {
+          const normalizedCurrentStatus = currentStatusMessage.trim().toLowerCase();
+          if (
+            normalizedCurrentStatus.startsWith("upload failed.") ||
+            normalizedCurrentStatus.startsWith("unable to fetch readiness")
+          ) {
+            return currentStatusMessage;
+          }
+          return supportMatrixErrorStatusMessage;
+        });
+      }
+    } finally {
+      supportMatrixRequestInFlightRef.current = false;
     }
-  }, [apiClient, supportMatrix]);
+  }, [apiClient, showOperationalPanels, supportMatrix]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     buildMessage("assistant-bootstrap", "assistant", ASSISTANT_BOOTSTRAP_TEXT, {
       disclaimer: legalDisclaimer,
     }),
   ]);
+  const [activityByTurn, setActivityByTurn] = useState<AgentActivityByTurn>({});
+  const [activeActivityTurnId, setActiveActivityTurnId] = useState<string | null>(null);
+
+  const nextActivityTurnId = useCallback((): string => {
+    const turnId = `turn-${activityTurnCounterRef.current}`;
+    activityTurnCounterRef.current += 1;
+    return turnId;
+  }, []);
+
+  const applyTurnActivityEvents = useCallback(
+    (
+      turnId: string,
+      updates: Array<{
+        stage: AgentActivityStage;
+        status: AgentActivityStatus;
+        label: string;
+        endedAt?: string;
+        details?: string;
+        meta?: AgentActivityMeta;
+      }>
+    ): void => {
+      setActivityByTurn((currentActivityByTurn) => {
+        let nextTurnEvents = currentActivityByTurn[turnId] ?? buildInitialTurnEvents(turnId);
+        for (const update of updates) {
+          nextTurnEvents = upsertTurnStageEvent(nextTurnEvents, {
+            turnId,
+            stage: update.stage,
+            status: update.status,
+            label: update.label,
+            endedAt: update.endedAt,
+            details: update.details,
+            meta: update.meta,
+          });
+        }
+        return {
+          ...currentActivityByTurn,
+          [turnId]: nextTurnEvents,
+        };
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -446,6 +568,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       if (!promptToSubmit) {
         return;
       }
+      const activityTurnId = nextActivityTurnId();
 
       if (!options?.isRetry) {
         const userMessageId = nextMessageId("user", messageCounterRef);
@@ -455,6 +578,20 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         ]);
         setDraft("");
       }
+      setActiveActivityTurnId(activityTurnId);
+      setActivityByTurn((currentActivityByTurn) => {
+        let initialEvents = buildInitialTurnEvents(activityTurnId);
+        initialEvents = upsertTurnStageEvent(initialEvents, {
+          turnId: activityTurnId,
+          stage: "retrieval",
+          status: "running",
+          label: "Searching case law",
+        });
+        return {
+          ...currentActivityByTurn,
+          [activityTurnId]: initialEvents,
+        };
+      });
 
       setChatError(null);
       setRetryPrompt(null);
@@ -464,6 +601,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setLastCaseSearchQuery(null);
       setRelatedCasesRetrievalMode(null);
       setSourceStatus(null);
+      setPrioritySourceStatus(null);
       setResearchConfidence(null);
       setConfidenceReasons([]);
       setIntakeCompleteness(null);
@@ -482,6 +620,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         });
 
         if (!chatResult.ok) {
+          const completedAt = new Date().toISOString();
           const errorCopy = ERROR_COPY[chatResult.error.code];
           setChatError({
             title: errorCopy.title,
@@ -498,11 +637,43 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
             code: chatResult.error.code,
             traceIdMismatch: chatResult.traceIdMismatch,
           });
+          applyTurnActivityEvents(activityTurnId, [
+            {
+              stage: "retrieval",
+              status: "error",
+              label: "Searching case law",
+              endedAt: completedAt,
+              meta: {
+                code: chatResult.error.code,
+              },
+            },
+            {
+              stage: "delivery",
+              status: "error",
+              label: "Delivering response",
+              endedAt: completedAt,
+              meta: {
+                code: chatResult.error.code,
+                traceId: chatResult.traceId ?? null,
+              },
+            },
+          ]);
           return;
         }
 
         const chatResponse = chatResult.data;
         const isPolicyRefusal = chatResponse.fallback_used.reason === "policy_block";
+        const completedAt = new Date().toISOString();
+        const synthesisStatus =
+          chatResponse.fallback_used.used && !isPolicyRefusal ? "warning" : "success";
+        const synthesisMeta: AgentActivityMeta | undefined =
+          chatResponse.fallback_used.used
+            ? {
+                fallbackUsed: chatResponse.fallback_used.used,
+                fallbackReason: chatResponse.fallback_used.reason ?? null,
+                fallbackProvider: chatResponse.fallback_used.provider ?? null,
+              }
+            : undefined;
         const assistantMessageId = nextMessageId("assistant", messageCounterRef);
 
         setMessages((currentMessages) => [
@@ -514,6 +685,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
             isPolicyRefusal,
             confidence: chatResponse.confidence,
             fallbackUsed: chatResponse.fallback_used,
+            activityTurnId,
           }),
         ]);
 
@@ -523,6 +695,49 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           traceId: chatResult.traceId,
           traceIdMismatch: false,
         });
+        applyTurnActivityEvents(activityTurnId, [
+          {
+            stage: "intake",
+            status: "success",
+            label: "Understanding question",
+            endedAt: completedAt,
+          },
+          {
+            stage: "retrieval",
+            status: "success",
+            label: "Searching case law",
+            endedAt: completedAt,
+          },
+          {
+            stage: "grounding",
+            status: "success",
+            label: "Evaluating sources",
+            endedAt: completedAt,
+            meta: {
+              sourceCount: chatResponse.citations.length,
+            },
+          },
+          {
+            stage: "synthesis",
+            status: synthesisStatus,
+            label: "Drafting answer",
+            endedAt: completedAt,
+            meta: synthesisMeta,
+          },
+          {
+            stage: "delivery",
+            status: isPolicyRefusal ? "blocked" : "success",
+            label: "Delivering response",
+            endedAt: completedAt,
+            meta: isPolicyRefusal
+              ? {
+                  fallbackReason: chatResponse.fallback_used.reason ?? "policy_block",
+                }
+              : {
+                  traceId: chatResult.traceId ?? null,
+                },
+          },
+        ]);
 
         if (isPolicyRefusal) {
           setRelatedCasesStatus(
@@ -537,7 +752,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
           setCaseSearchQuery(previewQuery);
           setLastCaseSearchQuery(previewQuery);
           setRelatedCasesRetrievalMode(researchPreview.retrieval_mode ?? "auto");
-          setSourceStatus(researchPreview.source_status ?? null);
+      setSourceStatus(researchPreview.source_status ?? null);
+      setPrioritySourceStatus(null);
           setResearchConfidence(null);
           setConfidenceReasons([]);
           setIntakeCompleteness(null);
@@ -560,7 +776,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         }
 
         setCaseSearchQuery(promptToSubmit);
-        setSourceStatus(null);
+      setSourceStatus(null);
+      setPrioritySourceStatus(null);
         setRelatedCasesStatus("Ready to find related Canadian case law.");
       } finally {
         setIsChatSubmitting(false);
@@ -568,7 +785,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
         textareaRef.current?.focus();
       }
     },
-    [activeLocale, apiClient, isSubmitting, legalDisclaimer]
+    [activeLocale, apiClient, applyTurnActivityEvents, isSubmitting, legalDisclaimer, nextActivityTurnId]
   );
 
   const runRelatedCaseSearch = useCallback(async (): Promise<void> => {
@@ -628,7 +845,6 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     setIsCaseSearchSubmitting(true);
     setSubmissionPhase("cases");
     setExportingCaseId(null);
-    setSourceStatus(null);
     setResearchConfidence(null);
     setConfidenceReasons([]);
     setIntakeCompleteness(null);
@@ -650,6 +866,15 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       });
 
       if (!caseSearchResult.ok) {
+        if (caseSearchResult.error.code === "SOURCE_UNAVAILABLE") {
+          setSourceStatus((currentStatus) =>
+            currentStatus ?? {
+              official: "unavailable",
+              canlii: "unavailable",
+            }
+          );
+        }
+        setPrioritySourceStatus(null);
         const statusMessage = buildCaseSearchErrorStatusMessage({
           code: caseSearchResult.error.code,
           message: caseSearchResult.error.message,
@@ -673,6 +898,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
       setLastCaseSearchQuery(query);
       setRelatedCasesRetrievalMode("manual");
       setSourceStatus(caseSearchResult.data.source_status ?? null);
+      setPrioritySourceStatus(caseSearchResult.data.priority_source_status ?? null);
       setResearchConfidence(caseSearchResult.data.research_confidence);
       setConfidenceReasons(caseSearchResult.data.confidence_reasons ?? []);
       setIntakeCompleteness(caseSearchResult.data.intake_completeness);
@@ -1282,6 +1508,7 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     lastCaseSearchQuery,
     relatedCasesRetrievalMode,
     sourceStatus,
+    prioritySourceStatus,
     researchConfidence,
     confidenceReasons,
     intakeCompleteness,
@@ -1306,6 +1533,8 @@ export function useChatLogic({ apiBaseUrl, legalDisclaimer, showOperationalPanel
     submissionPhase,
     chatPendingElapsedSeconds,
     isSlowChatResponse,
+    activityByTurn,
+    activeActivityTurnId,
     messages,
     submitPrompt,
     runRelatedCaseSearch,

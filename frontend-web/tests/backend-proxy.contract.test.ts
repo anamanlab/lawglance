@@ -263,6 +263,176 @@ describe("backend proxy scaffold fallback behavior", () => {
     expect(body.answer).toBe("ok-network-fallback");
   });
 
+  it("fails over case-search requests to fallback origin when primary tunnel is down", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api-primary.example.com",
+      backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: "https://api-fallback.example.com",
+    }));
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("error code: 1033", {
+          status: 530,
+          headers: {
+            "content-type": "text/plain; charset=UTF-8",
+            "x-trace-id": "trace-search-primary-down",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            cases: [],
+            query: "Express Entry",
+            source_status: {
+              source_id: "canlii",
+              status: "ok",
+              details: "fallback origin",
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-trace-id": "trace-search-fallback-ok",
+            },
+          }
+        )
+      );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/search/cases", { query: "Express Entry", top_k: 1 }),
+      "/api/search/cases"
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api-primary.example.com/api/search/cases"
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api-fallback.example.com/api/search/cases"
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-immcad-origin-fallback")).toBe("used");
+  });
+
+  it("fails over lawyer-research requests when primary tunnel is down", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api-primary.example.com",
+      backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: "https://api-fallback.example.com",
+    }));
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("error code: 1033", {
+          status: 530,
+          headers: {
+            "content-type": "text/plain; charset=UTF-8",
+            "x-trace-id": "trace-research-primary-down",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            matter_profile: {},
+            cases: [],
+            source_status: {},
+            research_confidence: "low",
+            confidence_reasons: [],
+            intake_completeness: "low",
+            intake_hints: [],
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-trace-id": "trace-research-fallback-ok",
+            },
+          }
+        )
+      );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/research/lawyer-cases", {
+        session_id: "session-123456",
+        matter_summary: "Federal Court procedural fairness",
+      }),
+      "/api/research/lawyer-cases"
+    );
+    const body = await response.json();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api-primary.example.com/api/research/lawyer-cases"
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api-fallback.example.com/api/research/lawyer-cases"
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-immcad-origin-fallback")).toBe("used");
+    expect(body.source_status).toEqual({});
+  });
+
+  it("does not fail over export-approval requests when primary tunnel is down", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api-primary.example.com",
+      backendBearerToken: "proxy-token",
+      backendFallbackBaseUrl: "https://api-fallback.example.com",
+    }));
+
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("error code: 1033", {
+          status: 530,
+          headers: {
+            "content-type": "text/plain; charset=UTF-8",
+            "x-trace-id": "trace-approval-primary-down",
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            approval_token: "token-fallback",
+            expires_at_epoch: 1770000000,
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-trace-id": "trace-approval-fallback-ok",
+            },
+          }
+        )
+      );
+
+    const response = await forwardPostRequest(
+      buildRequest("/api/export/cases/approval", {
+        source_id: "canlii",
+        case_id: "2026-fc-001",
+        document_url: "https://example.test/cases/2026-fc-001/document.pdf",
+        user_approved: true,
+      }),
+      "/api/export/cases/approval"
+    );
+    const body = await response.json();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api-primary.example.com/api/export/cases/approval"
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("x-immcad-origin-fallback")).toBeNull();
+    expect(body.error.code).toBe("SOURCE_UNAVAILABLE");
+    expect(body.error.message).toContain("origin tunnel");
+  });
+
   it("preserves binary export responses without text decoding", async () => {
     vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
       backendBaseUrl: "https://api.example.com",
@@ -570,7 +740,6 @@ describe("backend proxy scaffold fallback behavior", () => {
         headers: {
           "x-real-ip": "203.0.113.10",
           "x-forwarded-for": "203.0.113.10, 10.0.0.2",
-          "cf-connecting-ip": "203.0.113.10",
           "true-client-ip": "203.0.113.10",
         },
       }
@@ -586,7 +755,43 @@ describe("backend proxy scaffold fallback behavior", () => {
     const forwardedHeaders = new Headers(init?.headers as HeadersInit);
     expect(forwardedHeaders.get("x-real-ip")).toBe("203.0.113.10");
     expect(forwardedHeaders.get("x-forwarded-for")).toBe("203.0.113.10, 10.0.0.2");
-    expect(forwardedHeaders.get("cf-connecting-ip")).toBe("203.0.113.10");
     expect(forwardedHeaders.get("true-client-ip")).toBe("203.0.113.10");
+    expect(forwardedHeaders.get("cf-connecting-ip")).toBeNull();
+  });
+
+  it("forwards protocol and Cloudflare client headers for document middleware checks", async () => {
+    vi.mocked(getServerRuntimeConfig).mockImplementation(() => ({
+      backendBaseUrl: "https://api.example.com",
+      backendBearerToken: null,
+    }));
+
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ supported_profiles_by_forum: {}, unsupported_profile_families: [] }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "x-trace-id": "trace-doc-support-matrix",
+        },
+      })
+    );
+
+    const request = new NextRequest(
+      "https://immcad.arkiteto.dpdns.org/api/documents/support-matrix",
+      {
+        method: "GET",
+        headers: {
+          "cf-connecting-ip": "203.0.113.15",
+        },
+      }
+    );
+    const response = await forwardGetRequest(request, "/api/documents/support-matrix");
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0]!;
+    const forwardedHeaders = new Headers(init?.headers as HeadersInit);
+    expect(forwardedHeaders.get("x-forwarded-proto")).toBe("https");
+    expect(forwardedHeaders.get("x-forwarded-host")).toBe("immcad.arkiteto.dpdns.org");
+    expect(forwardedHeaders.get("cf-connecting-ip")).toBe("203.0.113.15");
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type {
   DocumentCompilationPaginationSummary,
+  PrioritySourceStatusMap,
   RelatedCasePanelProps,
 } from "@/components/chat/types";
 import { isLowSpecificityCaseQuery } from "@/components/chat/case-query-specificity";
@@ -163,6 +164,22 @@ function buildRefinementSuggestions(params: {
   return uniqueSuggestions.slice(0, 4);
 }
 
+const PRIORITY_SOURCE_DISPLAY_ORDER = [
+  { sourceId: "SCC_DECISIONS", label: "SCC" },
+  { sourceId: "FC_DECISIONS", label: "FC" },
+];
+
+function formatPrioritySourceStatus(statuses?: PrioritySourceStatusMap | null): string {
+  if (!statuses) {
+    return "Priority courts: n/a";
+  }
+  const parts = PRIORITY_SOURCE_DISPLAY_ORDER.map(({ sourceId, label }) => {
+    const status = statuses[sourceId] ?? "missing";
+    return `${label}: ${status}`;
+  });
+  return `Priority courts: ${parts.join(" | ")}`;
+}
+
 function buildExportUnavailableReason(policyReason?: string | null): string {
   switch (policyReason) {
     case "source_export_blocked_by_policy":
@@ -202,22 +219,22 @@ function buildPdfUnavailableReason(pdfReason?: string | null): string {
 
 function confidenceToneClass(confidence: "low" | "medium" | "high"): string {
   if (confidence === "high") {
-    return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+    return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
   }
   if (confidence === "medium") {
-    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+    return "border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]";
   }
-  return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+  return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning";
 }
 
 function intakeToneClass(completeness: "low" | "medium" | "high"): string {
   if (completeness === "high") {
-    return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+    return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
   }
   if (completeness === "medium") {
-    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+    return "border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]";
   }
-  return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+  return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning";
 }
 
 function toOfficialSourceStatusLabel(status: string): string {
@@ -269,15 +286,15 @@ function uploadStatusLabel(status: "pending" | "uploaded" | "needs_review" | "fa
 
 function uploadStatusTone(status: "pending" | "uploaded" | "needs_review" | "failed"): string {
   if (status === "pending") {
-    return "border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]";
+    return "border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]";
   }
   if (status === "needs_review") {
-    return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+    return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning";
   }
   if (status === "failed") {
     return "border-[rgba(172,63,47,0.22)] bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)]";
   }
-  return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+  return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
 }
 
 function toViolationSeverity(value: string): "blocking" | "warning" {
@@ -300,9 +317,9 @@ function sectionStatusTone(value: "present" | "missing" | "warning"): string {
     return "border-[rgba(172,63,47,0.22)] bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)]";
   }
   if (value === "warning") {
-    return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+    return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning";
   }
-  return "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]";
+  return "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]";
 }
 
 function sectionStatusLabel(value: "present" | "missing" | "warning"): string {
@@ -319,7 +336,7 @@ function violationSeverityTone(value: "blocking" | "warning"): string {
   if (value === "blocking") {
     return "border-[rgba(172,63,47,0.22)] bg-[var(--imm-danger-soft)] text-[var(--imm-danger-ink)]";
   }
-  return "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning";
+  return "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning";
 }
 
 function formatPageRange(startPage: number | null, endPage: number | null): string {
@@ -437,6 +454,7 @@ export function RelatedCasePanel({
   lastCaseSearchQuery,
   relatedCasesRetrievalMode,
   sourceStatus,
+  prioritySourceStatus,
   onCaseSearchQueryChange,
   relatedCasesStatus,
   researchConfidence,
@@ -613,7 +631,7 @@ export function RelatedCasePanel({
   return (
     <section className="imm-paper-card imm-fade-up rounded-2xl p-4 md:p-5" style={{ animationDelay: "200ms" }}>
       <div className="relative z-10">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[rgba(176,174,165,0.42)] pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--imm-border-soft)] pb-3">
           <div>
             <h2 className="text-lg font-semibold text-ink">Case-law precedents</h2>
             <p className="mt-1 max-w-md text-xs leading-6 text-muted">
@@ -635,7 +653,7 @@ export function RelatedCasePanel({
         </div>
 
         <div
-          className="mt-4 flex rounded-xl border border-[rgba(176,174,165,0.5)] bg-[rgba(247,243,234,0.7)] p-1"
+          className="mt-4 flex rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-1"
           aria-label="Workflow mode"
           role="tablist"
         >
@@ -645,8 +663,8 @@ export function RelatedCasePanel({
             aria-selected={activeWorkflowMode === "research"}
             className={`flex-1 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] transition ${
               activeWorkflowMode === "research"
-                ? "border border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]"
-                : "text-muted hover:bg-[rgba(235,232,223,0.8)]"
+                ? "border border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]"
+                : "text-muted hover:bg-[rgba(228,221,208,0.88)]"
             }`}
             onClick={() => setActiveWorkflowMode("research")}
             role="tab"
@@ -660,8 +678,8 @@ export function RelatedCasePanel({
             aria-selected={activeWorkflowMode === "documents"}
             className={`flex-1 rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] transition ${
               activeWorkflowMode === "documents"
-                ? "border border-[rgba(106,155,204,0.35)] bg-[#eef3f8] text-[#436280]"
-                : "text-muted hover:bg-[rgba(235,232,223,0.8)]"
+                ? "border border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] text-[var(--imm-accent-ink)]"
+                : "text-muted hover:bg-[rgba(228,221,208,0.88)]"
             }`}
             onClick={() => setActiveWorkflowMode("documents")}
             role="tab"
@@ -686,8 +704,8 @@ export function RelatedCasePanel({
               <span
                 className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${
                   documentReadiness.isReady
-                    ? "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]"
-                    : "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning"
+                    ? "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]"
+                    : "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning"
                 }`}
               >
                 {documentReadiness.isReady ? "Ready" : "Not ready"}
@@ -703,7 +721,7 @@ export function RelatedCasePanel({
               Document forum
               <select
                 aria-label="Document forum"
-                className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                 disabled={disableDocumentControls}
                 onChange={(event) => onDocumentForumChange(event.target.value as typeof documentForum)}
                 value={documentForum}
@@ -720,7 +738,7 @@ export function RelatedCasePanel({
               Matter ID (optional)
               <input
                 aria-label="Matter ID (optional)"
-                className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                 disabled={disableDocumentControls}
                 onChange={(event) => onDocumentMatterIdChange(event.target.value)}
                 placeholder="matter-abc123"
@@ -739,8 +757,8 @@ export function RelatedCasePanel({
             aria-describedby={documentDropzoneHintId}
             className={`mt-3 rounded-lg border border-dashed px-3 py-3 transition ${
               isDocumentDropActive
-                ? "border-[rgba(106,155,204,0.8)] bg-[#eef3f8]"
-                : "border-[rgba(176,174,165,0.6)] bg-[rgba(247,243,234,0.72)]"
+                ? "border-[rgba(95,132,171,0.7)] bg-[var(--imm-accent-soft)]"
+                : "border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)]"
             }`}
             onDragEnter={(event) => {
               event.preventDefault();
@@ -837,7 +855,7 @@ export function RelatedCasePanel({
             <p className="text-xs leading-5 text-muted">{documentStatusMessage}</p>
           </div>
 
-          <div className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
             <p className="font-semibold text-ink">Matter ID: {documentMatterId.trim() || "Not assigned"}</p>
             <p className="mt-1">
               Ready for filing package:{" "}
@@ -871,7 +889,7 @@ export function RelatedCasePanel({
               <p className="mt-1">Compiled binder download is unavailable in metadata-only mode.</p>
             ) : null}
             {unresolvedRequirementStatuses.length ? (
-              <div className="mt-2 rounded-md border border-[rgba(176,174,165,0.35)] bg-[rgba(247,243,234,0.64)] px-2 py-1.5">
+              <div className="mt-2 rounded-md border border-[rgba(159,154,142,0.42)] bg-[rgba(236,229,215,0.78)] px-2 py-1.5">
                 <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Rule guidance</p>
                 <ul className="mt-1 space-y-1">
                   {unresolvedRequirementStatuses.slice(0, 4).map((requirementStatus) => (
@@ -888,14 +906,14 @@ export function RelatedCasePanel({
           </div>
 
           {ruleViolations.length ? (
-            <div className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Rule violations</p>
               <ul className="mt-2 space-y-2">
                 {ruleViolations.map((violation) => {
                   const normalizedSeverity = toViolationSeverity(violation.severity);
                   return (
                     <li
-                      className="rounded-md border border-[rgba(176,174,165,0.35)] bg-[rgba(247,243,234,0.64)] px-2 py-1.5"
+                      className="rounded-md border border-[rgba(159,154,142,0.42)] bg-[rgba(236,229,215,0.78)] px-2 py-1.5"
                       key={`${violation.severity}-${violation.code}`}
                     >
                       <div className="flex flex-wrap items-center gap-2">
@@ -927,7 +945,7 @@ export function RelatedCasePanel({
           ) : null}
 
           {recordSections.length ? (
-            <div className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">
                 Record section completeness
               </p>
@@ -936,7 +954,7 @@ export function RelatedCasePanel({
                   const normalizedSectionStatus = toSectionStatus(section.sectionStatus);
                   return (
                     <li
-                      className="rounded-md border border-[rgba(176,174,165,0.35)] bg-[rgba(247,243,234,0.64)] px-2 py-1.5"
+                      className="rounded-md border border-[rgba(159,154,142,0.42)] bg-[rgba(236,229,215,0.78)] px-2 py-1.5"
                       key={section.sectionId}
                     >
                       <div className="flex flex-wrap items-center gap-2">
@@ -967,7 +985,7 @@ export function RelatedCasePanel({
           ) : null}
 
           {tocEntries.length ? (
-            <div className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+            <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
               <p className="text-[10px] uppercase tracking-[0.1em] text-muted">Compilation TOC</p>
               <ul className="mt-2 space-y-1">
                 {tocEntries.map((entry) => (
@@ -994,7 +1012,7 @@ export function RelatedCasePanel({
           ) : null}
 
           {blockedReasons.length ? (
-            <div className="mt-2 rounded-lg border border-[rgba(217,119,87,0.35)] bg-[#f8eee8] px-3 py-2 text-[11px] leading-5 text-warning">
+            <div className="mt-2 rounded-lg border border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] px-3 py-2 text-[11px] leading-5 text-warning">
               <p className="text-[10px] uppercase tracking-[0.1em] text-warning">Why blocked</p>
               <ul className="mt-2 space-y-1 text-muted">
                 {blockedReasons.map((reason) => (
@@ -1016,7 +1034,7 @@ export function RelatedCasePanel({
                 );
                 return (
                   <li
-                    className="rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)] px-3 py-2"
+                    className="rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2"
                     key={`${uploadItem.fileId}-${uploadItem.filename}`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1060,7 +1078,7 @@ export function RelatedCasePanel({
             Case search query
           </label>
           <input
-            className="min-h-[44px] w-full rounded-lg border border-[rgba(176,174,165,0.78)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-xs leading-6 text-ink shadow-sm outline-none transition duration-150 focus:border-accent-blue focus:ring-2 focus:ring-[rgba(106,155,204,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
+            className="min-h-[44px] w-full rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-xs leading-6 text-ink shadow-sm outline-none transition duration-150 focus:border-accent-blue focus:ring-2 focus:ring-[rgba(95,132,171,0.2)] disabled:cursor-not-allowed disabled:opacity-70"
             disabled={disableCaseSearchControls}
             id={caseSearchInputId}
             aria-describedby={caseSearchHintId}
@@ -1085,7 +1103,7 @@ export function RelatedCasePanel({
             {queryHint}
           </p>
 
-          <div className="mt-3 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(247,243,234,0.72)] p-3">
+          <div className="mt-3 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] p-3">
             <p className="text-[10px] uppercase tracking-[0.12em] text-muted">
               Research intake (recommended)
             </p>
@@ -1097,7 +1115,7 @@ export function RelatedCasePanel({
                 Research objective
                 <select
                   aria-label="Research objective"
-                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                   disabled={disableCaseSearchControls}
                   onChange={(event) => onIntakeObjectiveChange(event.target.value as typeof intakeObjective)}
                   value={intakeObjective}
@@ -1112,7 +1130,7 @@ export function RelatedCasePanel({
                 Target court
                 <select
                   aria-label="Target court"
-                  className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                  className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                   disabled={disableCaseSearchControls}
                   onChange={(event) => onIntakeTargetCourtChange(event.target.value)}
                   value={intakeTargetCourt}
@@ -1139,7 +1157,7 @@ export function RelatedCasePanel({
                   Procedural posture
                   <select
                     aria-label="Procedural posture"
-                    className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                    className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                     disabled={disableCaseSearchControls}
                     onChange={(event) =>
                       onIntakeProceduralPostureChange(event.target.value as typeof intakeProceduralPosture)
@@ -1157,7 +1175,7 @@ export function RelatedCasePanel({
                   Issue tags
                   <input
                     aria-label="Issue tags"
-                    className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                    className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                     disabled={disableCaseSearchControls}
                     onChange={(event) => onIntakeIssueTagsChange(event.target.value)}
                     placeholder="procedural_fairness, inadmissibility"
@@ -1169,7 +1187,7 @@ export function RelatedCasePanel({
                   Citation or docket anchor
                   <input
                     aria-label="Citation or docket anchor"
-                    className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                    className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                     disabled={disableCaseSearchControls}
                     onChange={(event) => onIntakeAnchorReferenceChange(event.target.value)}
                     placeholder="2024 FCA 77 or A-77-23"
@@ -1181,7 +1199,7 @@ export function RelatedCasePanel({
                   Decision date from
                   <input
                     aria-label="Decision date from"
-                    className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                    className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                     disabled={disableCaseSearchControls}
                     onChange={(event) => onIntakeDateFromChange(event.target.value)}
                     type="date"
@@ -1192,7 +1210,7 @@ export function RelatedCasePanel({
                   Decision date to
                   <input
                     aria-label="Decision date to"
-                    className="mt-1 min-h-[38px] w-full rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-2 text-xs text-ink"
+                    className="mt-1 min-h-[38px] w-full rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-2 text-xs text-ink"
                     disabled={disableCaseSearchControls}
                     onChange={(event) => onIntakeDateToChange(event.target.value)}
                     type="date"
@@ -1246,8 +1264,8 @@ export function RelatedCasePanel({
         {isCaseSearchSubmitting && submissionPhase === "cases" ? (
           <div aria-live="polite" className="mt-3 min-h-[20px]" role="status">
             <div className="flex animate-pulse flex-col gap-2.5 py-1">
-              <div className="h-2.5 w-3/4 rounded-full bg-[rgba(176,174,165,0.25)]" />
-              <div className="h-2.5 w-1/2 rounded-full bg-[rgba(176,174,165,0.25)]" />
+              <div className="h-2.5 w-3/4 rounded-full bg-[rgba(159,154,142,0.25)]" />
+              <div className="h-2.5 w-1/2 rounded-full bg-[rgba(159,154,142,0.25)]" />
               <span className="sr-only">Running grounded lawyer case research...</span>
             </div>
           </div>
@@ -1259,7 +1277,7 @@ export function RelatedCasePanel({
               Showing {relatedCases.length} related case{relatedCases.length === 1 ? "" : "s"} for: &quot;{lastCaseSearchQuery}&quot;
             </p>
             {retrievalModeLabel ? (
-              <span className="mt-1 inline-flex rounded-full border border-[rgba(106,155,204,0.35)] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#436280]">
+              <span className="mt-1 inline-flex rounded-full border border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--imm-accent-ink)]">
                 {retrievalModeLabel}
               </span>
             ) : null}
@@ -1267,18 +1285,21 @@ export function RelatedCasePanel({
         ) : null}
 
         {shouldShowSourceCard ? (
-          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
-            <span className="inline-flex rounded-full border border-[rgba(176,174,165,0.45)] bg-[#ebe8df] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Source transparency
-            </span>
-            <p className="mt-2">
-              {toOfficialSourceStatusLabel(officialStatus)} | {toCanliiSourceStatusLabel(canliiStatus)}
-            </p>
-          </div>
+        <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
+          <span className="inline-flex rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+            Source transparency
+          </span>
+          <p className="mt-2">
+            {toOfficialSourceStatusLabel(officialStatus)} | {toCanliiSourceStatusLabel(canliiStatus)}
+          </p>
+          <p className="mt-1">
+            {formatPrioritySourceStatus(prioritySourceStatus)}
+          </p>
+        </div>
         ) : null}
 
         {researchConfidence ? (
-          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
             <span
               className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${confidenceToneClass(researchConfidence)}`}
             >
@@ -1295,7 +1316,7 @@ export function RelatedCasePanel({
         ) : null}
 
         {intakeCompleteness ? (
-          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[rgba(250,249,245,0.96)] px-3 py-2 text-[11px] leading-5 text-muted">
+          <div className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] px-3 py-2 text-[11px] leading-5 text-muted">
             <span
               className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] ${intakeToneClass(intakeCompleteness)}`}
             >
@@ -1326,10 +1347,10 @@ export function RelatedCasePanel({
 
               return (
                 <li
-                  className="overflow-hidden rounded-xl border border-[rgba(176,174,165,0.45)] bg-[rgba(250,249,245,0.96)]"
+                  className="overflow-hidden rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)]"
                   key={result.case_id}
                 >
-                  <div className="border-b border-[rgba(176,174,165,0.35)] px-3 py-3">
+                  <div className="border-b border-[rgba(159,154,142,0.42)] px-3 py-3">
                     <a
                       className="block font-semibold leading-6 text-ink underline-offset-2 hover:underline"
                       href={result.url}
@@ -1346,24 +1367,24 @@ export function RelatedCasePanel({
                       <span
                         className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                           result.pdf_status === "available"
-                            ? "border-[#b8c6a6] bg-[#eef2e7] text-[#5f7248]"
-                            : "border-[rgba(217,119,87,0.35)] bg-[#f8eee8] text-warning"
+                            ? "border-[rgba(111,132,89,0.35)] bg-[var(--imm-success-soft)] text-[var(--imm-success-ink)]"
+                            : "border-[rgba(192,106,77,0.35)] bg-[var(--imm-primary-soft)] text-warning"
                         }`}
                       >
                         {result.pdf_status === "available" ? "PDF available" : "Online review only"}
                       </span>
                       {result.court ? (
-                        <span className="rounded-full border border-[rgba(176,174,165,0.45)] bg-[#ebe8df] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                        <span className="rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
                           {result.court}
                         </span>
                       ) : null}
                       {sourceBadgeLabel ? (
-                        <span className="rounded-full border border-[rgba(176,174,165,0.45)] bg-[#ebe8df] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                        <span className="rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
                           Source: {sourceBadgeLabel}
                         </span>
                       ) : null}
                       {sourceEventTypeLabel ? (
-                        <span className="rounded-full border border-[rgba(106,155,204,0.35)] bg-[#eef3f8] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#436280]">
+                        <span className="rounded-full border border-[rgba(95,132,171,0.35)] bg-[var(--imm-accent-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--imm-accent-ink)]">
                           Event: {sourceEventTypeLabel}
                         </span>
                       ) : null}
@@ -1372,7 +1393,7 @@ export function RelatedCasePanel({
                       </span>
                     </div>
 
-                    <p className="mt-2 rounded-lg border border-[rgba(176,174,165,0.4)] bg-[#f3f1ea] px-2.5 py-2 text-[11px] leading-5 text-muted">
+                    <p className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2.5 py-2 text-[11px] leading-5 text-muted">
                       {result.relevance_reason}
                     </p>
 
@@ -1384,7 +1405,7 @@ export function RelatedCasePanel({
                         <div className="mt-1 flex flex-wrap gap-1.5" aria-label="Docket numbers">
                           {docketNumbers.map((docketNumber) => (
                             <span
-                              className="rounded-full border border-[rgba(176,174,165,0.45)] bg-[rgba(247,243,234,0.72)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted"
+                              className="rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted"
                               key={`${result.case_id}-${docketNumber}`}
                             >
                               {docketNumber}
@@ -1441,7 +1462,7 @@ export function RelatedCasePanel({
             <div
               aria-labelledby="export-confirmation-title"
               aria-modal="true"
-              className="w-full max-w-md rounded-xl border border-[rgba(176,174,165,0.75)] bg-[rgba(253,252,248,0.99)] p-4 shadow-[0_18px_48px_rgba(20,20,19,0.2)]"
+              className="w-full max-w-md rounded-xl border border-[var(--imm-border-soft)] bg-[var(--imm-surface-soft)] p-4 shadow-[0_18px_48px_rgba(20,20,19,0.2)]"
               onClick={(event) => event.stopPropagation()}
               role="dialog"
             >
@@ -1454,7 +1475,7 @@ export function RelatedCasePanel({
               <p className="mt-2 text-sm leading-6 text-muted">
                 This will download the decision document from the official source for:
               </p>
-              <p className="mt-2 rounded-lg border border-[rgba(176,174,165,0.45)] bg-[rgba(247,243,234,0.72)] px-3 py-2 text-xs font-semibold text-ink">
+              <p className="mt-2 rounded-lg border border-[var(--imm-border-soft)] bg-[var(--imm-surface-warm)] px-3 py-2 text-xs font-semibold text-ink">
                 {pendingExportCase.title}
               </p>
               <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">

@@ -66,3 +66,13 @@ def test_parse_args_supports_repeated_source_id(monkeypatch: pytest.MonkeyPatch)
     args = MODULE.parse_args()
 
     assert args.source_id == ["SRC_DAILY", "SRC_WEEKLY"]
+
+
+def test_parse_args_uses_cache_checkpoint_state_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["run_ingestion_jobs.py"])
+
+    args = MODULE.parse_args()
+
+    assert args.state_path == ".cache/immcad/ingestion-checkpoints.json"

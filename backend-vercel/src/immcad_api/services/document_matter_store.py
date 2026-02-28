@@ -4,6 +4,7 @@ import base64
 from dataclasses import dataclass
 from datetime import date
 import hashlib
+import importlib
 import json
 import logging
 from threading import Lock
@@ -83,7 +84,9 @@ def _normalize_filing_context(
             else None
         )
         return FilingDeadlineContext(
-            submission_channel=normalize_submission_channel(filing_context.submission_channel),
+            submission_channel=normalize_submission_channel(
+                filing_context.submission_channel
+            ),
             decision_date=filing_context.decision_date,
             hearing_date=filing_context.hearing_date,
             service_date=filing_context.service_date,
@@ -105,7 +108,9 @@ def _normalize_filing_context(
         service_date = _parse_optional_date(filing_context.get("service_date"))
         filing_date = _parse_optional_date(filing_context.get("filing_date"))
         raw_override_reason = filing_context.get("deadline_override_reason")
-        override_reason = str(raw_override_reason).strip() if raw_override_reason else ""
+        override_reason = (
+            str(raw_override_reason).strip() if raw_override_reason else ""
+        )
         raw_warnings = filing_context.get("preflight_warnings")
         if isinstance(raw_warnings, list):
             preflight_warnings = tuple(
@@ -121,7 +126,8 @@ def _normalize_filing_context(
             preflight_warnings = ()
         return FilingDeadlineContext(
             submission_channel=normalize_submission_channel(
-                str(filing_context.get("submission_channel", "")).strip().lower() or "portal"
+                str(filing_context.get("submission_channel", "")).strip().lower()
+                or "portal"
             ),
             decision_date=decision_date,
             hearing_date=hearing_date,
@@ -163,7 +169,9 @@ class DocumentMatterStore(Protocol):
         forum: FilingForum,
         compilation_profile_id: CompilationProfileIdInput = None,
         results: list[DocumentIntakeResult] | tuple[DocumentIntakeResult, ...],
-        source_files: list[StoredSourceFile] | tuple[StoredSourceFile, ...] | None = None,
+        source_files: list[StoredSourceFile]
+        | tuple[StoredSourceFile, ...]
+        | None = None,
         filing_context: FilingDeadlineContext | None = None,
     ) -> None: ...
 
@@ -183,11 +191,15 @@ class InMemoryDocumentMatterStore:
         forum: FilingForum,
         compilation_profile_id: CompilationProfileIdInput = None,
         results: list[DocumentIntakeResult] | tuple[DocumentIntakeResult, ...],
-        source_files: list[StoredSourceFile] | tuple[StoredSourceFile, ...] | None = None,
+        source_files: list[StoredSourceFile]
+        | tuple[StoredSourceFile, ...]
+        | None = None,
         filing_context: FilingDeadlineContext | None = None,
     ) -> None:
         key = (client_id, matter_id)
-        normalized_profile_id = _normalize_compilation_profile_id(compilation_profile_id)
+        normalized_profile_id = _normalize_compilation_profile_id(
+            compilation_profile_id
+        )
         record = StoredDocumentMatter(
             forum=forum,
             compilation_profile_id=normalized_profile_id,
@@ -231,7 +243,9 @@ class RedisDocumentMatterStore:
                 normalized["page_char_counts"] = [
                     {
                         "page_number": int(signal.get("page_number", index + 1)),
-                        "extracted_char_count": int(signal.get("extracted_char_count", 0)),
+                        "extracted_char_count": int(
+                            signal.get("extracted_char_count", 0)
+                        ),
                     }
                     for index, signal in enumerate(legacy_page_signals)
                     if isinstance(signal, dict)
@@ -294,7 +308,9 @@ class RedisDocumentMatterStore:
         )
 
     @staticmethod
-    def _serialize_filing_context(filing_context: FilingDeadlineContext) -> dict[str, object]:
+    def _serialize_filing_context(
+        filing_context: FilingDeadlineContext,
+    ) -> dict[str, object]:
         return {
             "submission_channel": filing_context.submission_channel,
             "decision_date": (
@@ -335,10 +351,14 @@ class RedisDocumentMatterStore:
         forum: FilingForum,
         compilation_profile_id: CompilationProfileIdInput = None,
         results: list[DocumentIntakeResult] | tuple[DocumentIntakeResult, ...],
-        source_files: list[StoredSourceFile] | tuple[StoredSourceFile, ...] | None = None,
+        source_files: list[StoredSourceFile]
+        | tuple[StoredSourceFile, ...]
+        | None = None,
         filing_context: FilingDeadlineContext | None = None,
     ) -> None:
-        normalized_profile_id = _normalize_compilation_profile_id(compilation_profile_id)
+        normalized_profile_id = _normalize_compilation_profile_id(
+            compilation_profile_id
+        )
         normalized_source_files = _normalize_source_files(source_files)
         normalized_filing_context = _normalize_filing_context(filing_context)
         payload = json.dumps(
@@ -350,7 +370,9 @@ class RedisDocumentMatterStore:
                     self._serialize_source_file(source_file)
                     for source_file in normalized_source_files
                 ],
-                "filing_context": self._serialize_filing_context(normalized_filing_context),
+                "filing_context": self._serialize_filing_context(
+                    normalized_filing_context
+                ),
             }
         )
         key = self._key(client_id=client_id, matter_id=matter_id)
@@ -398,7 +420,9 @@ class RedisDocumentMatterStore:
             )
             raw_results = data.get("results") or []
             results = tuple(
-                DocumentIntakeResult.model_validate(self._normalize_result_payload(item))
+                DocumentIntakeResult.model_validate(
+                    self._normalize_result_payload(item)
+                )
                 for item in raw_results
             )
             raw_source_files = data.get("source_files") or []
@@ -409,9 +433,13 @@ class RedisDocumentMatterStore:
                 )
                 if source_file is not None
             )
-            filing_context = self._deserialize_filing_context(data.get("filing_context"))
+            filing_context = self._deserialize_filing_context(
+                data.get("filing_context")
+            )
         except Exception:
-            LOGGER.warning("Unable to decode stored document matter record", exc_info=True)
+            LOGGER.warning(
+                "Unable to decode stored document matter record", exc_info=True
+            )
             return None
 
         return StoredDocumentMatter(
@@ -433,7 +461,7 @@ def build_document_matter_store(
         return InMemoryDocumentMatterStore()
 
     try:
-        import redis
+        redis = importlib.import_module("redis")
 
         redis_client = redis.Redis.from_url(
             redis_url,

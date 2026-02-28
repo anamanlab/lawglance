@@ -44,7 +44,8 @@ If `make` is unavailable, run the underlying commands directly from the repo roo
 
 ## Security & Configuration Tips
 - Never commit secrets; use `.env` locally and keep `.env.example` as template.
-- Minimum required env var: `OPENAI_API_KEY`.
+- MVP provider baseline is Gemini-first (`ENABLE_OPENAI_PROVIDER=false`, `PRIMARY_PROVIDER=gemini`).
+- Minimum production runtime secrets: `GEMINI_API_KEY`, `IMMCAD_API_BEARER_TOKEN` (and compatibility alias `API_BEARER_TOKEN` with same value).
 - Redis is optional but recommended (`REDIS_URL=redis://localhost:6379/0`).
 
 ## Workflow Orchestration
@@ -112,3 +113,20 @@ If `make` is unavailable, run the underlying commands directly from the repo roo
 - Delivery discipline:
   - One PR per phase; avoid mixing workflow/security and runtime parser changes.
   - Every phase requires explicit verification before status is moved to done in `tasks/todo.md`.
+
+## Cloudflare Deployment Baseline (2026-02-27)
+- Canonical production path is Cloudflare-only:
+  - Backend: `backend-cloudflare` native Python Worker.
+  - Frontend: `frontend-web` Cloudflare Worker.
+- Canonical deploy command (GitHub-independent):
+  - `bash scripts/deploy_cloudflare_gemini_mvp_no_github.sh`
+- Deploy script behavior expectations:
+  - Uses local Wrangler when available, falls back to `npx wrangler`.
+  - Syncs backend + frontend bearer token secrets.
+  - Fails fast if `GEMINI_API_KEY` is unavailable/placeholder.
+  - Prevents accidental bearer-token rotation unless `ALLOW_GENERATE_BEARER_TOKEN=true`.
+- Runtime data/policy resilience:
+  - Source registry and source policy must be available in hardened mode.
+  - Embedded fallbacks are present in `src/immcad_api/sources/source_registry_embedded.py` and `src/immcad_api/policy/source_policy_embedded.py`.
+- Legacy Vercel tooling policy:
+  - `scripts/vercel_env_sync.py` and related `vercel-*` commands are recovery-only and not part of the active deploy path.

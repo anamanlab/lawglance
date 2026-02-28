@@ -111,7 +111,10 @@ def test_chat_endpoint_includes_research_preview_for_case_law_query(
     assert response.status_code == 200
     body = response.json()
     assert body["research_preview"]["retrieval_mode"] == "auto"
-    assert body["research_preview"]["query"] == "Find case law precedent on inadmissibility decisions."
+    assert (
+        body["research_preview"]["query"]
+        == "Find case law precedent on inadmissibility decisions."
+    )
     assert body["research_preview"]["cases"][0]["citation"] == "2024 FC 101"
 
 
@@ -134,6 +137,60 @@ def test_case_search_contract_shape() -> None:
     assert "url" in body["results"][0]
     assert "export_allowed" in body["results"][0]
     assert "export_policy_reason" in body["results"][0]
+
+
+def test_case_search_falls_back_when_threadpool_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from immcad_api.schemas import CaseSearchResponse, CaseSearchResult
+
+    search_calls = {"count": 0}
+
+    def _mock_search(self, request):
+        del self, request
+        search_calls["count"] += 1
+        return CaseSearchResponse(
+            results=[
+                CaseSearchResult(
+                    case_id="2026-FC-202",
+                    title="Fallback Search v Canada",
+                    citation="2026 FC 202",
+                    decision_date=date(2026, 2, 2),
+                    url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2026202/index.do",
+                    source_id="FC_DECISIONS",
+                    document_url="https://decisions.fct-cf.gc.ca/fc-cf/decisions/en/item/2026202/index.do",
+                )
+            ]
+        )
+
+    async def _threadless_runtime(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(
+        "immcad_api.services.case_search_service.CaseSearchService.search",
+        _mock_search,
+    )
+    monkeypatch.setattr(
+        "immcad_api.api.routes.cases.run_in_threadpool",
+        _threadless_runtime,
+    )
+
+    local_client = TestClient(create_app())
+    response = local_client.post(
+        "/api/search/cases",
+        json={
+            "query": "federal court inadmissibility precedent",
+            "jurisdiction": "ca",
+            "court": "fc",
+            "limit": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["results"][0]["citation"] == "2026 FC 202"
+    assert search_calls["count"] == 1
 
 
 def test_case_search_rejects_broad_stopword_query() -> None:
@@ -177,7 +234,9 @@ def test_case_search_returns_rate_limited_error_envelope(
 ) -> None:
     def _rate_limited_case_search(self, request):
         del self, request
-        raise RateLimitError("CanLII per-second request limit reached. Please retry shortly.")
+        raise RateLimitError(
+            "CanLII per-second request limit reached. Please retry shortly."
+        )
 
     monkeypatch.setattr(
         "immcad_api.services.case_search_service.CaseSearchService.search",
@@ -198,7 +257,10 @@ def test_case_search_returns_rate_limited_error_envelope(
     assert response.status_code == 429
     body = response.json()
     assert body["error"]["code"] == "RATE_LIMITED"
-    assert body["error"]["message"] == "CanLII per-second request limit reached. Please retry shortly."
+    assert (
+        body["error"]["message"]
+        == "CanLII per-second request limit reached. Please retry shortly."
+    )
     assert body["error"]["trace_id"]
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
@@ -276,7 +338,9 @@ def test_chat_case_law_query_uses_case_search_tool_citations(
 
     assert response.status_code == 200
     body = response.json()
-    assert any(citation["source_id"] == "FC_DECISIONS" for citation in body["citations"])
+    assert any(
+        citation["source_id"] == "FC_DECISIONS" for citation in body["citations"]
+    )
     assert body["confidence"] == "medium"
 
 
@@ -512,10 +576,44 @@ def test_provider_error_envelope_when_scaffold_disabled(
         },
     )
 
-    assert response.status_code == 502
+    assert response.status_code == 200
+    body = response.json()
+    assert body["fallback_used"]["used"] is True
+    assert body["fallback_used"]["reason"] == "provider_error"
+    assert body["confidence"] == "low"
+
+
+def test_unhandled_exception_returns_unknown_error_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENABLE_SCAFFOLD_PROVIDER", "false")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    def crashing_openai_generate(self, *, message: str, citations, locale: str):  # noqa: ANN001
+        del self, message, citations, locale
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "immcad_api.main.OpenAIProvider.generate", crashing_openai_generate
+    )
+
+    failing_client = TestClient(create_app(), raise_server_exceptions=False)
+    response = failing_client.post(
+        "/api/chat",
+        json={
+            "session_id": "session-123456",
+            "message": "Summarize IRPA section 11.",
+            "locale": "en-CA",
+            "mode": "standard",
+        },
+    )
+
+    assert response.status_code == 500
     body = response.json()
     assert body["error"]["code"] == "PROVIDER_ERROR"
     assert body["error"]["trace_id"]
+    assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
 def test_transient_openai_failure_falls_back_to_gemini_with_timeout_reason(
@@ -720,7 +818,9 @@ def test_rate_limit_client_id_resolution_failure_returns_validation_envelope(
     assert response.headers["x-trace-id"] == body["error"]["trace_id"]
 
 
-def test_rate_limit_client_id_uses_cloudflare_connecting_ip_when_direct_host_missing() -> None:
+def test_rate_limit_client_id_uses_cloudflare_connecting_ip_when_direct_host_missing() -> (
+    None
+):
     from immcad_api.main import _resolve_rate_limit_client_id
 
     class _Request:
@@ -730,7 +830,9 @@ def test_rate_limit_client_id_uses_cloudflare_connecting_ip_when_direct_host_mis
     assert _resolve_rate_limit_client_id(_Request()) == "203.0.113.10"
 
 
-def test_rate_limit_client_id_falls_back_to_host_header_when_proxy_headers_missing() -> None:
+def test_rate_limit_client_id_falls_back_to_host_header_when_proxy_headers_missing() -> (
+    None
+):
     from immcad_api.main import _resolve_rate_limit_client_id
 
     class _Request:
@@ -989,6 +1091,8 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["errors"]["total"] >= 1
     assert request_metrics["refusal"]["total"] >= 1
     assert "fallback" in request_metrics
+    assert "friendly" in request_metrics
+    assert "constrained" in request_metrics
     assert "export" in request_metrics
     assert "lawyer_research" in request_metrics
     assert "audit_recent" in request_metrics["export"]
@@ -997,9 +1101,19 @@ def test_ops_metrics_endpoint_exposes_observability_baseline(
     assert request_metrics["latency_ms"]["sample_count"] >= 3
     assert request_metrics["latency_ms"]["p50"] >= 0
     assert request_metrics["latency_ms"]["p95"] >= request_metrics["latency_ms"]["p50"]
-    assert payload["document_matter_store"]["backend"] in {"in_memory", "redis", "unknown"}
+    assert payload["document_matter_store"]["backend"] in {
+        "in_memory",
+        "redis",
+        "unknown",
+    }
     assert "provider_routing_metrics" in payload
     assert "canlii_usage_metrics" in payload
+    assert "official_source_freshness" in payload
+    official_source_freshness = payload["official_source_freshness"]
+    assert official_source_freshness["checkpoint_path"]
+    assert "priority_sources" in official_source_freshness
+    assert "SCC_DECISIONS" in official_source_freshness["priority_sources"]
+    assert "FC_DECISIONS" in official_source_freshness["priority_sources"]
 
 
 def test_ops_metrics_requires_auth_when_bearer_token_configured(

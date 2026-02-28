@@ -78,7 +78,7 @@ Endpoints:
 - Run registry-driven ingestion jobs and emit JSON report:
   - `uv run python scripts/run_ingestion_jobs.py --cadence daily`
   - `ENVIRONMENT=production uv run python scripts/run_ingestion_jobs.py --cadence scheduled_incremental --fail-on-error`
-  - Uses checkpoint state (`artifacts/ingestion/checkpoints.json`) for conditional fetches.
+  - Uses checkpoint state (`.cache/immcad/ingestion-checkpoints.json`) for conditional fetches.
   - Enforces source policy gates from `config/source_policy.yaml` (or `--source-policy`).
 - Run Cloudflare hourly ingestion scheduler wrapper (FC hourly, SCC every 6h, laws daily + Tue/Fri full-sync window):
   - `uv run python scripts/run_cloudflare_ingestion_hourly.py --fail-on-error`

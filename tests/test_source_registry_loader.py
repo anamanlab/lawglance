@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import immcad_api.sources.source_registry as source_registry_module
 from immcad_api.sources import SourceRegistry, load_source_registry
 
 
@@ -62,3 +63,29 @@ def test_load_source_registry_rejects_invalid_source_type(tmp_path: Path) -> Non
 
     with pytest.raises(ValueError):
         load_source_registry(path)
+
+
+def test_load_source_registry_uses_embedded_payload_when_files_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    missing_path = tmp_path / "missing-registry.json"
+    monkeypatch.setattr(
+        source_registry_module,
+        "DEFAULT_REGISTRY_RELATIVE_PATH",
+        missing_path,
+    )
+    monkeypatch.setattr(
+        source_registry_module,
+        "DEFAULT_REGISTRY_PACKAGE_PATH",
+        missing_path,
+    )
+    monkeypatch.setattr(
+        source_registry_module,
+        "DEFAULT_REGISTRY_REPO_PATH",
+        missing_path,
+    )
+
+    registry = source_registry_module.load_source_registry()
+    assert isinstance(registry, SourceRegistry)
+    assert registry.get_source("IRPA") is not None

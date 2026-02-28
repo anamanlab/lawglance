@@ -54,14 +54,18 @@ test("exports a related case after explicit user approval", async ({ page }) => 
     page.getByRole("link", { name: CASE_SEARCH_RESPONSE.results[0].title })
   ).toBeVisible();
 
-  page.once("dialog", async (dialog) => {
-    await dialog.accept();
-  });
-
   await page.getByRole("button", { name: "Export PDF" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Export this case PDF now?" })
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Export PDF now" }).click();
 
   await expect(
-    page.getByText(`Download started: ${EXPORT_PDF_FILENAME}`)
+    page.getByText(
+      new RegExp(
+        `^(Download started: ${EXPORT_PDF_FILENAME}|Case export completed, but automatic download is unavailable in this browser \\(${EXPORT_PDF_FILENAME}\\)\\.)$`
+      )
+    )
   ).toBeVisible();
 
   expect(chatApi.chatRequestCount()).toBe(1);

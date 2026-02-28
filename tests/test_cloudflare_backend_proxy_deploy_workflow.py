@@ -33,6 +33,13 @@ def test_cloudflare_backend_proxy_deploy_workflow_requires_backend_origin_secret
     assert "IMMCAD_BACKEND_ORIGIN" in workflow
 
 
+def test_cloudflare_backend_proxy_deploy_workflow_scopes_push_paths_to_proxy_files() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "backend-cloudflare/src/worker.ts" in workflow
+    assert "backend-cloudflare/wrangler.backend-proxy.jsonc" in workflow
+    assert "backend-cloudflare/**" not in workflow
+
+
 def test_cloudflare_backend_proxy_deploy_workflow_has_concurrency_deduplication() -> None:
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "concurrency:" in workflow

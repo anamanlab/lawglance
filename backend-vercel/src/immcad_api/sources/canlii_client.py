@@ -16,6 +16,19 @@ from immcad_api.sources.canlii_usage_limiter import (
 )
 
 _CANLII_SOURCE_ID = "CANLII_CASE_BROWSE"
+_DATABASE_ID_ALIASES = {
+    "fc": "fct",
+    "fct": "fct",
+    "fc-cf": "fct",
+    "federal court": "fct",
+    "fca": "fca",
+    "caf": "fca",
+    "fca-caf": "fca",
+    "federal court of appeal": "fca",
+    "scc": "scc",
+    "scc-csc": "scc",
+    "supreme court of canada": "scc",
+}
 
 
 @dataclass
@@ -129,7 +142,8 @@ class CanLIIClient:
     def _resolve_database_id(self, request: CaseSearchRequest) -> str:
         candidate = self._coerce_string(request.court)
         if candidate:
-            return candidate.lower()
+            normalized = candidate.lower()
+            return _DATABASE_ID_ALIASES.get(normalized, normalized)
         return self.default_database_id
 
     def _resolve_result_count(self, limit: int) -> int:

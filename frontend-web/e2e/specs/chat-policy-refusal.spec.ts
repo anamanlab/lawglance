@@ -15,7 +15,7 @@ test("shows policy refusal state and keeps case search disabled", async ({ page 
   await expect(page.getByText("Policy refusal response")).toBeVisible();
   await expect(
     page.getByText(
-      "Case-law search is unavailable for this request. Ask a general immigration question to continue."
+      "This chat request was blocked by policy. You can still run case-law search with a specific Canadian immigration query."
     )
   ).toBeVisible();
   await expect(chatShell.findRelatedCasesButton).toBeDisabled();

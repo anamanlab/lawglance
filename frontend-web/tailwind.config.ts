@@ -9,13 +9,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        accent: "#d97757",
-        "accent-blue": "#6a9bcc",
-        "accent-green": "#788c5d",
-        ink: "#141413",
-        muted: "#666259",
-        panel: "#e8e6dc",
-        warning: "#d97757"
+        accent: "#c06a4d",
+        "accent-blue": "#5f84ab",
+        "accent-green": "#6f8459",
+        ink: "#1c1a17",
+        muted: "#4f4a42",
+        panel: "#dfdbcf",
+        warning: "#7f4f3b"
       }
     }
   },

@@ -5,6 +5,7 @@ from immcad_api.api.routes.lawyer_research import (
     build_lawyer_research_router,
     build_lawyer_research_router_disabled,
 )
+from immcad_api.api.routes.source_transparency import build_source_transparency_router
 
 __all__ = [
     "build_case_router",
@@ -13,4 +14,5 @@ __all__ = [
     "build_documents_router",
     "build_lawyer_research_router",
     "build_lawyer_research_router_disabled",
+    "build_source_transparency_router",
 ]

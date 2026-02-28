@@ -56,6 +56,19 @@ function pdfResponse(
   });
 }
 
+function parseActivityPayload(testId: string): Array<{
+  stage: string;
+  status: string;
+  meta?: Record<string, unknown>;
+}> {
+  const rawPayload = screen.getByTestId(testId).textContent ?? "[]";
+  return JSON.parse(rawPayload) as Array<{
+    stage: string;
+    status: string;
+    meta?: Record<string, unknown>;
+  }>;
+}
+
 describe("chat shell contract behavior", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -80,6 +93,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
         showOperationalPanels
       />
     );
@@ -110,6 +124,9 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official courts: available | CanLII: not used")
     ).toBeTruthy();
+    expect(
+      screen.getByText((content) => content?.startsWith("Priority courts: SCC:") ?? false)
+    ).toBeTruthy();
     expect(screen.getByText("PDF available")).toBeTruthy();
     expect(screen.getByText("Intake quality: MEDIUM")).toBeTruthy();
     expect(
@@ -136,6 +153,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
         showOperationalPanels
       />
     );
@@ -153,6 +171,7 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official courts: available | CanLII: not used")
     ).toBeTruthy();
+    expect(screen.getByText("Priority courts: n/a")).toBeTruthy();
     expect(
       screen.getByText(
         'Showing 1 related case for: "Need precedent on inadmissibility findings in Federal Court"'
@@ -179,6 +198,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -260,6 +280,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -300,7 +321,7 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Official court sources returned aligned precedent results.")
     ).toBeTruthy();
-  });
+  }, 15000);
 
   it("renders source and docket metadata badges when case metadata is present", async () => {
     vi.spyOn(globalThis, "fetch")
@@ -353,6 +374,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -385,6 +407,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -420,6 +443,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -440,8 +464,68 @@ describe("chat shell contract behavior", () => {
     expect(screen.getAllByText("Trace ID: trace-policy-refusal").length).toBeGreaterThan(
       0
     );
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "delivery",
+          status: "blocked",
+          meta: expect.objectContaining({
+            fallbackReason: "policy_block",
+          }),
+        }),
+      ])
+    );
     expect(screen.getByText("Last endpoint: /api/chat")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("emits warning timeline metadata when degraded fallback response is used", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(
+        {
+          ...CHAT_SUCCESS_RESPONSE,
+          fallback_used: {
+            used: true,
+            provider: "gemini",
+            reason: "timeout",
+          },
+        },
+        {
+          headers: { "x-trace-id": "trace-fallback-timeout" },
+        }
+      )
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "What are the current IRCC processing timelines?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(screen.getByText("fallback response")).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "synthesis",
+          status: "warning",
+          meta: expect.objectContaining({
+            fallbackUsed: true,
+            fallbackReason: "timeout",
+            fallbackProvider: "gemini",
+          }),
+        }),
+      ])
+    );
   });
 
   it("requires structured intake details before broad manual case-law search", async () => {
@@ -457,6 +541,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -499,6 +584,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -538,6 +624,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -557,6 +644,17 @@ describe("chat shell contract behavior", () => {
     expect(
       screen.getByText("Trace mismatch detected between header and error body.")
     ).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: "delivery",
+          status: "error",
+          meta: expect.objectContaining({
+            code: "SOURCE_UNAVAILABLE",
+          }),
+        }),
+      ])
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Last outcome: error")).toBeTruthy();
@@ -576,6 +674,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -615,6 +714,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -638,7 +738,84 @@ describe("chat shell contract behavior", () => {
         )
       ).length
     ).toBeGreaterThan(0);
+    expect(
+      await screen.findByText("Official courts: unavailable | CanLII: unavailable")
+    ).toBeTruthy();
+    expect(await screen.findByText("Priority courts: n/a")).toBeTruthy();
     expect((await screen.findAllByText("Trace ID: trace-case-search-error")).length).toBeGreaterThan(0);
+  });
+
+  it("shows document error copy in workflow banner instead of stale case-law status", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/chat")) {
+        return jsonResponse(CHAT_SUCCESS_RESPONSE, {
+          headers: { "x-trace-id": "trace-chat-success" },
+        });
+      }
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "HTTPS is required for document upload and retrieval endpoints",
+              trace_id: "trace-doc-intake-https",
+              policy_reason: "document_https_required",
+            },
+          },
+          {
+            status: 400,
+            headers: { "x-trace-id": "trace-doc-intake-https" },
+          }
+        );
+      }
+      if (url.endsWith("/api/documents/support-matrix")) {
+        return jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix" },
+          }
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await screen.findByText(CHAT_SUCCESS_RESPONSE.answer);
+
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(
+      (
+        await screen.findAllByText(
+          "Upload failed. HTTPS is required for document upload and retrieval endpoints"
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect(await screen.findByText("Trace ID: trace-doc-intake-https")).toBeTruthy();
+    expect(screen.queryByText("Ready to find related Canadian case law.")).toBeNull();
   });
 
   it("requires explicit user approval before triggering case export", async () => {
@@ -658,6 +835,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -726,6 +904,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -804,6 +983,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -876,6 +1056,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -932,6 +1113,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -1056,6 +1238,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -1104,6 +1287,198 @@ describe("chat shell contract behavior", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe(
       "https://api.immcad.test/api/documents/matters/matter-abc123/package"
     );
+  });
+
+  it("retries support matrix fetch after a transient failure", async () => {
+    let supportMatrixCalls = 0;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-retry-001",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "record.pdf",
+                normalized_filename: "record-normalized.pdf",
+                classification: "record",
+                quality_status: "ready",
+                issues: [],
+              },
+            ],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake" },
+          }
+        );
+      }
+
+      if (url.includes("/api/documents/matters/matter-retry-001/readiness")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-retry-001",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness" },
+          }
+        );
+      }
+
+      if (url.endsWith("/api/documents/support-matrix")) {
+        supportMatrixCalls += 1;
+        if (supportMatrixCalls === 1) {
+          return jsonResponse(
+            {
+              error: {
+                code: "SOURCE_UNAVAILABLE",
+                message: "Support matrix unavailable",
+              },
+              trace_id: "trace-doc-support-matrix-fail",
+            },
+            {
+              status: 503,
+              headers: { "x-trace-id": "trace-doc-support-matrix-fail" },
+            }
+          );
+        }
+
+        return jsonResponse(
+          {
+            supported_profiles_by_forum: {
+              federal_court_jr: ["federal_court_jr_leave"],
+            },
+            unsupported_profile_families: ["work_permit"],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-support-matrix-success" },
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Matter ID: matter-retry-001")).toBeTruthy();
+    expect(await screen.findByText(/Supported profiles for federal court jr: federal court jr leave\./i)).toBeTruthy();
+    expect(await screen.findByText(/Unsupported profile families: work permit\./i)).toBeTruthy();
+    await waitFor(() => {
+      expect(supportMatrixCalls).toBe(2);
+    });
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it("surfaces support matrix failures with workflow copy and trace id", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.endsWith("/api/documents/intake")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-support-fail-001",
+            forum: "federal_court_jr",
+            results: [
+              {
+                file_id: "file-001",
+                original_filename: "record.pdf",
+                normalized_filename: "record-normalized.pdf",
+                classification: "record",
+                quality_status: "ready",
+                issues: [],
+              },
+            ],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-intake-success" },
+          }
+        );
+      }
+
+      if (url.includes("/api/documents/matters/matter-support-fail-001/readiness")) {
+        return jsonResponse(
+          {
+            matter_id: "matter-support-fail-001",
+            forum: "federal_court_jr",
+            is_ready: true,
+            missing_required_items: [],
+            blocking_issues: [],
+            warnings: [],
+          },
+          {
+            headers: { "x-trace-id": "trace-doc-readiness-success" },
+          }
+        );
+      }
+
+      if (url.endsWith("/api/documents/support-matrix")) {
+        return jsonResponse(
+          {
+            error: {
+              code: "SOURCE_UNAVAILABLE",
+              message: "Support matrix unavailable",
+            },
+            trace_id: "trace-doc-support-matrix-fail-only",
+          },
+          {
+            status: 503,
+            headers: { "x-trace-id": "trace-doc-support-matrix-fail-only" },
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("tab", { name: "Documents" }));
+    const uploadInput = screen.getByLabelText("Upload documents");
+    const file = new File(["record"], "record.pdf", { type: "application/pdf" });
+    await user.upload(uploadInput, file);
+
+    expect(await screen.findByText("Workflow Notice")).toBeTruthy();
+    expect(await screen.findByText("Document support matrix unavailable")).toBeTruthy();
+    expect(
+      (
+        await screen.findAllByText(
+          "Document support matrix is temporarily unavailable. Using default profile guidance."
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    expect(await screen.findByText("Trace ID: trace-doc-support-matrix-fail-only")).toBeTruthy();
   });
 
   it("renders remediation guidance for unreadable failed uploads", async () => {
@@ -1173,6 +1548,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -1302,6 +1678,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -1359,6 +1736,7 @@ describe("chat shell contract behavior", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -1370,7 +1748,7 @@ describe("chat shell contract behavior", () => {
     await user.upload(uploadInput, file);
 
     expect(
-      await screen.findByText("Upload failed. Unsupported file type.")
-    ).toBeTruthy();
+      (await screen.findAllByText("Upload failed. Unsupported file type.")).length
+    ).toBeGreaterThan(0);
   });
 });

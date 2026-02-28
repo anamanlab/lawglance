@@ -193,6 +193,39 @@ describe("api client chat contract", () => {
     expect(result.traceIdMismatch).toBe(true);
   });
 
+  it("uses root trace_id and policy_reason when nested error object omits them", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "POLICY_BLOCKED",
+            message: "Export blocked by policy.",
+          },
+          trace_id: "trace-root-envelope",
+          policy_reason: "source_export_blocked_by_policy",
+        },
+        {
+          status: 403,
+        }
+      )
+    );
+
+    const client = createApiClient({
+      apiBaseUrl: "https://api.immcad.test",
+    });
+    const result = await client.sendChatMessage(REQUEST_PAYLOAD);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.status).toBe(403);
+    expect(result.error.code).toBe("POLICY_BLOCKED");
+    expect(result.error.message).toBe("Export blocked by policy.");
+    expect(result.traceId).toBe("trace-root-envelope");
+    expect(result.policyReason).toBe("source_export_blocked_by_policy");
+  });
+
   it("generates a client trace id when error responses omit trace metadata", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("upstream html error", {

@@ -44,6 +44,9 @@ describe("message list long-thread behavior", () => {
         isSlowChatResponse={false}
         messages={messages}
         submissionPhase="idle"
+        enableAgentThinkingTimeline={false}
+        activityByTurn={{}}
+        activeActivityTurnId={null}
       />
     );
 
@@ -63,6 +66,9 @@ describe("message list long-thread behavior", () => {
         isSlowChatResponse={false}
         messages={messages}
         submissionPhase="idle"
+        enableAgentThinkingTimeline={false}
+        activityByTurn={{}}
+        activeActivityTurnId={null}
       />
     );
 
@@ -74,6 +80,9 @@ describe("message list long-thread behavior", () => {
         isSlowChatResponse={false}
         messages={messages}
         submissionPhase="chat"
+        enableAgentThinkingTimeline={false}
+        activityByTurn={{}}
+        activeActivityTurnId={null}
       />
     );
 

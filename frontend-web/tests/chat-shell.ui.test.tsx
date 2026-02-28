@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -44,6 +44,19 @@ function createDeferred<T>(): {
   return { promise, resolve, reject };
 }
 
+function parseActivityPayload(testId: string): Array<{
+  stage: string;
+  status: string;
+  meta?: Record<string, unknown>;
+}> {
+  const rawPayload = screen.getByTestId(testId).textContent ?? "[]";
+  return JSON.parse(rawPayload) as Array<{
+    stage: string;
+    status: string;
+    meta?: Record<string, unknown>;
+  }>;
+}
+
 describe("chat shell ui", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -55,12 +68,14 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test/"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
 
     expect(screen.getByText("IMMCAD Assistant")).toBeTruthy();
     expect(screen.getAllByText(LEGAL_DISCLAIMER).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Sources" })).toBeTruthy();
     expect(screen.getByText("Informational only")).toBeTruthy();
     expect(screen.getByText("Cite sources")).toBeTruthy();
     expect(
@@ -73,6 +88,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -110,6 +126,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -128,12 +145,13 @@ describe("chat shell ui", () => {
     vi.spyOn(globalThis, "fetch").mockReturnValueOnce(deferred.promise);
 
     render(
-      <ChatShell
-        apiBaseUrl="https://api.immcad.test"
-        legalDisclaimer={LEGAL_DISCLAIMER}
-        showOperationalPanels
-      />
-    );
+        <ChatShell
+          apiBaseUrl="https://api.immcad.test"
+          legalDisclaimer={LEGAL_DISCLAIMER}
+          enableAgentThinkingTimeline
+          showOperationalPanels
+        />
+      );
 
     const user = userEvent.setup();
     await user.type(
@@ -145,6 +163,14 @@ describe("chat shell ui", () => {
     expect(await screen.findByText("Sending request...")).toBeTruthy();
     expect(await screen.findByText("Submitting your question...")).toBeTruthy();
     expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("true");
+    expect(await screen.findByLabelText("Agent activity")).toBeTruthy();
+    expect(screen.getByText("Understanding question")).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-pending")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: "intake", status: "running" }),
+        expect.objectContaining({ stage: "retrieval", status: "running" }),
+      ])
+    );
 
     deferred.resolve(
       jsonResponse(CHAT_SUCCESS_RESPONSE, {
@@ -153,9 +179,82 @@ describe("chat shell ui", () => {
     );
 
     expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(parseActivityPayload("agent-activity-latest")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: "retrieval", status: "success" }),
+        expect.objectContaining({ stage: "grounding", status: "success" }),
+        expect.objectContaining({ stage: "synthesis", status: "success" }),
+        expect.objectContaining({ stage: "delivery", status: "success" }),
+      ])
+    );
     await waitFor(() => {
       expect(screen.getByRole("log").getAttribute("aria-busy")).toBe("false");
     });
+  });
+
+  it("toggles assistant thinking drawer details when timeline is enabled", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_RESPONSE, {
+        headers: { "x-trace-id": "trace-thinking-drawer" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline
+        showOperationalPanels
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    await user.click(
+      await screen.findByRole("button", { name: "Show agent thinking" })
+    );
+    const timelineList = screen.getByRole("list", { name: "Timeline details" });
+    expect(timelineList).toBeTruthy();
+    expect(within(timelineList).getByText("Evaluating sources")).toBeTruthy();
+    expect(
+      within(timelineList).getByLabelText("Evaluating sources (success)")
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Hide details" })
+    ).toBeTruthy();
+  });
+
+  it("hides timeline UI affordances when thinking timeline feature flag is disabled", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(CHAT_SUCCESS_RESPONSE, {
+        headers: { "x-trace-id": "trace-thinking-disabled" },
+      })
+    );
+
+    render(
+      <ChatShell
+        apiBaseUrl="https://api.immcad.test"
+        legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByLabelText("Ask a Canadian immigration question"),
+      "How does Express Entry work?"
+    );
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText(CHAT_SUCCESS_RESPONSE.answer)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show agent thinking" })).toBeNull();
+    expect(screen.queryByLabelText("Agent activity")).toBeNull();
   });
 
   it("exposes accessibility landmarks and enables case search after chat success", async () => {
@@ -175,6 +274,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
         showOperationalPanels
       />
     );
@@ -217,6 +317,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -249,6 +350,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 
@@ -265,6 +367,7 @@ describe("chat shell ui", () => {
       <ChatShell
         apiBaseUrl="https://api.immcad.test"
         legalDisclaimer={LEGAL_DISCLAIMER}
+        enableAgentThinkingTimeline={false}
       />
     );
 

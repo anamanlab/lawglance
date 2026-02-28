@@ -10,12 +10,18 @@
     "binding": "ASSETS",
     "run_worker_first": true
   },
+  "services": [
+    {
+      "binding": "IMMCAD_BACKEND",
+      "service": "immcad-backend-native-python"
+    }
+  ],
   "observability": {
     "enabled": true
   },
   "vars": {
-    "IMMCAD_API_BASE_URL": "https://immcad-api.arkiteto.dpdns.org",
-    "IMMCAD_API_BASE_URL_FALLBACK": "https://backend-vercel-eight-sigma.vercel.app",
+    "IMMCAD_API_BASE_URL": "https://immcad-backend-native-python.optivoo-edu.workers.dev",
+    "IMMCAD_API_BASE_URL_FALLBACK": "",
     "ENVIRONMENT": "production",
     "IMMCAD_ENVIRONMENT": "production"
   }

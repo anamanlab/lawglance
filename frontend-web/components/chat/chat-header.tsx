@@ -12,7 +12,7 @@ export function ChatHeader({
   onLocaleChange,
 }: ChatHeaderProps): JSX.Element {
   return (
-    <header className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[rgba(176,174,165,0.42)] pb-4">
+    <header className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--imm-border-soft)] pb-4">
       <div>
         <h2 className="text-xl font-semibold leading-tight text-ink">
           IMMCAD Assistant
@@ -23,11 +23,17 @@ export function ChatHeader({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 shrink-0">
-        <label className="flex items-center gap-2 rounded-full border border-[rgba(176,174,165,0.65)] bg-[#f6f3eb] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        <a
+          href="/sources"
+          className="rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted hover:bg-[var(--imm-surface-muted)]"
+        >
+          Sources
+        </a>
+        <label className="flex items-center gap-2 rounded-full border border-[var(--imm-border-soft)] bg-[var(--imm-surface-strong)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
           Language
           <select
             aria-label="Interface language"
-            className="rounded-md border border-[rgba(176,174,165,0.72)] bg-white px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-ink"
+            className="rounded-md border border-[var(--imm-border-soft)] bg-[var(--imm-surface)] px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.04em] text-ink"
             onChange={(event) => onLocaleChange(event.target.value as FrontendLocale)}
             value={activeLocale}
           >

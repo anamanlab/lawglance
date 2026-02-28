@@ -11,6 +11,7 @@ FallbackReason = Literal["timeout", "rate_limit", "policy_block", "provider_erro
 ChatLocale = Literal["en-CA", "fr-CA"]
 ChatMode = Literal["standard"]
 SourceEventType = Literal["new", "updated", "translated", "corrected"]
+SourceFreshnessStatus = Literal["fresh", "stale", "missing", "unknown"]
 ResearchObjective = Literal[
     "support_precedent",
     "distinguish_precedent",
@@ -114,6 +115,37 @@ class CaseSearchResponse(BaseModel):
     results: list[CaseSearchResult]
 
 
+class SourceTransparencyCheckpoint(BaseModel):
+    path: str
+    exists: bool
+    updated_at: str | None = None
+
+
+class CaseLawSourceTransparencyItem(BaseModel):
+    source_id: str
+    court: str | None = None
+    instrument: str
+    url: str
+    update_cadence: str
+    source_class: str | None = None
+    production_ingest_allowed: bool | None = None
+    answer_citation_allowed: bool | None = None
+    export_fulltext_allowed: bool | None = None
+    last_success_at: str | None = None
+    last_http_status: int | None = None
+    freshness_seconds: int | None = None
+    freshness_status: SourceFreshnessStatus
+
+
+class SourceTransparencyResponse(BaseModel):
+    jurisdiction: str
+    registry_version: str
+    generated_at: str
+    supported_courts: list[str]
+    checkpoint: SourceTransparencyCheckpoint
+    case_law_sources: list[CaseLawSourceTransparencyItem]
+
+
 class LawyerCaseResearchRequest(BaseModel):
     session_id: str = Field(min_length=8, max_length=128)
     matter_summary: str = Field(min_length=10, max_length=12000)
@@ -192,6 +224,7 @@ class LawyerCaseResearchResponse(BaseModel):
     matter_profile: dict[str, list[str] | str | None]
     cases: list[LawyerCaseSupport]
     source_status: dict[str, str]
+    priority_source_status: dict[str, SourceFreshnessStatus] = Field(default_factory=dict)
     research_confidence: Confidence = "low"
     confidence_reasons: list[str] = Field(default_factory=list)
     intake_completeness: Confidence = "low"

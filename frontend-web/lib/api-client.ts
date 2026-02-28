@@ -60,6 +60,8 @@ export type CaseSearchResponsePayload = {
   results: CaseSearchResult[];
 };
 
+export type SourceFreshnessStatus = "fresh" | "stale" | "missing" | "unknown";
+
 export type LawyerCaseResearchRequestPayload = {
   session_id: string;
   matter_summary: string;
@@ -104,6 +106,7 @@ export type LawyerCaseResearchResponsePayload = {
   matter_profile: Record<string, string | string[] | null>;
   cases: LawyerCaseSupport[];
   source_status: Record<string, string>;
+  priority_source_status: Record<string, SourceFreshnessStatus>;
   research_confidence: "low" | "medium" | "high";
   confidence_reasons: string[];
   intake_completeness: "low" | "medium" | "high";
@@ -368,6 +371,14 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
     return null;
   }
 
+  const rootTraceId = normalizeTraceId(
+    typeof payload.trace_id === "string" ? payload.trace_id : null
+  );
+  const rootPolicyReason =
+    typeof payload.policy_reason === "string"
+      ? normalizeTraceId(payload.policy_reason)
+      : null;
+
   if (typeof payload.error === "string") {
     const message =
       typeof payload.message === "string"
@@ -376,13 +387,8 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
     return {
       code: toApiErrorCode(payload.error),
       message,
-      traceId: normalizeTraceId(
-        typeof payload.trace_id === "string" ? payload.trace_id : null
-      ),
-      policyReason:
-        typeof payload.policy_reason === "string"
-          ? normalizeTraceId(payload.policy_reason)
-          : null,
+      traceId: rootTraceId,
+      policyReason: rootPolicyReason,
     };
   }
 
@@ -392,16 +398,18 @@ function parseErrorEnvelope(payload: unknown): ParsedErrorEnvelope | null {
   }
 
   const message = typeof errorField.message === "string" ? errorField.message : DEFAULT_ERROR_MESSAGE;
+  const nestedTraceId = normalizeTraceId(
+    typeof errorField.trace_id === "string" ? errorField.trace_id : null
+  );
+  const nestedPolicyReason =
+    typeof errorField.policy_reason === "string"
+      ? normalizeTraceId(errorField.policy_reason)
+      : null;
   return {
     code: toApiErrorCode(errorField.code),
     message,
-    traceId: normalizeTraceId(
-      typeof errorField.trace_id === "string" ? errorField.trace_id : null
-    ),
-    policyReason:
-      typeof errorField.policy_reason === "string"
-        ? normalizeTraceId(errorField.policy_reason)
-        : null,
+    traceId: nestedTraceId ?? rootTraceId,
+    policyReason: nestedPolicyReason ?? rootPolicyReason,
   };
 }
 

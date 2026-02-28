@@ -4,7 +4,10 @@ import hashlib
 import inspect
 import os
 
-import fitz
+try:
+    import fitz
+except Exception:  # pragma: no cover - optional compiled PDF dependency
+    fitz = None  # type: ignore[assignment]
 from immcad_api.policy.document_compilation_rules import (
     DocumentCompilationCatalog,
     DocumentCompilationProfile as CatalogCompilationProfile,
@@ -629,6 +632,8 @@ class DocumentPackageService:
 
     @classmethod
     def _open_source_as_pdf_document(cls, source_file: StoredSourceFile):
+        if fitz is None:
+            raise ValueError("compiled_pdf_runtime_unavailable")
         payload_bytes = source_file.payload_bytes
         if not payload_bytes:
             raise ValueError("source file payload is empty")
@@ -758,7 +763,7 @@ class DocumentPackageService:
         assembly_plan: DocumentAssemblyPlan,
         source_files: list[StoredSourceFile] | tuple[StoredSourceFile, ...] | None,
     ) -> tuple[bytes, int] | None:
-        if not self._compiled_pdf_enabled():
+        if not self._compiled_pdf_enabled() or fitz is None:
             return None
 
         ordered_source_files = self._ordered_source_files_for_assembly_plan(

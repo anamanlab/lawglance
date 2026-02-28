@@ -24,3 +24,4 @@ frontend-web/coverage/
 .wrangler/
 .worktrees/
 .ai/
+.cache/

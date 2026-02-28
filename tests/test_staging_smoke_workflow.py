@@ -26,9 +26,15 @@ def test_staging_smoke_script_validates_refusal_citations_and_trace_ids() -> Non
     script = SMOKE_SCRIPT_PATH.read_text(encoding="utf-8")
     assert '/api/chat' in script
     assert '/api/search/cases' in script
+    assert '/api/sources/transparency' in script
     assert "immcad_refusal.json" in script
+    assert "immcad_sources.json" in script
     assert "fallback_used" in script
     assert "policy_block" in script
+    assert "SCC_DECISIONS" in script
+    assert "FC_DECISIONS" in script
+    assert "TMP_CHECKPOINT_PATH" in script
+    assert "INGESTION_CHECKPOINT_STATE_PATH" in script
     assert "len(chat[\"citations\"]) >= 1" in script
     assert "x-trace-id" in script
     assert "staging-smoke-report.json" in script

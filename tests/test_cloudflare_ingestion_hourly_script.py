@@ -22,7 +22,7 @@ def test_hourly_schedule_runs_fc_each_hour() -> None:
         datetime(2026, 2, 27, 1, 0, tzinfo=timezone.utc)
     )
 
-    assert schedule["source_ids"] == ["FC_DECISIONS"]
+    assert schedule["source_ids"] == ["FC_DECISIONS", "FCA_DECISIONS"]
     assert schedule["scc_due"] is False
     assert schedule["laws_due"] is False
     assert schedule["laws_full_sync_due"] is False
@@ -33,7 +33,7 @@ def test_hourly_schedule_runs_scc_every_six_hours() -> None:
         datetime(2026, 2, 27, 6, 0, tzinfo=timezone.utc)
     )
 
-    assert schedule["source_ids"] == ["FC_DECISIONS", "SCC_DECISIONS"]
+    assert schedule["source_ids"] == ["FC_DECISIONS", "FCA_DECISIONS", "SCC_DECISIONS"]
     assert schedule["scc_due"] is True
     assert schedule["laws_due"] is False
     assert schedule["laws_full_sync_due"] is False
@@ -43,16 +43,34 @@ def test_hourly_schedule_runs_laws_daily_and_flags_full_sync_windows() -> None:
     daily_schedule = MODULE.build_hourly_schedule(
         datetime(2026, 2, 26, 3, 0, tzinfo=timezone.utc)
     )
-    assert daily_schedule["source_ids"] == ["FC_DECISIONS", "FEDERAL_LAWS_BULK_XML"]
+    assert daily_schedule["source_ids"] == [
+        "FC_DECISIONS",
+        "FCA_DECISIONS",
+        "FEDERAL_LAWS_BULK_XML",
+    ]
     assert daily_schedule["laws_due"] is True
     assert daily_schedule["laws_full_sync_due"] is False
 
     full_sync_schedule = MODULE.build_hourly_schedule(
         datetime(2026, 2, 27, 4, 0, tzinfo=timezone.utc)
     )
-    assert full_sync_schedule["source_ids"] == ["FC_DECISIONS", "FEDERAL_LAWS_BULK_XML"]
+    assert full_sync_schedule["source_ids"] == [
+        "FC_DECISIONS",
+        "FCA_DECISIONS",
+        "FEDERAL_LAWS_BULK_XML",
+    ]
     assert full_sync_schedule["laws_due"] is False
     assert full_sync_schedule["laws_full_sync_due"] is True
+
+
+def test_parse_args_uses_cache_checkpoint_state_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["run_cloudflare_ingestion_hourly.py"])
+
+    args = MODULE.parse_args()
+
+    assert args.state_path == ".cache/immcad/ingestion-checkpoints.json"
 
 
 def _write_federal_laws_registry(path: Path) -> Path:

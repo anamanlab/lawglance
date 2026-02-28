@@ -10,6 +10,7 @@ from immcad_api.schemas import (
     DocumentRuleViolation,
 )
 from immcad_api.services.document_matter_store import StoredSourceFile
+from immcad_api.services import document_package_service
 from immcad_api.services.document_package_service import DocumentPackageService
 
 
@@ -169,6 +170,35 @@ def test_package_builder_returns_metadata_plan_only_when_compiled_pdf_flag_off(
                 file_id="f70",
                 filename="disclosure.pdf",
                 payload_bytes=_pdf_payload("Disclosure package source payload."),
+            )
+        ],
+    )
+
+    assert package.compilation_output_mode == "metadata_plan_only"
+    assert package.compiled_artifact is None
+
+
+def test_package_builder_returns_metadata_plan_only_when_fitz_runtime_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IMMCAD_ENABLE_COMPILED_PDF", "1")
+    monkeypatch.setattr(document_package_service, "fitz", None)
+    service = DocumentPackageService()
+    package = service.build_package(
+        matter_id="matter-compiled-no-fitz",
+        forum="rpd",
+        intake_results=[
+            _result(
+                file_id="f70b",
+                filename="disclosure.pdf",
+                classification="disclosure_package",
+            ),
+        ],
+        source_files=[
+            StoredSourceFile(
+                file_id="f70b",
+                filename="disclosure.pdf",
+                payload_bytes=b"%PDF-1.4\n%fallback\n",
             )
         ],
     )

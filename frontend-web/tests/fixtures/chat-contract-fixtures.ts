@@ -136,6 +136,10 @@ export const LAWYER_RESEARCH_SUCCESS_RESPONSE: LawyerCaseResearchResponsePayload
     official: "ok",
     canlii: "not_used",
   },
+  priority_source_status: {
+    SCC_DECISIONS: "fresh",
+    FC_DECISIONS: "fresh",
+  },
   research_confidence: "medium",
   confidence_reasons: [
     "Official court sources returned relevant case-law results.",

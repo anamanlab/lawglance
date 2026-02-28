@@ -39,6 +39,8 @@ class RequestMetrics:
         self._chat_requests = 0
         self._chat_fallbacks = 0
         self._chat_refusals = 0
+        self._chat_friendly = 0
+        self._chat_constrained = 0
         self._export_attempts = 0
         self._export_allowed = 0
         self._export_blocked = 0
@@ -88,13 +90,24 @@ class RequestMetrics:
                 self._api_errors += 1
             self._latencies_ms.append(latency_ms)
 
-    def record_chat_outcome(self, *, fallback_used: bool, refusal_used: bool) -> None:
+    def record_chat_outcome(
+        self,
+        *,
+        fallback_used: bool,
+        refusal_used: bool,
+        friendly_used: bool = False,
+        constrained_used: bool = False,
+    ) -> None:
         with self._lock:
             self._chat_requests += 1
             if fallback_used:
                 self._chat_fallbacks += 1
             if refusal_used:
                 self._chat_refusals += 1
+            if friendly_used:
+                self._chat_friendly += 1
+            if constrained_used:
+                self._chat_constrained += 1
 
     def record_export_outcome(
         self, *, outcome: str, policy_reason: str | None = None
@@ -318,6 +331,8 @@ class RequestMetrics:
             chat_requests = self._chat_requests
             chat_fallbacks = self._chat_fallbacks
             chat_refusals = self._chat_refusals
+            chat_friendly = self._chat_friendly
+            chat_constrained = self._chat_constrained
             export_attempts = self._export_attempts
             export_allowed = self._export_allowed
             export_blocked = self._export_blocked
@@ -383,6 +398,10 @@ class RequestMetrics:
         error_rate = (api_errors / api_requests) if api_requests else 0.0
         fallback_rate = (chat_fallbacks / chat_requests) if chat_requests else 0.0
         refusal_rate = (chat_refusals / chat_requests) if chat_requests else 0.0
+        friendly_rate = (chat_friendly / chat_requests) if chat_requests else 0.0
+        constrained_rate = (
+            (chat_constrained / chat_requests) if chat_requests else 0.0
+        )
 
         return {
             "window_seconds": elapsed_seconds,
@@ -401,6 +420,14 @@ class RequestMetrics:
             "refusal": {
                 "total": chat_refusals,
                 "rate": refusal_rate,
+            },
+            "friendly": {
+                "total": chat_friendly,
+                "rate": friendly_rate,
+            },
+            "constrained": {
+                "total": chat_constrained,
+                "rate": constrained_rate,
             },
             "export": {
                 "attempts": export_attempts,

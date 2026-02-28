@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import re
-from typing import Protocol
+from typing import Callable, Protocol, cast
 
 from immcad_api.errors import SourceUnavailableError
 from immcad_api.policy import SourcePolicy, is_source_export_allowed
@@ -13,6 +13,7 @@ from immcad_api.schemas import (
     LawyerCaseResearchRequest,
     LawyerCaseResearchResponse,
     LawyerCaseSupport,
+    SourceFreshnessStatus,
 )
 from immcad_api.services.case_document_resolver import (
     allowed_hosts_for_source,
@@ -38,6 +39,7 @@ _DOCKET_ANCHOR_PATTERN = re.compile(
     r"\b[a-z]{1,5}\s*-\s*\d{1,8}\s*-\s*\d{2,4}\b",
     re.IGNORECASE,
 )
+_VALID_SOURCE_FRESHNESS_VALUES = frozenset({"fresh", "stale", "missing", "unknown"})
 
 
 class _CaseSearchProtocol(Protocol):
@@ -107,6 +109,9 @@ def _extract_reference_anchors(text: str) -> set[str]:
     return anchors
 
 
+PrioritySourceStatusProvider = Callable[[], dict[str, SourceFreshnessStatus]]
+
+
 class LawyerCaseResearchService:
     def __init__(
         self,
@@ -114,10 +119,12 @@ class LawyerCaseResearchService:
         case_search_service: _CaseSearchProtocol,
         source_policy: SourcePolicy | None = None,
         source_registry: SourceRegistry | None = None,
+        priority_source_status_provider: PrioritySourceStatusProvider | None = None,
     ) -> None:
         self.case_search_service = case_search_service
         self.source_policy = source_policy
         self.source_registry = source_registry
+        self._priority_source_status_provider = priority_source_status_provider
 
     def _resolve_court_label(self, case_result: CaseSearchResult) -> str | None:
         source_id = (case_result.source_id or "").strip().upper()
@@ -135,6 +142,31 @@ class LawyerCaseResearchService:
         if " SCC " in f" {citation} ":
             return "SCC"
         return None
+
+    def _fetch_priority_source_status(self) -> dict[str, SourceFreshnessStatus]:
+        if self._priority_source_status_provider is None:
+            return {}
+        try:
+            raw_statuses = self._priority_source_status_provider()
+        except Exception:
+            return {}
+        if not isinstance(raw_statuses, dict):
+            return {}
+        snapshot: dict[str, SourceFreshnessStatus] = {}
+        for source_id, status in raw_statuses.items():
+            if not isinstance(source_id, str):
+                continue
+            normalized_source_id = source_id.strip().upper()
+            if not normalized_source_id:
+                continue
+            normalized_status = str(status).strip().lower()
+            if normalized_status not in _VALID_SOURCE_FRESHNESS_VALUES:
+                normalized_status = "unknown"
+            snapshot[normalized_source_id] = cast(
+                SourceFreshnessStatus,
+                normalized_status,
+            )
+        return snapshot
 
     def _resolve_export_status(
         self,
@@ -582,6 +614,7 @@ class LawyerCaseResearchService:
             decision_date_to=decision_date_to,
         )
 
+        priority_source_status = self._fetch_priority_source_status()
         if not aggregated_results:
             if source_unavailable_errors == len(queries):
                 source_status = {
@@ -604,6 +637,7 @@ class LawyerCaseResearchService:
                 matter_profile=matter_profile,
                 cases=[],
                 source_status=source_status,
+                priority_source_status=priority_source_status,
                 research_confidence=research_confidence,
                 confidence_reasons=confidence_reasons,
                 intake_completeness=intake_completeness,
@@ -656,6 +690,7 @@ class LawyerCaseResearchService:
             matter_profile=matter_profile,
             cases=cases,
             source_status=source_status,
+            priority_source_status=priority_source_status,
             research_confidence=research_confidence,
             confidence_reasons=confidence_reasons,
             intake_completeness=intake_completeness,

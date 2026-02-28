@@ -1,5 +1,19 @@
 # Task Plan Tracking Log
 
+## Task Plan - 2026-02-28 - Modernization Execution Slice A
+
+### Current Focus
+- Execute an isolated modernization slice covering runtime hardening, deterministic CI dependency installs, and developer-environment prerequisite reliability.
+
+### Plan
+- [ ] Harden frontend server runtime environment resolution (remove legacy fail-open heuristics) and update contract tests.
+- [ ] Make CI dependency installation deterministic by freezing `uv` dependency sync in quality/release/docs workflows.
+- [ ] Add explicit frontend prerequisites (`node`/`npm`) to setup/verify scripts and align development environment docs.
+- [ ] Run targeted verification commands for touched runtime/workflow/script surfaces and capture blockers if tooling is unavailable.
+
+### Review
+- Pending.
+
 ## Task Plan - 2026-02-28 - Frontend Runtime Modernization Debt Audit
 
 ### Current Focus

@@ -602,13 +602,15 @@ def validate_court_source_payload(
                     source_id=source_id,
                     court_code="FC",
                 )
-            except ET.ParseError:
+            except ET.ParseError as exc:
                 records = parse_decisia_search_results_html(
                     payload,
                     source_id=source_id,
                     court_code="FC",
                     base_url="https://decisions.fct-cf.gc.ca/fc-cf/en/d/s/index.do",
                 )
+                if not records:
+                    raise exc
             if not records:
                 records = parse_decisia_search_results_html(
                     payload,

@@ -174,11 +174,7 @@ def extract_text_and_page_signals(payload_bytes: bytes) -> DocumentExtractionRes
                 page = document.load_page(page_index)
                 page_text = page.get_text("text") or ""
                 if not page_text.strip():
-                    should_ocr = (
-                        _can_run_tesseract_ocr()
-                        and ocr_pages < page_limit
-                        and ocr_char_count < char_limit
-                    )
+                    should_ocr = ocr_pages < page_limit and ocr_char_count < char_limit
                     if should_ocr:
                         ocr_result = _ocr_text_from_page(page)
                         trimmed = ocr_result.strip()

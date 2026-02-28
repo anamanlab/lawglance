@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import logging
 import re
-from typing import Protocol, cast
+from typing import Protocol, Sequence, cast
 
 from immcad_api.errors import ApiError, ProviderApiError
 from immcad_api.policy.source_policy import SourcePolicy
@@ -86,7 +86,7 @@ class LawyerResearchTool(Protocol):
     ) -> LawyerCaseResearchResponse: ...
 
 
-def _extract_rejected_citation_urls(citations: list[object]) -> tuple[str, ...]:
+def _extract_rejected_citation_urls(citations: Sequence[object]) -> tuple[str, ...]:
     urls: list[str] = []
     for citation in citations:
         raw_url: object | None
@@ -480,8 +480,9 @@ class ChatService:
             raise ProviderApiError(exc.message) from exc
 
         provider_citations = cast(list[Citation], routed.result.citations)
-        citations_to_validate: list[Citation | dict[str, object] | object] = (
-            provider_citations if provider_citations else citations
+        citations_to_validate = cast(
+            list[Citation | dict[str, object] | object],
+            provider_citations if provider_citations else citations,
         )
         answer, validated_citations, confidence = enforce_citation_requirement(
             routed.result.answer,

@@ -7,7 +7,13 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 Confidence = Literal["low", "medium", "high"]
-FallbackReason = Literal["timeout", "rate_limit", "policy_block", "provider_error"]
+FallbackReason = Literal[
+    "timeout",
+    "rate_limit",
+    "policy_block",
+    "provider_error",
+    "insufficient_context",
+]
 ChatLocale = Literal["en-CA", "fr-CA"]
 ChatMode = Literal["standard"]
 SourceEventType = Literal["new", "updated", "translated", "corrected"]
